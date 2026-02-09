@@ -1,4 +1,4 @@
-name: 🐞 (English) Bug Report (SysWarden)
+name: 🐞 Bug Report (SysWarden)
 description: Report errors, crashes, or unexpected behavior of the script.
 title: "[BUG] "
 labels: ["bug", "triage"]
