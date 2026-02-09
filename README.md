@@ -54,6 +54,12 @@ SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https
 
 - **Auto-Update:** Installs a cron job to refresh the blocklist hourly.
 
+## Objectives
+
+- **Noise Reduction:** Drastically reduce the size of system logs (`/var/log/auth.log`, `journalctl`) by blocking scanners at the door.
+- **Resource Saving:** Save CPU cycles and bandwidth by dropping packets at the kernel level rather than letting application servers (Nginx, SSHD) handle them.
+- **Proactive Security:** Move from a "Reactive" stance (wait for 5 failed logins -> Ban) to a "Proactive" stance (Ban the IP because it attacked a server in another country 10 minutes ago).
+
 ## Technical Deep Dive: Integration Logic
 > Many admins worry that installing a massive blocklist might conflict with Fail2ban. **SysWarden solves this via layering.**
 
@@ -76,12 +82,6 @@ On Enterprise Linux, proper integration with `firewalld` is critical.
 
 - **Enable the option** Simply confirm with `y` when prompted during installation.
 - **API key** Paste your AbuseIPDB API key to automatically report malicious IPs and contribute to the community database.
-
-### Project Objectives
-
-- **Noise Reduction:** Drastically reduce the size of system logs (`/var/log/auth.log`, `journalctl`) by blocking scanners at the door.
-- **Resource Saving:** Save CPU cycles and bandwidth by dropping packets at the kernel level rather than letting application servers (Nginx, SSHD) handle them.
-- **Proactive Security:** Move from a "Reactive" stance (wait for 5 failed logins -> Ban) to a "Proactive" stance (Ban the IP because it attacked a server in another country 10 minutes ago).
 
 ## How to Install (root)
 
