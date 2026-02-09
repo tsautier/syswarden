@@ -819,7 +819,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Community Blocklist Installer (Pro/Secu)    #"
+    echo -e "#     SysWarden Tool Installer (Pro/Secu)    #"
     echo -e "#############################################################${NC}"
 fi
 
