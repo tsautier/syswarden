@@ -46,7 +46,7 @@ SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https
   
 - **Smart Mirror Selection:** Replaced ICMP Pings with **TCP/HTTP latency checks** to bypass firewall restrictions on GitHub/GitLab, ensuring you always download from the fastest mirror.
 
-- **Kernel-Safe Optimization:**:
+- **Kernel-Safe Optimization:**
   - Enables high-performance memory hashing (`hashsize`) on Debian/Ubuntu.
   - Uses conservative, stability-first settings on RHEL/Rocky kernels to prevent "Invalid Argument" crashes.
   
@@ -74,10 +74,10 @@ On Enterprise Linux, proper integration with `firewalld` is critical.
 ### 3. AbuseIPDB reporting
 > In a community setting, during the script installation phase, it is possible to report triggered and confirmed alerts to ABUSEIPDB in order to keep the database of malicious IP addresses up to date.
 
-- **Enable the option** Just accept the return to the platform.
-- **API key** Insert the platform's API key in order to send and share nuisances, noises, and other malicious IPs to it.
+- **Enable the option** Simply confirm with `y` when prompted during installation.
+- **API key** Paste your AbuseIPDB API key to automatically report malicious IPs and contribute to the community database.
 
-## Project Objectives
+### Project Objectives
 
 - **Noise Reduction:** Drastically reduce the size of system logs (`/var/log/auth.log`, `journalctl`) by blocking scanners at the door.
 - **Resource Saving:** Save CPU cycles and bandwidth by dropping packets at the kernel level rather than letting application servers (Nginx, SSHD) handle them.
@@ -87,12 +87,15 @@ On Enterprise Linux, proper integration with `firewalld` is critical.
 
 ```bash
 # For Ubuntu/Debian
-apt update && apt upgrade
+apt update && apt upgrade -y
+apt install wget -y
 
 # For Rocky/AlmaLinux/RHEL
-dnf update
+dnf update -y
+dnf install wget -y
 
 # install script
+cd /usr/local/bin/
 wget https://github.com/duggytuxy/syswarden/releases/download/v1.01/install-syswarden.sh
 chmod +x install-syswarden.sh
 ./install-syswarden.sh
@@ -101,7 +104,7 @@ chmod +x install-syswarden.sh
 journalctl -k -f | grep "SysWarden-BLOCK"
 ```
 
-### Uninstallation (root)
+## Uninstallation (root)
 
 ```bash
 ./install-syswarden.sh uninstall
