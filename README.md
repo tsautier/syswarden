@@ -75,8 +75,8 @@ SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https
            │               │              │
            ▼               ▼              ▼
     +-------------+ +-------------+ +-------------+
-    | 👮 FAIL2BAN | | 🐍 REPORTER | | 🦁 WAZUH Agt|
-    | (Dynamic Ban)| | (Python 3)  | | (SIEM Fwd)  |
+    |  FAIL2BAN   |  |  REPORTER  | |  WAZUH Agt  |
+    | (Dynamic Ban)| | (Python 3) | |  (SIEM Fwd) |
     +-------------+ +-------------+ +-------------+
            │               │              │
            ▼               ▼              ▼
@@ -198,6 +198,7 @@ chmod +x install-syswarden.sh
 journalctl -k -f | grep "SysWarden-BLOCK"
 ```
 
+```
 📂 / (Root System)
 ├── 📁 etc/
 │   ├── 📄 syswarden.conf           # Main Configuration (Auto-generated)
@@ -210,6 +211,7 @@ journalctl -k -f | grep "SysWarden-BLOCK"
 │   └── 🐍 syswarden_reporter.py    # Python Log Analyzer
 └── 📁 var/log/
     └── 📄 syswarden-install.log    # Installation & Debug Logs
+```
 
 ## Uninstallation (root)
 
