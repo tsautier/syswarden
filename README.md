@@ -37,6 +37,7 @@ SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https
 
 ## Architecture
 
+```
 ☁️  EXTERNAL SOURCES (Blocklists)
       (GitHub / GitLab / Codeberg Mirrors)
                    │
@@ -81,6 +82,7 @@ SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https
            ▼               ▼              ▼
       🚫 BAN IP       📡 AbuseIPDB    🛡️ WAZUH
       (Firewall)        (API Push)    (Manager)
+```
 
 ## Key Features
 
@@ -139,6 +141,7 @@ On Enterprise Linux, proper integration with `firewalld` is critical.
 
 ## Workflow
 
+```
 INTERNET TRAFFIC 🌍
        │
        ▼
@@ -172,6 +175,7 @@ INTERNET TRAFFIC 🌍
                                   │       ▼
                                   └─ YES ➔ 📡 REPORT TO ABUSEIPDB
                                            & 🦁 FORWARD TO WAZUH
+```
 
 ## How to Install (root)
 
