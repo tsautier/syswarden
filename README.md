@@ -211,7 +211,7 @@ journalctl -k -f | grep "SysWarden-BLOCK"
 
 ## License & Copyright
 
-- **SysWarden** © 2023–2026  
+- **SysWarden** © 2026  
 - Developed by **Duggy Tuxy (Laurent Minne)**.
 
 "This tool is open-source software licensed under the **[GNU GPLv3 License](/LICENSE)**." 
