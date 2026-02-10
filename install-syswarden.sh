@@ -596,9 +596,9 @@ def monitor_logs():
     # Regex SysWarden (SRC + DPT)
     regex_ds = re.compile(r"\[SysWarden-BLOCK\].*SRC=([\d\.]+).*DPT=(\d+)")
     
-    # [OPTIMIZATION] Regex Fail2ban (More permissive)
-    # Allows "fail2ban.actions", "fail2ban-server", or just "fail2ban"
-    regex_f2b = re.compile(r"fail2ban.*\[(.*?)\].*?[Bb]an\s+([\d\.]+)", re.IGNORECASE)
+    # [OPTIMIZATION] Regex Fail2ban (Universal - Works on AlmaLinux with brackets [PID] or [Jail])
+    # Ignore content between first brackets (often PID), find [Jail] later or implicitly
+    regex_f2b = re.compile(r"fail2ban.*\[(.*?)\].*Ban\s+([\d\.]+)", re.IGNORECASE)
 
     while True:
         if p.poll(100):
@@ -940,7 +940,7 @@ setup_wazuh_agent() {
             iptables -I INPUT 1 -s "$WAZUH_IP" -p tcp -m multiport --sports $WAZUH_PORT,$WAZUH_REG_PORT -j ACCEPT
             
             # Persistence for IPtables
-            if command -v netfilter-persistent >/dev/null; then
+            if command -v netfilter-persistent >/dev/null; then 
                 netfilter-persistent save >/dev/null 2>&1
             elif [[ -f /etc/iptables/rules.v4 ]]; then
                 iptables-save > /etc/iptables/rules.v4
@@ -988,8 +988,8 @@ EOF
             log "ERROR" "Unsupported OS for automatic Wazuh install."
             return
         fi
-		
-		# [FIX] Force Manager IP configuration (Universal)
+        
+        # [FIX] Force Manager IP configuration (Universal)
         # This ensures the Manager IP is applied even if the package was already installed 
         # and the package manager returned "Nothing to do".
         if [[ -f /var/ossec/etc/ossec.conf ]]; then
@@ -1015,8 +1015,8 @@ EOF
         systemctl daemon-reload
         systemctl enable wazuh-agent
         systemctl start wazuh-agent
-		
-		# --- [NEW] Persistence for Uninstallation ---
+        
+        # --- [NEW] Persistence for Uninstallation ---
         log "INFO" "Saving Wazuh configuration for future removal..."
         echo "WAZUH_IP='$WAZUH_IP'" >> "$CONF_FILE"
         echo "WAZUH_PORT='$WAZUH_PORT'" >> "$CONF_FILE"
@@ -1049,7 +1049,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Pro/Secu)    #"
+    echo -e "#     SysWarden Tool Installer (Pro/Secu)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -1080,11 +1080,11 @@ fi
 if [[ "$MODE" != "update" ]]; then
     setup_siem_logging
     setup_abuse_reporting
-	setup_wazuh_agent
+    setup_wazuh_agent
     setup_cron_autoupdate "$MODE"
     
     echo -e "\n${GREEN}#############################################################"
-    echo -e "#                     INSTALLATION SUCCESSFUL                     #"
+    echo -e "#                      INSTALLATION SUCCESSFUL                      #"
     echo -e "#############################################################${NC}"
     echo -e " -> List loaded: $LIST_TYPE"
     echo -e " -> Backend: $FIREWALL_BACKEND"
