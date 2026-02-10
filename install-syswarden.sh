@@ -753,7 +753,7 @@ setup_cron_autoupdate() {
         
         # 1. Setup Cron
         local cron_file="/etc/cron.d/syswarden-update"
-        echo "0 * * * * root $script_path update >/dev/null 2>&1" > "$cron_file"
+        echo "5 * * * * root $script_path update >/dev/null 2>&1" > "$cron_file"
         chmod 644 "$cron_file"
         log "INFO" "Automatic updates enabled: Runs every hour via $cron_file"
 
