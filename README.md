@@ -35,6 +35,78 @@
 
 SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist)**, **[Wazuh](https://github.com/wazuh)** and **[Fail2ban](https://github.com/fail2ban/fail2ban)** that blocks up to 99% of noisy, disruptive, and malicious IP addresses and focuses on real signals.
 
+## Architecture & Workflow
+
+```mermaid
+graph TD
+    %% --- STYLES ---
+    classDef attacker fill:#ff4d4d,stroke:#333,color:white;
+    classDef user fill:#4dff88,stroke:#333,color:black;
+    classDef shield fill:#333,stroke:#fff,color:white,stroke-width:4px;
+    classDef component fill:#e1f5fe,stroke:#0277bd,color:black;
+    classDef ext fill:#fff3e0,stroke:#ff9800,color:black,stroke-dasharray: 5 5;
+
+    %% --- EXTERNAL ACTORS ---
+    Hacker[☠️ Attackers / Bots]:::attacker
+    Legit[👤 Legitimate Users]:::user
+    
+    subgraph Cloud["☁️ External Resources"]
+        Repo[("📦 Data-Shield Sources<br>(GitHub/GitLab/Codeberg)")]:::ext
+        AbuseAPI["📡 AbuseIPDB API"]:::ext
+        WazuhSrv["🛡️ Wazuh SIEM Manager"]:::ext
+    end
+
+    %% --- SERVER INTERNAL ---
+    subgraph Server["🖥️ Protected Server (SysWarden Ecosystem)"]
+        
+        %% UPDATE LOGIC
+        Cron((🕒 Cron Job)) -->|Every Hour| Updater["🔄 SysWarden Script<br>(Bash)"]:::component
+        Updater <-->|Fetch List| Repo
+        Updater -->|Inject IPs| FW_Backend
+
+        %% FIREWALL LAYER
+        subgraph FW_Layer["🔥 Layer 1: The Firewall Shield"]
+            direction TB
+            FW_Backend{"⚙️ Backend Engine<br>(Auto-Detected)"}:::shield
+            NFT["🛡️ Nftables<br>(Debian/Ubuntu)"]
+            Fwd["🔥 Firewalld<br>(RHEL/Alma)"]
+            IPT["🧱 IPSet/Iptables<br>(Legacy)"]
+            
+            FW_Backend -.-> NFT
+            FW_Backend -.-> Fwd
+            FW_Backend -.-> IPT
+        end
+
+        %% TRAFFIC FLOW
+        Hacker -->|Connection Attempt| FW_Backend
+        Legit -->|Connection Attempt| FW_Backend
+        
+        FW_Backend --"🛑 BLOCKED (Static Set)"--> Drop[🗑️ DROP Packet]:::attacker
+        FW_Backend --"✅ ALLOWED"--> Services["Services (SSH, Web, DB)"]:::user
+
+        %% MONITORING LAYER
+        Services -.->|Logs| SysLogs[("/var/log/syslog<br>Journald")]
+
+        subgraph Defense["👮 Layer 2: Active Defense"]
+            F2B["Fail2ban"]:::component
+            SysLogs --> F2B
+            F2B --"🚫 Ban Dynamic IP"--> FW_Backend
+        end
+
+        %% REPORTING LAYER
+        subgraph Reporting["📢 Reporting & SIEM"]
+            Reporter["🐍 Python Reporter"]:::component
+            Agent["🦁 Wazuh Agent"]:::component
+            
+            SysLogs --> Reporter
+            SysLogs --> Agent
+            
+            Reporter --"Report IP"--> AbuseAPI
+            Agent --"Forward Events"--> WazuhSrv
+        end
+    end
+
+
 ## Key Features
 
 - **Universal OS Support:** Auto-detects and adapts to **Debian, Ubuntu, RHEL, AlmaLinux, and Rocky Linux**.
