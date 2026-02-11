@@ -33,6 +33,14 @@
 
 # SysWarden
 
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./banner-light.svg">
+    <img alt="SysWarden Banner" src="./banner-dark.svg" width="100%">
+  </picture>
+</div>
+
 SysWarden is a tool based on the **[Data-Shield IPv4 Blocklists Community](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist)**, **[Wazuh](https://github.com/wazuh)** and **[Fail2ban](https://github.com/fail2ban/fail2ban)** that blocks up to 99% of noisy, disruptive, and malicious IP addresses and focuses on real signals.
 
 ## What Does SysWarden Protect
