@@ -98,12 +98,26 @@ install_dependencies() {
     fi
 
     # Python Requests (Required for AbuseIPDB Reporter)
+    # PEP 668 COMPLIANCE: We strictly use system packages (apt/dnf) to avoid 'externally-managed-environment' errors.
     if ! python3 -c "import requests" 2>/dev/null; then
         log "INFO" "Installing Python Requests library..."
+        
         if [[ -f /etc/debian_version ]]; then
+            # Debian/Ubuntu: MANDATORY usage of apt to avoid breaking system python
             apt-get install -y python3-requests
+            
         elif [[ -f /etc/redhat-release ]]; then
-            dnf install -y python3-requests || (dnf install -y python3-pip && pip3 install requests)
+            # RHEL/Alma: Prioritize RPM. Fallback to pip only if RPM fails (RHEL behavior is less strict than Debian yet)
+            if ! dnf install -y python3-requests; then
+                 log "WARN" "python3-requests RPM not found. Trying pip fallback..."
+                 dnf install -y python3-pip
+                 pip3 install requests
+            fi
+        fi
+
+        # Verification post-install
+        if ! python3 -c "import requests" 2>/dev/null; then
+             log "ERROR" "Failed to install 'python3-requests'. AbuseIPDB reporting feature will be disabled."
         fi
     fi
 
@@ -645,46 +659,190 @@ EOF
 
 uninstall_syswarden() {
     echo -e "\n${RED}=== Uninstalling SysWarden ===${NC}"
-    log "WARN" "Starting Uninstallation..."
+    log "WARN" "Starting Deep Clean Uninstallation..."
 
+    # Charger la conf pour récupérer les variables (Wazuh IP, etc.)
     if [[ -f "$CONF_FILE" ]]; then source "$CONF_FILE"; fi
 
+    # 1. Stop & Remove Reporter Service
+    log "INFO" "Removing SysWarden Reporter..."
     systemctl disable --now syswarden-reporter 2>/dev/null || true
     rm -f /etc/systemd/system/syswarden-reporter.service /usr/local/bin/syswarden_reporter.py
     systemctl daemon-reload
 
+    # 2. Remove Cron & Logrotate
+    log "INFO" "Removing Maintenance Tasks..."
     rm -f "/etc/cron.d/syswarden-update"
+    rm -f "/etc/logrotate.d/syswarden"
 
-    if command -v nft >/dev/null; then nft delete table inet syswarden_table 2>/dev/null || true; fi
+    # 3. Clean Firewall Rules
+    log "INFO" "Cleaning Firewall Rules..."
+    
+    # Nftables
+    if command -v nft >/dev/null; then 
+        nft delete table inet syswarden_table 2>/dev/null || true
+    fi
+    
+    # Firewalld
     if command -v firewall-cmd >/dev/null; then
+        # Remove Blocklist Rules
         firewall-cmd --permanent --remove-rich-rule="rule source ipset='$SET_NAME' log prefix='[SysWarden-BLOCK] ' level='info' drop" 2>/dev/null || true
         firewall-cmd --permanent --delete-ipset="$SET_NAME" 2>/dev/null || true
+        
+        # Remove Wazuh Whitelist Rules (if they exist)
+        if [[ -n "${WAZUH_IP:-}" ]]; then
+             firewall-cmd --permanent --remove-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='1514' protocol='tcp' accept" 2>/dev/null || true
+             firewall-cmd --permanent --remove-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='1515' protocol='tcp' accept" 2>/dev/null || true
+        fi
+        
         firewall-cmd --reload 2>/dev/null || true
     fi
-    if command -v ipset >/dev/null; then ipset destroy "$SET_NAME" 2>/dev/null || true; fi
+    
+    # IPSet / Iptables (Legacy)
+    if command -v ipset >/dev/null; then 
+        ipset destroy "$SET_NAME" 2>/dev/null || true
+        # Note: iptables rules in RAM are cleared by reboot or manual flush, 
+        # but persistent rules (netfilter-persistent) should be manually reviewed if used.
+    fi
 
+    # 4. Revert Fail2ban Configuration
+    if [[ -f /etc/fail2ban/jail.local.bak ]]; then
+        log "INFO" "Restoring original Fail2ban configuration..."
+        mv /etc/fail2ban/jail.local.bak /etc/fail2ban/jail.local
+        systemctl restart fail2ban
+    else
+        log "WARN" "No Fail2ban backup found. Leaving current config active."
+    fi
+
+    # 5. Remove Wazuh Agent (Optional but cleaner)
+    if command -v systemctl >/dev/null && systemctl list-unit-files | grep -q wazuh-agent; then
+        read -p "Do you also want to UNINSTALL the Wazuh Agent? (y/N): " rm_wazuh
+        if [[ "$rm_wazuh" =~ ^[Yy]$ ]]; then
+            log "INFO" "Removing Wazuh Agent..."
+            systemctl disable --now wazuh-agent 2>/dev/null || true
+            
+            if [[ -f /etc/debian_version ]]; then
+                apt-get remove --purge -y wazuh-agent
+                rm -f /etc/apt/sources.list.d/wazuh.list
+                rm -f /usr/share/keyrings/wazuh.gpg
+                apt-get update -qq
+            elif [[ -f /etc/redhat-release ]]; then
+                dnf remove -y wazuh-agent
+                rm -f /etc/yum.repos.d/wazuh.repo
+            fi
+            log "INFO" "Wazuh Agent removed."
+        else
+            log "INFO" "Keeping Wazuh Agent installed."
+        fi
+    fi
+
+    # 6. Remove Config File
     rm -f "$CONF_FILE"
+    
+    log "INFO" "Cleanup complete. Logs at $LOG_FILE are kept for reference."
     echo -e "${GREEN}Uninstallation complete.${NC}"
     exit 0
 }
 
 setup_wazuh_agent() {
-    echo -e "\n${BLUE}=== Step 8: Wazuh Agent Installation ===${NC}"
+    echo -e "\n${BLUE}=== Step 8: Wazuh Agent Installation (Custom) ===${NC}"
+    
+    # 1. Ask for confirmation
     read -p "Install Wazuh Agent? (y/N): " response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        read -p "Enter Wazuh Manager IP: " WAZUH_IP
-        if [[ -z "$WAZUH_IP" ]]; then log "ERROR" "Missing IP."; return; fi
-        
-        log "INFO" "Whitelisting Wazuh IP..."
-        # Add basic firewall whitelist logic here if needed (omitted for brevity as standard ports are used)
-        if [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
-             firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='1514' protocol='tcp' accept" >/dev/null 2>&1
-             firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='1515' protocol='tcp' accept" >/dev/null 2>&1
-             firewall-cmd --reload
-        fi
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        log "INFO" "Skipping Wazuh Agent installation."
+        return
+    fi
 
-        log "INFO" "Installing Wazuh Agent..."
-        cat <<EOF > /etc/yum.repos.d/wazuh.repo
+    # 2. Gather Configuration Data
+    # IP Serveur
+    read -p "Enter Wazuh Manager IP: " WAZUH_IP
+    if [[ -z "$WAZUH_IP" ]]; then log "ERROR" "Missing IP. Skipping."; return; fi
+
+    # Hostname (Agent Name)
+    read -p "Agent Name [Press Enter for '$(hostname)']: " W_NAME
+    W_NAME=${W_NAME:-$(hostname)}
+
+    # Group
+    read -p "Agent Group [Press Enter for 'default']: " W_GROUP
+    W_GROUP=${W_GROUP:-default}
+
+    # Agent Port (Communication)
+    read -p "Agent Communication Port [Press Enter for '1514']: " W_PORT_COMM
+    W_PORT_COMM=${W_PORT_COMM:-1514}
+
+    # Enrollment Port (Registration)
+    read -p "Enrollment Port [Press Enter for '1515']: " W_PORT_ENROLL
+    W_PORT_ENROLL=${W_PORT_ENROLL:-1515}
+
+    # Protocol (Default TCP)
+    W_PROTO="TCP"
+
+    # 3. Whitelist Wazuh Manager (Universal Firewall)
+    log "INFO" "Whitelisting Wazuh Manager IP ($WAZUH_IP) on ports $W_PORT_COMM & $W_PORT_ENROLL..."
+    
+    if [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
+         # RHEL / Alma / Rocky
+         # Rules for Custom Ports
+         firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='$W_PORT_COMM' protocol='${W_PROTO,,}' accept" >/dev/null 2>&1 || true
+         firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WAZUH_IP' port port='$W_PORT_ENROLL' protocol='${W_PROTO,,}' accept" >/dev/null 2>&1 || true
+         firewall-cmd --reload
+
+    elif [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
+         # Debian / Ubuntu (Modern)
+         # We accept all traffic from Manager IP (Highest Priority) to ensure connectivity & Active Response
+         nft insert rule inet syswarden_table input ip saddr "$WAZUH_IP" accept 2>/dev/null || true
+         log "INFO" "Nftables rule added for Wazuh Manager (Full Trust)."
+		 
+		 # ### PERSISTENCE FIX ###
+         # Save current RAM ruleset to disk so it survives reboot
+         log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
+         nft list ruleset > /etc/nftables.conf
+         # Enable service just in case
+         systemctl enable nftables >/dev/null 2>&1 || true
+
+    else
+         # Fallback Iptables / IPSet
+         if ! iptables -C INPUT -s "$WAZUH_IP" -j ACCEPT 2>/dev/null; then
+             iptables -I INPUT 1 -s "$WAZUH_IP" -j ACCEPT
+             
+             if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
+             elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+         fi
+    fi
+
+    log "INFO" "Starting Wazuh Agent installation..."
+
+    # 4. OS-Specific Installation Logic with EXPORTS
+    # These variables are automatically read by the Wazuh package installer
+    export WAZUH_MANAGER="$WAZUH_IP"
+    export WAZUH_AGENT_NAME="$W_NAME"
+    export WAZUH_AGENT_GROUP="$W_GROUP"
+    export WAZUH_MANAGER_PORT="$W_PORT_COMM"       # Custom Agent Port
+    export WAZUH_REGISTRATION_PORT="$W_PORT_ENROLL" # Custom Enrollment Port
+    export WAZUH_PROTOCOL="$W_PROTO"
+
+    if [[ -f /etc/debian_version ]]; then
+        # --- DEBIAN / UBUNTU ---
+        log "INFO" "Detected Debian/Ubuntu system."
+        apt-get install -y gnupg apt-transport-https
+        
+        if curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import; then
+            chmod 644 /usr/share/keyrings/wazuh.gpg
+        else
+            log "ERROR" "Failed to import GPG key."
+            return
+        fi
+        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee /etc/apt/sources.list.d/wazuh.list
+        
+        apt-get update -qq
+        apt-get install -y wazuh-agent
+
+    elif [[ -f /etc/redhat-release ]]; then
+        # --- RHEL / ALMA / ROCKY ---
+        log "INFO" "Detected RHEL/Alma/Rocky system."
+        rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH
+        cat > /etc/yum.repos.d/wazuh.repo << EOF
 [wazuh]
 gpgcheck=1
 gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
@@ -693,9 +851,26 @@ name=EL-\$releasever - Wazuh
 baseurl=https://packages.wazuh.com/4.x/yum/
 priority=1
 EOF
-        WAZUH_MANAGER="$WAZUH_IP" dnf install -y wazuh-agent
+        dnf install -y wazuh-agent
+    else
+        log "ERROR" "Unsupported OS."
+        return
+    fi
+
+    # 5. Enable and Persistence
+    if systemctl list-unit-files | grep -q wazuh-agent; then
+        systemctl daemon-reload
         systemctl enable --now wazuh-agent
+        
+        # Save config for uninstall reference
         echo "WAZUH_IP='$WAZUH_IP'" >> "$CONF_FILE"
+        echo "WAZUH_AGENT_NAME='$W_NAME'" >> "$CONF_FILE"
+        echo "WAZUH_COMM_PORT='$W_PORT_COMM'" >> "$CONF_FILE"
+        echo "WAZUH_ENROLL_PORT='$W_PORT_ENROLL'" >> "$CONF_FILE"
+        
+        log "INFO" "Wazuh Agent '$W_NAME' installed (Group: $W_GROUP, Ports: $W_PORT_COMM/$W_PORT_ENROLL)."
+    else
+        log "ERROR" "Wazuh Agent installation seemed to fail."
     fi
 }
 
