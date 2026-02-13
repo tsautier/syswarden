@@ -425,6 +425,7 @@ EOF
 
         # 5. DYNAMIC DETECTION: APACHE
         APACHE_LOG=""
+		APACHE_ACCESS=""
         if [[ -f "/var/log/apache2/error.log" ]]; then
             APACHE_LOG="/var/log/apache2/error.log" # Debian/Ubuntu
             APACHE_ACCESS="/var/log/apache2/access.log"
