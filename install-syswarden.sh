@@ -1152,6 +1152,9 @@ uninstall_syswarden() {
 
     # 6. Remove Config File
     rm -f "$CONF_FILE"
+	
+	# 7. Remove All logs
+	rm -f "$LOG_FILE"
     
     log "INFO" "Cleanup complete. Logs at $LOG_FILE are kept for reference."
     echo -e "${GREEN}Uninstallation complete.${NC}"
