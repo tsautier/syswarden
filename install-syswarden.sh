@@ -66,7 +66,9 @@ detect_os_backend() {
     fi
 
     # Logic to select the best firewall for the OS
-    if [[ "$OS_ID" == "ubuntu" ]] || [[ "$OS_ID" == "debian" ]]; then
+    if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+        FIREWALL_BACKEND="ufw"
+    elif [[ "$OS_ID" == "ubuntu" ]] || [[ "$OS_ID" == "debian" ]]; then
         FIREWALL_BACKEND="nftables"
     elif command -v firewall-cmd >/dev/null 2>&1; then
         FIREWALL_BACKEND="firewalld" # RHEL/Alma default
@@ -324,6 +326,33 @@ EOF
         
         firewall-cmd --reload
         log "INFO" "Firewalld rules applied."
+		
+		elif [[ "$FIREWALL_BACKEND" == "ufw" ]]; then
+        log "INFO" "Configuring UFW with IPSet..."
+        
+        # 1. Create IPSet (UFW uses iptables underneath)
+        ipset create "$SET_NAME" hash:ip maxelem 200000 -exist
+        sed "s/^/add $SET_NAME /" "$FINAL_LIST" | ipset restore -!
+
+        # 2. Inject Rule into /etc/ufw/before.rules
+        # We insert the rule right after the standard UFW header to ensure it runs first
+        UFW_RULES="/etc/ufw/before.rules"
+        
+        # Remove old rules if present to avoid duplicates
+        sed -i "/$SET_NAME/d" "$UFW_RULES"
+
+        # Insert new rules after "# End required lines" marker
+        if grep -q "# End required lines" "$UFW_RULES"; then
+            sed -i "/# End required lines/a -A ufw-before-input -m set --match-set $SET_NAME src -j DROP" "$UFW_RULES"
+            sed -i "/# End required lines/a -A ufw-before-input -m set --match-set $SET_NAME src -j LOG --log-prefix '[SysWarden-BLOCK] '" "$UFW_RULES"
+        else
+            log "WARN" "Standard UFW marker not found. Appending to end of file."
+            echo "-A ufw-before-input -m set --match-set $SET_NAME src -j LOG --log-prefix '[SysWarden-BLOCK] '" >> "$UFW_RULES"
+            echo "-A ufw-before-input -m set --match-set $SET_NAME src -j DROP" >> "$UFW_RULES"
+        fi
+
+        ufw reload
+        log "INFO" "UFW rules applied."
 
     else
         # Fallback IPSET / IPTABLES
@@ -1097,6 +1126,12 @@ uninstall_syswarden() {
     # Nftables
     if command -v nft >/dev/null; then 
         nft delete table inet syswarden_table 2>/dev/null || true
+    fi
+	
+	# UFW
+    if [[ -f "/etc/ufw/before.rules" ]]; then
+        sed -i "/$SET_NAME/d" /etc/ufw/before.rules
+        if command -v ufw >/dev/null; then ufw reload; fi
     fi
     
     # Firewalld
