@@ -435,6 +435,12 @@ EOF
 
         if [[ -n "$APACHE_LOG" ]]; then
             log "INFO" "Apache logs detected. Enabling Apache Jail."
+            
+            # Create Filter for 404/403 scanners (Apache specific)
+            if [[ ! -f "/etc/fail2ban/filter.d/apache-scanner.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^<HOST> .+\"(GET|POST|HEAD) .+\" (400|401|403|404) .+\$\nignoreregex =" > /etc/fail2ban/filter.d/apache-scanner.conf
+            fi
+
             cat <<EOF >> /etc/fail2ban/jail.local
 
 # --- Apache Protection ---
@@ -449,27 +455,412 @@ enabled = true
 port = http,https
 logpath = $APACHE_ACCESS
 backend = auto
+
+[apache-scanner]
+enabled = true
+port    = http,https
+filter  = apache-scanner
+logpath = $APACHE_ACCESS
+backend = auto
+maxretry = 3
+bantime  = 24h
 EOF
         fi
 
         # 6. DYNAMIC DETECTION: MONGODB
         if [[ -f "/var/log/mongodb/mongod.log" ]]; then
             log "INFO" "MongoDB logs detected. Enabling Mongo Jail."
+
+            # Create strict Filter for Auth failures & Unauthorized commands (Injection probing)
+            # Catches: "Authentication failed", "SASL authentication failed", "unauthorized", "not authorized"
+            if [[ ! -f "/etc/fail2ban/filter.d/mongodb-guard.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*(?:Authentication failed|SASL authentication \S+ failed|Command not found|unauthorized|not authorized).*\$\nignoreregex =" > /etc/fail2ban/filter.d/mongodb-guard.conf
+            fi
+
             cat <<EOF >> /etc/fail2ban/jail.local
 
 # --- MongoDB Protection ---
-[mongodb-auth]
+[mongodb-guard]
 enabled = true
 port = 27017
+filter = mongodb-guard
 logpath = /var/log/mongodb/mongod.log
 backend = auto
+maxretry = 3
+bantime  = 24h
 EOF
         fi
+		
+		# 7. DYNAMIC DETECTION: MARIADB / MYSQL
+        MARIADB_LOG=""
+        if [[ -f "/var/log/mysql/error.log" ]]; then
+            MARIADB_LOG="/var/log/mysql/error.log" # Debian/Ubuntu default
+        elif [[ -f "/var/log/mariadb/mariadb.log" ]]; then
+            MARIADB_LOG="/var/log/mariadb/mariadb.log" # RHEL/Alma default
+        fi
 
-        log "INFO" "Fail2ban configured successfully."
-        systemctl restart fail2ban
-        sleep 2
-    fi
+        if [[ -n "$MARIADB_LOG" ]]; then
+            log "INFO" "MariaDB logs detected. Enabling MariaDB Jail."
+
+            # Create Filter for Authentication Failures (Access Denied brute-force)
+            if [[ ! -f "/etc/fail2ban/filter.d/mariadb-auth.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*[Aa]ccess denied for user.*\$\nignoreregex =" > /etc/fail2ban/filter.d/mariadb-auth.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- MariaDB Protection ---
+[mariadb-auth]
+enabled = true
+port = 3306
+filter = mariadb-auth
+logpath = $MARIADB_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 8. DYNAMIC DETECTION: POSTFIX (SMTP)
+        POSTFIX_LOG=""
+        if [[ -f "/var/log/mail.log" ]]; then
+            POSTFIX_LOG="/var/log/mail.log" # Debian/Ubuntu
+        elif [[ -f "/var/log/maillog" ]]; then
+            POSTFIX_LOG="/var/log/maillog" # RHEL/Alma
+        fi
+
+        if [[ -n "$POSTFIX_LOG" ]]; then
+            log "INFO" "Postfix logs detected. Enabling SMTP Jails."
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Postfix SMTP Protection ---
+[postfix]
+enabled = true
+mode    = aggressive
+port    = smtp,465,submission
+logpath = $POSTFIX_LOG
+backend = auto
+
+[postfix-sasl]
+enabled = true
+port    = smtp,465,submission
+logpath = $POSTFIX_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 9. DYNAMIC DETECTION: VSFTPD (FTP)
+        if [[ -f "/var/log/vsftpd.log" ]]; then
+            log "INFO" "VSFTPD logs detected. Enabling FTP Jail."
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- VSFTPD Protection ---
+[vsftpd]
+enabled = true
+port    = ftp,ftp-data,ftps,20,21
+logpath = /var/log/vsftpd.log
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+		
+		# 10. DYNAMIC DETECTION: WORDPRESS (WP-LOGIN)
+        # Reuses web logs detected in steps 4 & 5
+        WP_LOG=""
+        if [[ -n "$APACHE_ACCESS" ]]; then WP_LOG="$APACHE_ACCESS";
+        elif [[ -f "/var/log/nginx/access.log" ]]; then WP_LOG="/var/log/nginx/access.log"; fi
+
+        if [[ -n "$WP_LOG" ]]; then
+            log "INFO" "Web logs available. Configuring WordPress Jail."
+
+            # Create specific filter for WP Login & XMLRPC
+            if [[ ! -f "/etc/fail2ban/filter.d/wordpress-auth.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^<HOST> .* \"POST .*(wp-login\.php|xmlrpc\.php) HTTP.*\" 200\nignoreregex =" > /etc/fail2ban/filter.d/wordpress-auth.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- WordPress Protection ---
+[wordpress-auth]
+enabled = true
+port = http,https
+filter = wordpress-auth
+logpath = $WP_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 11. DYNAMIC DETECTION: NEXTCLOUD
+        NC_LOG=""
+        # Check common paths for Nextcloud log file
+        for path in "/var/www/nextcloud/data/nextcloud.log" "/var/www/html/nextcloud/data/nextcloud.log" "/var/www/html/data/nextcloud.log"; do
+            if [[ -f "$path" ]]; then NC_LOG="$path"; break; fi
+        done
+
+        if [[ -n "$NC_LOG" ]]; then
+            log "INFO" "Nextcloud logs detected. Enabling Nextcloud Jail."
+
+            # Create Filter (Supports both JSON and Legacy text logs)
+            if [[ ! -f "/etc/fail2ban/filter.d/nextcloud.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*Login failed: .* \(Remote IP: '<HOST>'\).*$\nignoreregex =" > /etc/fail2ban/filter.d/nextcloud.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Nextcloud Protection ---
+[nextcloud]
+enabled = true
+port    = http,https
+filter  = nextcloud
+logpath = $NC_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 12. DYNAMIC DETECTION: ASTERISK (VOIP)
+        ASTERISK_LOG=""
+        if [[ -f "/var/log/asterisk/messages" ]]; then
+            ASTERISK_LOG="/var/log/asterisk/messages"
+        elif [[ -f "/var/log/asterisk/full" ]]; then
+            ASTERISK_LOG="/var/log/asterisk/full"
+        fi
+
+        if [[ -n "$ASTERISK_LOG" ]]; then
+            log "INFO" "Asterisk logs detected. Enabling VoIP Jail."
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Asterisk VoIP Protection ---
+[asterisk]
+enabled  = true
+filter   = asterisk
+port     = 5060,5061
+logpath  = $ASTERISK_LOG
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+		
+		# 13. DYNAMIC DETECTION: ZABBIX
+        if [[ -f "/var/log/zabbix/zabbix_server.log" ]]; then
+            log "INFO" "Zabbix Server logs detected. Enabling Zabbix Jail."
+
+            # Create Filter for Zabbix Server Login Failures
+            if [[ ! -f "/etc/fail2ban/filter.d/zabbix-auth.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*failed login of user .* from <HOST>.*\$\nignoreregex =" > /etc/fail2ban/filter.d/zabbix-auth.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Zabbix Protection ---
+[zabbix-auth]
+enabled = true
+port    = http,https,10050,10051
+filter  = zabbix-auth
+logpath = /var/log/zabbix/zabbix_server.log
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 14. DYNAMIC DETECTION: HAPROXY
+        if [[ -f "/var/log/haproxy.log" ]]; then
+            log "INFO" "HAProxy logs detected. Enabling HAProxy Jail."
+
+            # Create Filter for HTTP Errors (403 Forbidden, 404 Scan, 429 RateLimit)
+            if [[ ! -f "/etc/fail2ban/filter.d/haproxy-guard.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.* <HOST>:\d+ .+(400|403|404|429) .+\$\nignoreregex =" > /etc/fail2ban/filter.d/haproxy-guard.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- HAProxy Protection ---
+[haproxy-guard]
+enabled = true
+port    = http,https,8080
+filter  = haproxy-guard
+logpath = /var/log/haproxy.log
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+		
+		# 15. DYNAMIC DETECTION: WIREGUARD
+        if [[ -d "/etc/wireguard" ]]; then
+            WG_LOG=""
+            if [[ -f "/var/log/kern.log" ]]; then WG_LOG="/var/log/kern.log"; # Debian/Ubuntu
+            elif [[ -f "/var/log/messages" ]]; then WG_LOG="/var/log/messages"; fi # RHEL
+
+            if [[ -n "$WG_LOG" ]]; then
+                log "INFO" "WireGuard detected. Enabling UDP Jail."
+
+                # Create Filter for Handshake Failures (Requires Kernel Logging)
+                if [[ ! -f "/etc/fail2ban/filter.d/wireguard.conf" ]]; then
+                    echo -e "[Definition]\nfailregex = ^.*wireguard: .* Handshake for peer .* did not complete.*\$\nignoreregex =" > /etc/fail2ban/filter.d/wireguard.conf
+                fi
+
+                cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- WireGuard Protection ---
+[wireguard]
+enabled = true
+port    = 51820
+protocol= udp
+filter  = wireguard
+logpath = $WG_LOG
+maxretry = 5
+bantime  = 24h
+EOF
+            fi
+        fi
+		
+		# 16. DYNAMIC DETECTION: PHPMYADMIN
+        # Reuses web logs detected in steps 4 & 5
+        PMA_LOG=""
+        if [[ -n "$APACHE_ACCESS" ]]; then PMA_LOG="$APACHE_ACCESS";
+        elif [[ -f "/var/log/nginx/access.log" ]]; then PMA_LOG="/var/log/nginx/access.log"; fi
+
+        # Check if phpMyAdmin is installed (common paths)
+        if [[ -d "/usr/share/phpmyadmin" ]] || [[ -d "/etc/phpmyadmin" ]] || [[ -d "/var/www/html/phpmyadmin" ]]; then
+            if [[ -n "$PMA_LOG" ]]; then
+                log "INFO" "phpMyAdmin detected. Enabling PMA Jail."
+
+                # Create Filter for POST requests to PMA (Bruteforce usually returns 200 OK)
+                if [[ ! -f "/etc/fail2ban/filter.d/phpmyadmin-custom.conf" ]]; then
+                     echo -e "[Definition]\nfailregex = ^<HOST> -.*\"POST .*phpmyadmin.* HTTP.*\" 200\nignoreregex =" > /etc/fail2ban/filter.d/phpmyadmin-custom.conf
+                fi
+
+                cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- phpMyAdmin Protection ---
+[phpmyadmin-custom]
+enabled = true
+port    = http,https
+filter  = phpmyadmin-custom
+logpath = $PMA_LOG
+maxretry = 3
+bantime  = 24h
+EOF
+            fi
+        fi
+		
+		# 17. DYNAMIC DETECTION: LARAVEL
+        LARAVEL_LOG=""
+        # Check standard Laravel log paths
+        for path in "/var/www/html/storage/logs/laravel.log" "/var/www/storage/logs/laravel.log"; do
+            if [[ -f "$path" ]]; then LARAVEL_LOG="$path"; break; fi
+        done
+
+        # Fallback: search in /var/www (max depth 4)
+        if [[ -z "$LARAVEL_LOG" ]] && [[ -d "/var/www" ]]; then
+            LARAVEL_LOG=$(find /var/www -maxdepth 4 -name "laravel.log" 2>/dev/null | head -n 1)
+        fi
+
+        if [[ -n "$LARAVEL_LOG" ]]; then
+            log "INFO" "Laravel log detected. Enabling Laravel Jail."
+
+            # Create Filter (Matches: 'Failed login... ip: 1.2.3.4' or similar patterns)
+            if [[ ! -f "/etc/fail2ban/filter.d/laravel-auth.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^\\[.*\\] .*: (?:Failed login|Authentication failed|Login failed).*<HOST>.*\$\nignoreregex =" > /etc/fail2ban/filter.d/laravel-auth.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Laravel Protection ---
+[laravel-auth]
+enabled = true
+port    = http,https
+filter  = laravel-auth
+logpath = $LARAVEL_LOG
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+		
+		# 18. DYNAMIC DETECTION: GRAFANA
+        if [[ -f "/var/log/grafana/grafana.log" ]]; then
+            log "INFO" "Grafana logs detected. Enabling Grafana Jail."
+
+            # Create Filter for Grafana Auth Failures
+            if [[ ! -f "/etc/fail2ban/filter.d/grafana-auth.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*(?:msg=\"Invalid username or password\"|status=401).*remote_addr=<HOST>.*\$\nignoreregex =" > /etc/fail2ban/filter.d/grafana-auth.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Grafana Protection ---
+[grafana-auth]
+enabled = true
+port    = 3000,http,https
+filter  = grafana-auth
+logpath = /var/log/grafana/grafana.log
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+		
+		# 19. DYNAMIC DETECTION: SENDMAIL
+        SM_LOG=""
+        if [[ -f "/var/log/mail.log" ]]; then SM_LOG="/var/log/mail.log"; # Debian/Ubuntu
+        elif [[ -f "/var/log/maillog" ]]; then SM_LOG="/var/log/maillog"; fi # RHEL/Alma
+
+        # Check if Sendmail is installed to avoid conflict with Postfix
+        if [[ -n "$SM_LOG" ]] && [[ -f "/usr/sbin/sendmail" ]]; then
+            log "INFO" "Sendmail detected. Enabling Sendmail Jails."
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Sendmail Protection ---
+[sendmail-auth]
+enabled = true
+port    = smtp,465,submission
+logpath = $SM_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+
+[sendmail-reject]
+enabled = true
+port    = smtp,465,submission
+logpath = $SM_LOG
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+		
+		# 20. DYNAMIC DETECTION: SQUID PROXY
+        if [[ -f "/var/log/squid/access.log" ]]; then
+            log "INFO" "Squid Proxy logs detected. Enabling Squid Jail."
+
+            # Create Filter for Proxy Abuse (TCP_DENIED / 403 / 407)
+            if [[ ! -f "/etc/fail2ban/filter.d/squid-custom.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^\s*<HOST> .*(?:TCP_DENIED|ERR_ACCESS_DENIED).*\$\nignoreregex =" > /etc/fail2ban/filter.d/squid-custom.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Squid Proxy Protection ---
+[squid-custom]
+enabled = true
+port    = 3128,8080
+filter  = squid-custom
+logpath = /var/log/squid/access.log
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
 }
 
 setup_abuse_reporting() {
