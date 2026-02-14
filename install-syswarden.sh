@@ -268,7 +268,7 @@ download_list() {
     
     local output_file="$TMP_DIR/blocklist.txt"
     if curl -sS -L --retry 3 --connect-timeout 10 "$SELECTED_URL" -o "$output_file"; then
-        tr -d '\r' < "$output_file" | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' > "$TMP_DIR/clean_list.txt"
+        tr -d '\r' < "$output_file" | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$' > "$TMP_DIR/clean_list.txt"
         FINAL_LIST="$TMP_DIR/clean_list.txt"
         log "INFO" "Download success."
     else
@@ -314,7 +314,7 @@ EOF
         firewall-cmd --reload
         firewall-cmd --permanent --delete-ipset="$SET_NAME" 2>/dev/null || true
         firewall-cmd --reload
-        firewall-cmd --permanent --new-ipset="$SET_NAME" --type=hash:ip --option=family=inet --option=maxelem=200000
+        firewall-cmd --permanent --new-ipset="$SET_NAME" --type=hash:net --option=family=inet --option=maxelem=200000
         firewall-cmd --reload
         
         firewall-cmd --permanent --ipset="$SET_NAME" --add-entries-from-file="$FINAL_LIST"
@@ -331,7 +331,7 @@ EOF
         log "INFO" "Configuring UFW with IPSet..."
         
         # 1. Create IPSet (UFW uses iptables underneath)
-        ipset create "$SET_NAME" hash:ip maxelem 200000 -exist
+        ipset create "$SET_NAME" hash:net maxelem 200000 -exist
         sed "s/^/add $SET_NAME /" "$FINAL_LIST" | ipset restore -!
 
         # 2. Inject Rule into /etc/ufw/before.rules
@@ -356,9 +356,9 @@ EOF
 
     else
         # Fallback IPSET / IPTABLES
-        ipset create "${SET_NAME}_tmp" hash:ip maxelem 200000 -exist
+        ipset create "${SET_NAME}_tmp" hash:net maxelem 200000 -exist
         sed "s/^/add ${SET_NAME}_tmp /" "$FINAL_LIST" | ipset restore
-        ipset create "$SET_NAME" hash:ip maxelem 200000 -exist
+        ipset create "$SET_NAME" hash:net maxelem 200000 -exist
         ipset swap "${SET_NAME}_tmp" "$SET_NAME"
         ipset destroy "${SET_NAME}_tmp"
         
