@@ -1431,12 +1431,15 @@ show_alerts_dashboard() {
         clear
         local NOW=$(date "+%H:%M:%S")
         
-        echo -e "${BLUE}=====================================================================================${NC}"
+        echo -e "${BLUE}====================================================================================================${NC}"
         echo -e "${BLUE}   SysWarden Live Attack Dashboard (Last Update: $NOW)        ${NC}"
-        echo -e "${BLUE}=====================================================================================${NC}"
-        # HEADER: 5 Colonnes avec RULES au milieu
-        printf "${YELLOW}%-10s | %-16s | %-20s | %-12s | %-8s${NC}\n" "SOURCE" "IP ADDRESS" "RULES" "PORT" "DECISION"
-        echo "-------------------------------------------------------------------------------------"
+        echo -e "${BLUE}====================================================================================================${NC}"
+        # HEADER: 6 Columns (DATE / HOUR aligned to max 19 characters)
+        printf "${YELLOW}%-19s | %-10s | %-16s | %-20s | %-12s | %-8s${NC}\n" "DATE / HOUR" "SOURCE" "IP ADDRESS" "RULES" "PORT" "DECISION"
+        echo "----------------------------------------------------------------------------------------------------"
+
+        # Regex to cleanly extract the date: "Feb 14 10:05:10" OR "2026-02-14 10:05:10"
+        local date_regex="^([A-Z][a-z]{2}[[:space:]]+[0-9]+[[:space:]]+[0-9:]+|[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]+[0-9:]+)"
 
         # 1. FAIL2BAN ENTRIES (Via Journalctl)
         if command -v journalctl >/dev/null; then
@@ -1444,8 +1447,9 @@ show_alerts_dashboard() {
                 if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
                     jail="${BASH_REMATCH[1]}"
                     ip="${BASH_REMATCH[2]}"
-                    # Rule = Jail Name, Port = Dynamic (managed by Jail)
-                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
+                    dtime="Unknown"
+                    if [[ $line =~ $date_regex ]]; then dtime="${BASH_REMATCH[1]}"; fi
+                    printf "%-19s | %-10s | %-16s | %-20s | %-12s | %-8s\n" "$dtime" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
                 fi
             done
         elif [[ -f "/var/log/fail2ban.log" ]]; then
@@ -1453,21 +1457,26 @@ show_alerts_dashboard() {
                 if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
                     jail="${BASH_REMATCH[1]}"
                     ip="${BASH_REMATCH[2]}"
-                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
+                    dtime="Unknown"
+                    if [[ $line =~ $date_regex ]]; then dtime="${BASH_REMATCH[1]}"; fi
+                    printf "%-19s | %-10s | %-16s | %-20s | %-12s | %-8s\n" "$dtime" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
                 fi
             done
         fi
 
         # 2. FIREWALL ENTRIES (Via Journalctl)
+        # Increased journalctl to -n 100 to ensure enough lines are found
         if command -v journalctl >/dev/null; then
-            journalctl -k -n 50 --no-pager 2>/dev/null | { grep "SysWarden-BLOCK" || true; } | tail -n 12 | while read -r line; do
+            journalctl -k -n 100 --no-pager 2>/dev/null | { grep "SysWarden-BLOCK" || true; } | tail -n 12 | while read -r line; do
                 if [[ $line =~ SRC=([0-9.]+) ]]; then
                     ip="${BASH_REMATCH[1]}"
                     rule="SysWarden-BLOCK"
                     port="Global"
                     if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
+                    dtime="Unknown"
+                    if [[ $line =~ $date_regex ]]; then dtime="${BASH_REMATCH[1]}"; fi
                     
-                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Firewall" "$ip" "$rule" "$port" "BLOCK"
+                    printf "%-19s | %-10s | %-16s | %-20s | %-12s | %-8s\n" "$dtime" "Firewall" "$ip" "$rule" "$port" "BLOCK"
                 fi
             done
         elif [[ -f "/var/log/kern.log" ]]; then
@@ -1477,12 +1486,15 @@ show_alerts_dashboard() {
                     rule="SysWarden-BLOCK"
                     port="Global"
                     if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
-                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Firewall" "$ip" "$rule" "$port" "BLOCK"
+                    dtime="Unknown"
+                    if [[ $line =~ $date_regex ]]; then dtime="${BASH_REMATCH[1]}"; fi
+                    
+                    printf "%-19s | %-10s | %-16s | %-20s | %-12s | %-8s\n" "$dtime" "Firewall" "$ip" "$rule" "$port" "BLOCK"
                 fi
              done
         fi
         
-        echo "-------------------------------------------------------------------------------------"
+        echo "----------------------------------------------------------------------------------------------------"
         echo -e "Press [ESC] to Quit."
         
         read -t 10 -n 1 -s -r key || true
