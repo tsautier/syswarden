@@ -1161,8 +1161,14 @@ uninstall_syswarden() {
         log "INFO" "Restoring original Fail2ban configuration..."
         mv /etc/fail2ban/jail.local.bak /etc/fail2ban/jail.local
         systemctl restart fail2ban
+    elif [[ -f /etc/fail2ban/jail.local ]]; then
+        # Si pas de backup, c'est que jail.local n'existait pas avant (Install propre).
+        # On le supprime pour revenir à l'état par défaut de l'OS.
+        log "INFO" "No backup found (was a clean install). Removing SysWarden jail.local..."
+        rm /etc/fail2ban/jail.local
+        systemctl restart fail2ban
     else
-        log "WARN" "No Fail2ban backup found. Leaving current config active."
+        log "WARN" "No Fail2ban configuration found to revert."
     fi
 
     # 5. Remove Wazuh Agent (Optional but cleaner)
@@ -1328,11 +1334,197 @@ EOF
     fi
 }
 
+whitelist_ip() {
+    echo -e "\n${BLUE}=== SysWarden Whitelist Manager ===${NC}"
+    read -p "Enter IP to Whitelist: " WL_IP
+
+    # Validation simple de l'IP
+    if [[ ! "$WL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log "ERROR" "Invalid IP format."
+        return
+    fi
+
+    log "INFO" "Whitelisting IP: $WL_IP on backend: $FIREWALL_BACKEND"
+
+    case "$FIREWALL_BACKEND" in
+        "nftables")
+            # Insert Rule at position 1 (Pre-Filter)
+            nft insert rule inet syswarden_table input ip saddr "$WL_IP" accept
+            # Persistence
+            nft list ruleset > /etc/nftables.conf
+            log "INFO" "Rule added to Nftables and saved."
+            ;;
+        
+        "firewalld")
+            # Add Rich Rule with ACCEPT action
+            firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WL_IP' accept"
+            firewall-cmd --reload
+            log "INFO" "Rule added to Firewalld."
+            ;;
+        
+        "ufw")
+            # 1. Add UFW Allow Rule (High priority on user chain)
+            ufw insert 1 allow from "$WL_IP"
+            # 2. Remove from Blacklist IPSet immediately (in case it was blocked there)
+            ipset del "$SET_NAME" "$WL_IP" 2>/dev/null || true
+            ufw reload
+            log "INFO" "Rule added to UFW (and removed from current blocklist)."
+            ;;
+        
+        *)
+            # Fallback IPSet / Iptables
+            iptables -I INPUT 1 -s "$WL_IP" -j ACCEPT
+            # Persistence
+            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
+            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+            log "INFO" "Rule added to IPTables."
+            ;;
+    esac
+}
+
+blocklist_ip() {
+    echo -e "\n${RED}=== SysWarden Manual Blocklist Manager ===${NC}"
+    read -p "Enter IP to Block: " BL_IP
+
+    # Validation simple de l'IP
+    if [[ ! "$BL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log "ERROR" "Invalid IP format."
+        return
+    fi
+
+    log "INFO" "Blocking IP: $BL_IP on backend: $FIREWALL_BACKEND"
+
+    case "$FIREWALL_BACKEND" in
+        "nftables")
+            # Insert Rule at position 1 (Immediate Drop)
+            nft insert rule inet syswarden_table input ip saddr "$BL_IP" drop
+            # Persistence
+            nft list ruleset > /etc/nftables.conf
+            log "INFO" "Drop rule added to Nftables and saved."
+            ;;
+        
+        "firewalld")
+            # Add Rich Rule with DROP action
+            firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$BL_IP' drop"
+            firewall-cmd --reload
+            log "INFO" "Drop rule added to Firewalld."
+            ;;
+        
+        "ufw")
+            # Add UFW Deny Rule (High priority)
+            ufw insert 1 deny from "$BL_IP"
+            ufw reload
+            log "INFO" "Deny rule added to UFW."
+            ;;
+        
+        *)
+            # Fallback IPSet / Iptables
+            iptables -I INPUT 1 -s "$BL_IP" -j DROP
+            # Persistence
+            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
+            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+            log "INFO" "Drop rule added to IPTables."
+            ;;
+    esac
+}
+
+show_alerts_dashboard() {
+    # Trap Ctrl+C/Exit to restore cursor
+    trap "tput cnorm; clear; exit 0" INT TERM
+    tput civis # Hide cursor for cleaner UI
+
+    while true; do
+        clear
+        local NOW=$(date "+%H:%M:%S")
+        
+        echo -e "${BLUE}=====================================================================================${NC}"
+        echo -e "${BLUE}   SysWarden Live Attack Dashboard (Last Update: $NOW)        ${NC}"
+        echo -e "${BLUE}=====================================================================================${NC}"
+        # HEADER: 5 Colonnes avec RULES au milieu
+        printf "${YELLOW}%-10s | %-16s | %-20s | %-12s | %-8s${NC}\n" "SOURCE" "IP ADDRESS" "RULES" "PORT" "DECISION"
+        echo "-------------------------------------------------------------------------------------"
+
+        # 1. FAIL2BAN ENTRIES (Via Journalctl)
+        if command -v journalctl >/dev/null; then
+            journalctl -u fail2ban -n 50 --no-pager 2>/dev/null | { grep " Ban " || true; } | tail -n 8 | while read -r line; do
+                if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
+                    jail="${BASH_REMATCH[1]}"
+                    ip="${BASH_REMATCH[2]}"
+                    # Rule = Jail Name, Port = Dynamic (managed by Jail)
+                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
+                fi
+            done
+        elif [[ -f "/var/log/fail2ban.log" ]]; then
+             { grep " Ban " "/var/log/fail2ban.log" || true; } | tail -n 8 | while read -r line; do
+                if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
+                    jail="${BASH_REMATCH[1]}"
+                    ip="${BASH_REMATCH[2]}"
+                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Fail2ban" "$ip" "$jail" "Dynamic" "BAN"
+                fi
+            done
+        fi
+
+        # 2. FIREWALL ENTRIES (Via Journalctl)
+        if command -v journalctl >/dev/null; then
+            journalctl -k -n 50 --no-pager 2>/dev/null | { grep "SysWarden-BLOCK" || true; } | tail -n 12 | while read -r line; do
+                if [[ $line =~ SRC=([0-9.]+) ]]; then
+                    ip="${BASH_REMATCH[1]}"
+                    rule="SysWarden-BLOCK"
+                    port="Global"
+                    if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
+                    
+                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Firewall" "$ip" "$rule" "$port" "BLOCK"
+                fi
+            done
+        elif [[ -f "/var/log/kern.log" ]]; then
+             { grep "SysWarden-BLOCK" "/var/log/kern.log" || true; } | tail -n 12 | while read -r line; do
+                if [[ $line =~ SRC=([0-9.]+) ]]; then
+                    ip="${BASH_REMATCH[1]}"
+                    rule="SysWarden-BLOCK"
+                    port="Global"
+                    if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
+                    printf "%-10s | %-16s | %-20s | %-12s | %-8s\n" "Firewall" "$ip" "$rule" "$port" "BLOCK"
+                fi
+             done
+        fi
+        
+        echo "-------------------------------------------------------------------------------------"
+        echo -e "Press [ESC] to Quit."
+        
+        read -t 10 -n 1 -s -r key || true
+        if [[ $key == $'\e' ]]; then
+            break
+        fi
+    done
+    tput cnorm # Restore cursor
+    clear
+}
+
 # ==============================================================================
 # MAIN EXECUTION
 # ==============================================================================
 
 MODE="${1:-install}"
+
+if [[ "$MODE" == "whitelist" ]]; then
+    check_root
+    detect_os_backend
+    whitelist_ip
+    exit 0
+fi
+
+if [[ "$MODE" == "blocklist" ]]; then
+    check_root
+    detect_os_backend
+    blocklist_ip
+    exit 0
+fi
+
+if [[ "$MODE" == "alerts" ]]; then
+    check_root
+    show_alerts_dashboard
+    exit 0
+fi
 
 if [[ "$MODE" == "uninstall" ]]; then
     check_root
