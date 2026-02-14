@@ -187,6 +187,9 @@ chmod +x install-syswarden.sh
 # Update configurations and Blocklists
 ./install-syswarden.sh update
 
+# View Alerts
+./install-syswarden alerts
+
 # Check Kernel Logs
 journalctl -k -f | grep "SysWarden-BLOCK"
 
