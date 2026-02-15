@@ -1213,6 +1213,15 @@ uninstall_syswarden() {
         firewall-cmd --reload 2>/dev/null || true
     fi
     
+	# Docker (DOCKER-USER chain)
+    if command -v iptables >/dev/null && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
+        iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j DROP 2>/dev/null || true
+        iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] " 2>/dev/null || true
+        
+        if command -v netfilter-persistent >/dev/null; then netfilter-persistent save 2>/dev/null || true; 
+        elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save 2>/dev/null || true; fi
+    fi
+	
     # IPSet / Iptables (Legacy)
     if command -v ipset >/dev/null; then 
         ipset destroy "$SET_NAME" 2>/dev/null || true
@@ -1234,6 +1243,9 @@ uninstall_syswarden() {
     else
         log "WARN" "No Fail2ban configuration found to revert."
     fi
+	
+	# Remove custom Docker banaction
+    rm -f /etc/fail2ban/action.d/syswarden-docker.conf
 
     # 5. Remove Wazuh Agent (Optional but cleaner)
     if command -v systemctl >/dev/null && systemctl list-unit-files | grep -q wazuh-agent; then
