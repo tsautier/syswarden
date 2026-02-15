@@ -169,6 +169,25 @@ define_ssh_port() {
     log "INFO" "SSH Port configured as: $SSH_PORT"
 }
 
+define_docker_integration() {
+    if [[ "${1:-}" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
+        if [[ -z "${USE_DOCKER:-}" ]]; then USE_DOCKER="n"; fi
+        log "INFO" "Update Mode: Preserving Docker integration setting ($USE_DOCKER)"
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Step: Docker Integration ===${NC}"
+    read -p "Do you use Docker on this server? (y/N): " input_docker
+    if [[ "$input_docker" =~ ^[Yy]$ ]]; then
+        USE_DOCKER="y"
+        log "INFO" "Docker integration ENABLED."
+    else
+        USE_DOCKER="n"
+        log "INFO" "Docker integration DISABLED."
+    fi
+    echo "USE_DOCKER='$USE_DOCKER'" >> "$CONF_FILE"
+}
+
 # ==============================================================================
 # CORE LOGIC
 # ==============================================================================
@@ -370,6 +389,34 @@ EOF
             
             if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
             elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+        fi
+    fi
+	
+	# --- DOCKER HERMETIC FIREWALL BLOCK ---
+    if [[ "${USE_DOCKER:-n}" == "y" ]]; then
+        log "INFO" "Applying Global Blocklist to Docker (DOCKER-USER chain)..."
+        
+        # Docker exclusively uses iptables routing. 
+        # Even if the host uses Nftables, we must load the IPSet for Docker.
+        if ! ipset list "$SET_NAME" >/dev/null 2>&1; then
+             ipset create "$SET_NAME" hash:net maxelem 200000 -exist
+             sed "s/^/add $SET_NAME /" "$FINAL_LIST" | ipset restore -!
+        fi
+
+        # Check if Docker chain exists before injecting rules
+        if iptables -n -L DOCKER-USER >/dev/null 2>&1; then
+            iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j DROP 2>/dev/null || true
+            iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] " 2>/dev/null || true
+            
+            iptables -I DOCKER-USER 1 -m set --match-set "$SET_NAME" src -j DROP
+            iptables -I DOCKER-USER 1 -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] "
+            
+            # Persist rules if possible
+            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
+            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+            log "INFO" "Docker firewall rules applied successfully."
+        else
+            log "WARN" "DOCKER-USER chain not found. Docker might not be running yet."
         fi
     fi
 }
@@ -890,6 +937,29 @@ logpath = /var/log/squid/access.log
 maxretry = 5
 bantime  = 24h
 EOF
+        fi
+		
+		# --- DOCKER HERMETIC FAIL2BAN BLOCK ---
+        if [[ "${USE_DOCKER:-n}" == "y" ]]; then
+            log "INFO" "Creating Docker-specific Fail2ban banaction..."
+            
+            # Create a custom action that routes bans directly to the DOCKER-USER chain
+            # This allows users to protect containers without breaking host SSH routing.
+            cat <<'EOF' > /etc/fail2ban/action.d/syswarden-docker.conf
+[Definition]
+actionstart = iptables -N f2b-<name>
+              iptables -A f2b-<name> -j RETURN
+              iptables -I DOCKER-USER -p <protocol> -m multiport --dports <port> -j f2b-<name>
+actionstop = iptables -D DOCKER-USER -p <protocol> -m multiport --dports <port> -j f2b-<name>
+             iptables -F f2b-<name>
+             iptables -X f2b-<name>
+actioncheck = iptables -n -L DOCKER-USER | grep -q 'f2b-<name>[ \t]'
+actionban = iptables -I f2b-<name> 1 -s <ip> -j DROP
+actionunban = iptables -D f2b-<name> -s <ip> -j DROP
+EOF
+            log "INFO" "Docker banaction 'syswarden-docker' created successfully."
+            # Note: The user can now append 'banaction = syswarden-docker' to any custom 
+            # Docker container jail in their jail.local to protect exposed container ports.
         fi
     fi 
 }
@@ -1550,6 +1620,7 @@ detect_os_backend
 if [[ "$MODE" != "update" ]]; then
     install_dependencies
     define_ssh_port "$MODE"
+	define_docker_integration "$MODE"
     configure_fail2ban
 fi
 
