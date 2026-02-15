@@ -16,7 +16,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v3.00"
+VERSION="v4.00"
 
 # --- LIST URLS ---
 declare -A URLS_STANDARD
