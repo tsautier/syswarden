@@ -1754,7 +1754,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v3)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v4)     #"
     echo -e "#############################################################${NC}"
 fi
 
