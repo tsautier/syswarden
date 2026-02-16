@@ -1000,6 +1000,7 @@ import select
 import re
 import requests
 import time
+import ipaddress
 
 # --- CONFIGURATION ---
 API_KEY = "PLACEHOLDER_KEY"
@@ -1012,6 +1013,14 @@ reported_cache = {}
 
 def send_report(ip, categories, comment):
     current_time = time.time()
+    
+    # --- Validation stricte de l'IP ---
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        print(f"[SKIP] Invalid IP detected by Regex: '{ip}'", flush=True)
+        return
+
     if ip in reported_cache:
         if current_time - reported_cache[ip] < REPORT_INTERVAL:
             return 
@@ -1023,13 +1032,13 @@ def send_report(ip, categories, comment):
     try:
         response = requests.post(url, params=params, headers=headers)
         if response.status_code == 200:
-            print(f"[SUCCESS] Reported {ip} -> Cats [{categories}]")
+            print(f"[SUCCESS] Reported {ip} -> Cats [{categories}]", flush=True)
             reported_cache[ip] = current_time 
             clean_cache()
         else:
-            print(f"[API ERROR] HTTP {response.status_code} : {response.text}")
+            print(f"[API ERROR] HTTP {response.status_code} : {response.text}", flush=True)
     except Exception as e:
-        print(f"[FAIL] Error: {e}")
+        print(f"[FAIL] Error: {e}", flush=True)
 
 def clean_cache():
     current_time = time.time()
@@ -1038,8 +1047,9 @@ def clean_cache():
         del reported_cache[ip]
 
 def monitor_logs():
-    print("🚀 Monitoring logs (Unified SysWarden Reporter)...")
-    f = subprocess.Popen(['journalctl', '-f', '-n', '0'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print("🚀 Monitoring logs (Unified SysWarden Reporter)...", flush=True)
+    # Securisation de journalctl pour forcer la sortie brute
+    f = subprocess.Popen(['journalctl', '-f', '-n', '0', '-o', 'cat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     p = select.poll()
     p.register(f.stdout)
 
@@ -1055,9 +1065,9 @@ def monitor_logs():
             if ENABLE_FW:
                 match_fw = regex_fw.search(line)
                 if match_fw:
-                    ip = match_fw.group(1)
+                    ip = match_fw.group(2)
                     try:
-                        port = int(match_fw.group(2))
+                        port = int(match_fw.group(3))
                     except ValueError:
                         port = 0
                     
