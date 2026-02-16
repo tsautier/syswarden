@@ -16,7 +16,10 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v4.01"
+VERSION="v4.02"
+SYSWARDEN_DIR="/etc/syswarden"
+WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
+BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 
 # --- LIST URLS ---
 declare -A URLS_STANDARD
@@ -299,6 +302,23 @@ download_list() {
 
 apply_firewall_rules() {
     echo -e "\n${BLUE}=== Step 4: Applying Firewall Rules ($FIREWALL_BACKEND) ===${NC}"
+	
+	# --- LOCAL PERSISTENCE INJECTION ---
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$WHITELIST_FILE" "$BLOCKLIST_FILE"
+
+    # 1. Inject local blocklist into the global list
+    cat "$BLOCKLIST_FILE" >> "$FINAL_LIST"
+    
+    # 2. Clean duplicates to ensure firewall stability
+    sort -u "$FINAL_LIST" -o "$FINAL_LIST"
+
+    # 3. Exclude local whitelisted IPs from the final blocklist
+    if [[ -s "$WHITELIST_FILE" ]]; then
+        grep -vFf "$WHITELIST_FILE" "$FINAL_LIST" > "$TMP_DIR/clean_final.txt" || true
+        mv "$TMP_DIR/clean_final.txt" "$FINAL_LIST"
+    fi
+    # -----------------------------------
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
         log "INFO" "Configuring Nftables Set..."
@@ -1002,6 +1022,7 @@ import requests
 import time
 import ipaddress
 import socket
+import threading
 
 # --- CONFIGURATION ---
 API_KEY = "PLACEHOLDER_KEY"
@@ -1094,7 +1115,7 @@ def monitor_logs():
                     elif port in [5060, 5061]: cats.extend(["8", "18"]); attack_type = "SIP/VoIP Attack"
                     elif port in [6379, 9200, 11211]: cats.extend(["15", "20"]); attack_type = "NoSQL/Cache Attack"
 
-                    send_report(ip, ",".join(cats), f"Blocked by SysWarden Firewall ({attack_type} Port {port})")
+                    threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Blocked by SysWarden Firewall ({attack_type} Port {port})")).start()
                     continue
 
             # --- FAIL2BAN LOGIC ---
@@ -1110,7 +1131,7 @@ def monitor_logs():
                     elif "postfix" in jail.lower() or "sendmail" in jail.lower(): cats.extend(["5", "11"])
                     elif "mariadb" in jail.lower() or "mongodb" in jail.lower(): cats.extend(["15"])
 
-                    send_report(ip, ",".join(cats), f"Banned by Fail2ban (Jail: {jail})")
+                    threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Banned by Fail2ban (Jail: {jail})")).start()
 
 if __name__ == "__main__":
     monitor_logs()
@@ -1170,7 +1191,8 @@ setup_cron_autoupdate() {
     if [[ "${1:-}" != "update" ]]; then
         local script_path=$(realpath "$0")
         local cron_file="/etc/cron.d/syswarden-update"
-        echo "5 * * * * root $script_path update >/dev/null 2>&1" > "$cron_file"
+        local random_min=$((RANDOM % 60))
+        echo "$random_min * * * * root $script_path update >/dev/null 2>&1" > "$cron_file"
         chmod 644 "$cron_file"
         log "INFO" "Automatic updates enabled."
 
@@ -1445,6 +1467,14 @@ whitelist_ip() {
         log "ERROR" "Invalid IP format."
         return
     fi
+	
+	# --- LOCAL PERSISTENCE ---
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$WHITELIST_FILE"
+    if ! grep -q "^${WL_IP}$" "$WHITELIST_FILE" 2>/dev/null; then
+        echo "$WL_IP" >> "$WHITELIST_FILE"
+    fi
+    # -------------------------
 
     log "INFO" "Whitelisting IP: $WL_IP on backend: $FIREWALL_BACKEND"
 
@@ -1493,6 +1523,14 @@ blocklist_ip() {
         log "ERROR" "Invalid IP format."
         return
     fi
+	
+	# --- LOCAL PERSISTENCE ---
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$BLOCKLIST_FILE"
+    if ! grep -q "^${BL_IP}$" "$BLOCKLIST_FILE" 2>/dev/null; then
+        echo "$BL_IP" >> "$BLOCKLIST_FILE"
+    fi
+    # -------------------------
 
     log "INFO" "Blocking IP: $BL_IP on backend: $FIREWALL_BACKEND"
 
@@ -1779,7 +1817,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v4.01)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v4.02)     #"
     echo -e "#############################################################${NC}"
 fi
 
