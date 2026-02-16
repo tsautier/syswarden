@@ -86,7 +86,7 @@ install_dependencies() {
     log "INFO" "Updating apk repositories and installing dependencies..."
     apk update -q
 
-    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate"
+    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses"
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
         deps="$deps nftables"
