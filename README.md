@@ -180,7 +180,7 @@ dnf install wget -y
 
 # install script
 cd /usr/local/bin/
-wget https://github.com/duggytuxy/syswarden/releases/download/v4.03/install-syswarden.sh
+wget https://github.com/duggytuxy/syswarden/releases/download/v5.00/install-syswarden.sh
 chmod +x install-syswarden.sh
 ./install-syswarden.sh
 
