@@ -1148,6 +1148,115 @@ EOF
             # Note: The user can now append 'banaction = syswarden-docker' to any custom 
             # Docker container jail in their jail.local to protect exposed container ports.
         fi
+		
+		# 21. DYNAMIC DETECTION: DOVECOT (IMAP/POP3)
+        DOVECOT_LOG=""
+        if [[ -f "/var/log/mail.log" ]]; then DOVECOT_LOG="/var/log/mail.log";
+        elif [[ -f "/var/log/maillog" ]]; then DOVECOT_LOG="/var/log/maillog"; fi
+
+        if [[ -n "$DOVECOT_LOG" ]] && command -v dovecot >/dev/null 2>&1; then
+            log "INFO" "Dovecot detected. Enabling IMAP/POP3 Jail."
+
+            # Filter for Dovecot Auth Failures (catches standard rip=IP format)
+            if [[ ! -f "/etc/fail2ban/filter.d/dovecot-custom.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*dovecot: .*(?:Authentication failure|Aborted login|auth failed).*rip=<HOST>,.*\$\nignoreregex =" > /etc/fail2ban/filter.d/dovecot-custom.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Dovecot Protection ---
+[dovecot-custom]
+enabled = true
+port    = pop3,pop3s,imap,imaps,submission,465,587
+filter  = dovecot-custom
+logpath = $DOVECOT_LOG
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+
+        # 22. DYNAMIC DETECTION: PROXMOX VE
+        if command -v pveversion >/dev/null 2>&1; then
+            log "INFO" "Proxmox VE detected. Enabling PVE Jail."
+            
+            PVE_LOG="/var/log/daemon.log"
+            if [[ ! -f "$PVE_LOG" ]]; then PVE_LOG="/var/log/syslog"; fi
+
+            # Filter for Proxmox Web GUI Auth Failures
+            if [[ ! -f "/etc/fail2ban/filter.d/proxmox-custom.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*pvedaemon\\[\\d+\\]: authentication failure; rhost=<HOST> user=.*\$\nignoreregex =" > /etc/fail2ban/filter.d/proxmox-custom.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Proxmox Protection ---
+[proxmox-custom]
+enabled = true
+port    = https,8006
+filter  = proxmox-custom
+logpath = $PVE_LOG
+backend = auto
+maxretry = 3
+bantime  = 24h
+EOF
+        fi
+
+        # 23. DYNAMIC DETECTION: OPENVPN
+        OVPN_LOG=""
+        if [[ -f "/var/log/openvpn/openvpn.log" ]]; then OVPN_LOG="/var/log/openvpn/openvpn.log";
+        elif [[ -f "/var/log/openvpn.log" ]]; then OVPN_LOG="/var/log/openvpn.log";
+        elif [[ -f "/var/log/syslog" ]]; then OVPN_LOG="/var/log/syslog"; fi
+
+        if [[ -d "/etc/openvpn" ]] && [[ -n "$OVPN_LOG" ]]; then
+            log "INFO" "OpenVPN detected. Enabling OpenVPN Jail."
+
+            # Filter for OpenVPN TLS Handshake & Verification Errors
+            if [[ ! -f "/etc/fail2ban/filter.d/openvpn-custom.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.* <HOST>:[0-9]+ (?:TLS Error: TLS handshake failed|VERIFY ERROR:|TLS Auth Error:).*\$\nignoreregex =" > /etc/fail2ban/filter.d/openvpn-custom.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- OpenVPN Protection ---
+[openvpn-custom]
+enabled = true
+port    = 1194
+protocol= udp
+filter  = openvpn-custom
+logpath = $OVPN_LOG
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
+
+        # 24. DYNAMIC DETECTION: GITEA / FORGEJO
+        GITEA_LOG=""
+        if [[ -f "/var/log/gitea/gitea.log" ]]; then GITEA_LOG="/var/log/gitea/gitea.log"
+        elif [[ -f "/var/log/forgejo/forgejo.log" ]]; then GITEA_LOG="/var/log/forgejo/forgejo.log"; fi
+
+        if [[ -n "$GITEA_LOG" ]]; then
+            log "INFO" "Gitea/Forgejo detected. Enabling Git Server Jail."
+
+            # Filter for Git Web UI Auth Failures
+            if [[ ! -f "/etc/fail2ban/filter.d/gitea-custom.conf" ]]; then
+                echo -e "[Definition]\nfailregex = ^.*Failed authentication attempt for .* from <HOST>:.*\$\nignoreregex =" > /etc/fail2ban/filter.d/gitea-custom.conf
+            fi
+
+            cat <<EOF >> /etc/fail2ban/jail.local
+
+# --- Gitea / Forgejo Protection ---
+[gitea-custom]
+enabled = true
+port    = http,https,3000
+filter  = gitea-custom
+logpath = $GITEA_LOG
+backend = auto
+maxretry = 5
+bantime  = 24h
+EOF
+        fi
     fi 
 }
 
@@ -1270,6 +1379,7 @@ def monitor_logs():
                     elif port in [139, 445]: cats.extend(["15", "18"]); attack_type = "SMB/Possible Ransomware Attack"
                     elif port in [389, 636]: cats.extend(["15", "20"]); attack_type = "LDAP/LDAPS Attack"
                     elif port == 1433: cats.extend(["18", "15"]); attack_type = "MSSQL Attack"
+                    elif port == 8006: cats.extend(["18", "21"]); attack_type = "Proxmox VE Brute-Force"
                     elif port == 3000: cats.extend(["15", "20"]); attack_type = "Possible Vulns Exploit"
                     elif port == 4444: cats.extend(["15", "20"]); attack_type = "Possible C2 Host"
                     elif port in [3389, 5900]: cats.extend(["18"]); attack_type = "RDP/VNC Attack"
@@ -1280,6 +1390,8 @@ def monitor_logs():
                     elif port in [3306, 5432, 27017]: cats.extend(["15", "18"]); attack_type = "DB Attack (MySQL/PgSQL/Mongo)"
                     elif port in [5060, 5061]: cats.extend(["8", "18"]); attack_type = "SIP/VoIP Attack"
                     elif port in [6379, 9200, 11211]: cats.extend(["15", "20"]); attack_type = "NoSQL/Cache Attack"
+                    elif port == 1194: cats.extend(["15", "18"]); attack_type = "OpenVPN Attack"
+                    elif port in [51820, 51821]: cats.extend(["15", "18"]); attack_type = "WireGuard Attack"
 
                     threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Blocked by SysWarden Firewall ({attack_type} Port {port})")).start()
                     continue
