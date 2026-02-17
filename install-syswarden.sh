@@ -16,10 +16,12 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v4.03"
+VERSION="v5.00"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
+GEOIP_SET_NAME="syswarden_geoip"
+GEOIP_FILE="$SYSWARDEN_DIR/geoip.txt"
 
 # --- LIST URLS ---
 declare -A URLS_STANDARD
@@ -221,9 +223,33 @@ select_list_type() {
         *) log "ERROR" "Invalid choice. Exiting."; exit 1;;
     esac
     
-    echo "LIST_TYPE='$LIST_TYPE'" > "$CONF_FILE"
+    echo "LIST_TYPE='$LIST_TYPE'" >> "$CONF_FILE"
     if [[ -n "${CUSTOM_URL:-}" ]]; then echo "CUSTOM_URL='$CUSTOM_URL'" >> "$CONF_FILE"; fi
     log "INFO" "User selected: $LIST_TYPE Blocklist"
+}
+
+define_geoblocking() {
+    if [[ "${1:-}" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
+        if [[ -z "${GEOBLOCK_COUNTRIES:-}" ]]; then GEOBLOCK_COUNTRIES="none"; fi
+        log "INFO" "Update Mode: Preserving Geo-Blocking setting ($GEOBLOCK_COUNTRIES)"
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Step: Geo-Blocking (High-Risk Countries) ===${NC}"
+    echo "Do you want to block all inbound traffic from specific countries?"
+    read -p "Enable Geo-Blocking? (y/N): " input_geo
+
+    if [[ "$input_geo" =~ ^[Yy]$ ]]; then
+        read -p "Enter country codes separated by space [Default: ru cn kp ir]: " geo_codes
+        GEOBLOCK_COUNTRIES=${geo_codes:-ru cn kp ir}
+        # Force lowercase for the URL
+        GEOBLOCK_COUNTRIES=$(echo "$GEOBLOCK_COUNTRIES" | tr '[:upper:]' '[:lower:]')
+        log "INFO" "Geo-Blocking ENABLED for: $GEOBLOCK_COUNTRIES"
+    else
+        GEOBLOCK_COUNTRIES="none"
+        log "INFO" "Geo-Blocking DISABLED."
+    fi
+    echo "GEOBLOCK_COUNTRIES='$GEOBLOCK_COUNTRIES'" >> "$CONF_FILE"
 }
 
 measure_latency() {
@@ -315,6 +341,42 @@ download_list() {
     fi
 }
 
+download_geoip() {
+    if [[ "${GEOBLOCK_COUNTRIES:-none}" == "none" ]]; then
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Step: Downloading Geo-Blocking Data ===${NC}"
+    
+    # FIX: Create required directories before doing anything
+    mkdir -p "$TMP_DIR"
+    mkdir -p "$SYSWARDEN_DIR"
+    > "$TMP_DIR/geoip_raw.txt"
+
+    # FIX: Bypass strict IFS by transforming spaces into newlines for the loop
+    for country in $(echo "$GEOBLOCK_COUNTRIES" | tr ' ' '\n'); do
+        # Skip empty strings just in case
+        if [[ -z "$country" ]]; then continue; fi 
+        
+        echo -n "Fetching IP blocks for ${country^^}... "
+        if curl -sS -L --retry 3 --connect-timeout 5 "https://www.ipdeny.com/ipblocks/data/countries/${country}.zone" >> "$TMP_DIR/geoip_raw.txt"; then
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${RED}FAIL${NC}"
+            log "WARN" "Failed to download GeoIP data for $country."
+        fi
+    done
+
+    if [[ -s "$TMP_DIR/geoip_raw.txt" ]]; then
+        # Ensure valid CIDR formats and remove duplicates
+        grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$' "$TMP_DIR/geoip_raw.txt" | sort -u > "$GEOIP_FILE"
+        log "INFO" "Geo-Blocking list updated successfully."
+    else
+        log "WARN" "Geo-Blocking list is empty. IPDeny might be unreachable."
+        touch "$GEOIP_FILE"
+    fi
+}
+
 apply_firewall_rules() {
     echo -e "\n${BLUE}=== Step 4: Applying Firewall Rules ($FIREWALL_BACKEND) ===${NC}"
 	
@@ -337,18 +399,39 @@ apply_firewall_rules() {
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
         log "INFO" "Configuring Nftables Set..."
+        
+        # 1. Main Blocklist Elements (Conditional for Option 4 "No List")
+        local main_elements=""
+        if [[ -s "$FINAL_LIST" ]]; then
+            main_elements="elements = { $(awk '{print $1 ","}' "$FINAL_LIST") }"
+        fi
+        
+        # 2. GeoIP Blocklist Elements (Conditional)
+        local geoip_block=""
+        local geoip_rule=""
+        if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+            geoip_block="
+    set $GEOIP_SET_NAME {
+        type ipv4_addr
+        flags interval
+        auto-merge
+        elements = { $(awk '{print $1 ","}' "$GEOIP_FILE") }
+    }"
+            geoip_rule="ip saddr @$GEOIP_SET_NAME log prefix \"[SysWarden-GEO] \" flags all drop"
+        fi
+
+        # 3. Build and Apply Nftables config
         cat <<EOF > "$TMP_DIR/syswarden.nft"
 table inet syswarden_table {
     set $SET_NAME {
         type ipv4_addr
         flags interval
         auto-merge
-        elements = {
-$(awk '{print $1 ","}' "$FINAL_LIST")
-        }
-    }
+        $main_elements
+    }$geoip_block
     chain input {
         type filter hook input priority filter - 10; policy accept;
+        $geoip_rule
         ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " flags all drop
         tcp dport { 23, 445, 1433, 3389, 5900 } log prefix "[SysWarden-BLOCK] " flags all drop
     }
@@ -378,6 +461,16 @@ EOF
         for port in 23 445 1433 3389 5900; do
             firewall-cmd --permanent --add-rich-rule="rule port port=\"$port\" protocol=\"tcp\" log prefix=\"[SysWarden-BLOCK] \" level=\"info\" drop" 2>/dev/null || true
         done
+		
+		# --- GEOIP INJECTION ---
+        if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+            log "INFO" "Configuring Firewalld GeoIP Set..."
+            firewall-cmd --permanent --remove-rich-rule="rule source ipset='$GEOIP_SET_NAME' log prefix='[SysWarden-GEO] ' level='info' drop" 2>/dev/null || true
+            firewall-cmd --permanent --delete-ipset="$GEOIP_SET_NAME" 2>/dev/null || true
+            firewall-cmd --permanent --new-ipset="$GEOIP_SET_NAME" --type=hash:net --option=family=inet --option=maxelem=500000
+            firewall-cmd --permanent --ipset="$GEOIP_SET_NAME" --add-entries-from-file="$GEOIP_FILE"
+            firewall-cmd --permanent --add-rich-rule="rule source ipset='$GEOIP_SET_NAME' log prefix='[SysWarden-GEO] ' level='info' drop"
+        fi
         
         firewall-cmd --reload
         log "INFO" "Firewalld rules applied."
@@ -406,6 +499,23 @@ EOF
             echo "-A ufw-before-input -m set --match-set $SET_NAME src -j DROP" >> "$UFW_RULES"
         fi
 
+        # --- GEOIP INJECTION ---
+        if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+            log "INFO" "Configuring UFW GeoIP Set..."
+            ipset create "$GEOIP_SET_NAME" hash:net maxelem 500000 -exist
+            sed "s/^/add $GEOIP_SET_NAME /" "$GEOIP_FILE" | ipset restore -!
+            
+            sed -i "/$GEOIP_SET_NAME/d" "$UFW_RULES"
+            if grep -q "# End required lines" "$UFW_RULES"; then
+                sed -i "/# End required lines/a -A ufw-before-input -m set --match-set $GEOIP_SET_NAME src -j DROP" "$UFW_RULES"
+                sed -i "/# End required lines/a -A ufw-before-input -m set --match-set $GEOIP_SET_NAME src -j LOG --log-prefix '[SysWarden-GEO] '" "$UFW_RULES"
+            else
+                echo "-A ufw-before-input -m set --match-set $GEOIP_SET_NAME src -j LOG --log-prefix '[SysWarden-GEO] '" >> "$UFW_RULES"
+                echo "-A ufw-before-input -m set --match-set $GEOIP_SET_NAME src -j DROP" >> "$UFW_RULES"
+            fi
+        fi
+        # -----------------------
+
         ufw reload
         log "INFO" "UFW rules applied."
 
@@ -426,30 +536,66 @@ EOF
             if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
             elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
         fi
+
+        # --- GEOIP INJECTION ---
+        if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+            ipset create "${GEOIP_SET_NAME}_tmp" hash:net maxelem 500000 -exist
+            # Le -! est crucial ici pour éviter qu'ipset ne plante si deux pays partagent un même CIDR
+            sed "s/^/add ${GEOIP_SET_NAME}_tmp /" "$GEOIP_FILE" | ipset restore -!
+            ipset create "$GEOIP_SET_NAME" hash:net maxelem 500000 -exist
+            ipset swap "${GEOIP_SET_NAME}_tmp" "$GEOIP_SET_NAME"
+            ipset destroy "${GEOIP_SET_NAME}_tmp"
+            
+            if ! iptables -C INPUT -m set --match-set "$GEOIP_SET_NAME" src -j DROP 2>/dev/null; then
+                # On insère en position 1 (Top priorité, avant même la liste standard)
+                iptables -I INPUT 1 -m set --match-set "$GEOIP_SET_NAME" src -j DROP
+                iptables -I INPUT 1 -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] "
+                
+                # Persistance indépendante pour s'assurer que le GeoIP survive au reboot
+                if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
+                elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+            fi
+        fi
+        # -----------------------
     fi
 	
 	# --- DOCKER HERMETIC FIREWALL BLOCK ---
     if [[ "${USE_DOCKER:-n}" == "y" ]]; then
-        log "INFO" "Applying Global Blocklist to Docker (DOCKER-USER chain)..."
+        log "INFO" "Applying Global Rules to Docker (DOCKER-USER chain)..."
         
-        # Docker exclusively uses iptables routing. 
-        # Even if the host uses Nftables, we must load the IPSet for Docker.
+        # 1. Standard Blocklist
         if ! ipset list "$SET_NAME" >/dev/null 2>&1; then
              ipset create "$SET_NAME" hash:net maxelem 200000 -exist
              sed "s/^/add $SET_NAME /" "$FINAL_LIST" | ipset restore -!
         fi
 
-        # Check if Docker chain exists before injecting rules
+        # 2. Geo-Blocking Set
+        if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+            if ! ipset list "$GEOIP_SET_NAME" >/dev/null 2>&1; then
+                 ipset create "$GEOIP_SET_NAME" hash:net maxelem 500000 -exist
+                 sed "s/^/add $GEOIP_SET_NAME /" "$GEOIP_FILE" | ipset restore -!
+            fi
+        fi
+
         if iptables -n -L DOCKER-USER >/dev/null 2>&1; then
+            # Clean old rules
             iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j DROP 2>/dev/null || true
             iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] " 2>/dev/null || true
+            iptables -D DOCKER-USER -m set --match-set "$GEOIP_SET_NAME" src -j DROP 2>/dev/null || true
+            iptables -D DOCKER-USER -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] " 2>/dev/null || true
             
+            # Apply Standard Blocklist
             iptables -I DOCKER-USER 1 -m set --match-set "$SET_NAME" src -j DROP
             iptables -I DOCKER-USER 1 -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] "
+
+            # Apply Geo-Blocklist (Takes priority before standard blocklist)
+            if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
+                iptables -I DOCKER-USER 1 -m set --match-set "$GEOIP_SET_NAME" src -j DROP
+                iptables -I DOCKER-USER 1 -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] "
+            fi
             
-            # Persist rules if possible
-            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
-            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
+            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save 2>/dev/null || true; 
+            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save 2>/dev/null || true; fi
             log "INFO" "Docker firewall rules applied successfully."
         else
             log "WARN" "DOCKER-USER chain not found. Docker might not be running yet."
@@ -1265,6 +1411,7 @@ uninstall_syswarden() {
 	# UFW
     if [[ -f "/etc/ufw/before.rules" ]]; then
         sed -i "/$SET_NAME/d" /etc/ufw/before.rules
+		sed -i "/$GEOIP_SET_NAME/d" /etc/ufw/before.rules
         if command -v ufw >/dev/null; then ufw reload; fi
     fi
     
@@ -1272,6 +1419,8 @@ uninstall_syswarden() {
     if command -v firewall-cmd >/dev/null; then
         # Remove Blocklist Rules
         firewall-cmd --permanent --remove-rich-rule="rule source ipset='$SET_NAME' log prefix='[SysWarden-BLOCK] ' level='info' drop" 2>/dev/null || true
+		firewall-cmd --permanent --remove-rich-rule="rule source ipset='$GEOIP_SET_NAME' log prefix='[SysWarden-GEO] ' level='info' drop" 2>/dev/null || true
+        firewall-cmd --permanent --delete-ipset="$GEOIP_SET_NAME" 2>/dev/null || true
         firewall-cmd --permanent --delete-ipset="$SET_NAME" 2>/dev/null || true
         
         # Remove Wazuh Whitelist Rules (if they exist)
@@ -1287,6 +1436,8 @@ uninstall_syswarden() {
     if command -v iptables >/dev/null && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
         iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j DROP 2>/dev/null || true
         iptables -D DOCKER-USER -m set --match-set "$SET_NAME" src -j LOG --log-prefix "[SysWarden-DOCKER] " 2>/dev/null || true
+		iptables -D DOCKER-USER -m set --match-set "$GEOIP_SET_NAME" src -j DROP 2>/dev/null || true
+        iptables -D DOCKER-USER -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] " 2>/dev/null || true
         
         if command -v netfilter-persistent >/dev/null; then netfilter-persistent save 2>/dev/null || true; 
         elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save 2>/dev/null || true; fi
@@ -1295,6 +1446,7 @@ uninstall_syswarden() {
     # IPSet / Iptables (Legacy)
     if command -v ipset >/dev/null; then 
         ipset destroy "$SET_NAME" 2>/dev/null || true
+		ipset destroy "$GEOIP_SET_NAME" 2>/dev/null || true
         # Note: iptables rules in RAM are cleared by reboot or manual flush, 
         # but persistent rules (netfilter-persistent) should be manually reviewed if used.
     fi
@@ -1839,7 +1991,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v4.03)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v5.00)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -1851,15 +2003,18 @@ if [[ "$MODE" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
 fi
 
 if [[ "$MODE" != "update" ]]; then
+    > "$CONF_FILE"
     install_dependencies
     define_ssh_port "$MODE"
     define_docker_integration "$MODE"
+	define_geoblocking "$MODE"
     configure_fail2ban
 fi
 
 select_list_type "$MODE"
 select_mirror "$MODE"
 download_list
+download_geoip
 apply_firewall_rules
 detect_protected_services
 
