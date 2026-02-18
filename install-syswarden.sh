@@ -431,7 +431,18 @@ download_asn() {
     done
 
     if [[ -s "$TMP_DIR/asn_raw.txt" ]]; then
-        sort -u "$TMP_DIR/asn_raw.txt" > "$ASN_FILE"
+        # Use Python to mathematically collapse overlapping CIDRs and prevent Firewalld INVALID_ENTRY errors
+        python3 -c '
+import sys, ipaddress
+nets = []
+for line in sys.stdin:
+    line = line.strip()
+    if line and ":" not in line:
+        try: nets.append(ipaddress.ip_network(line, strict=False))
+        except ValueError: pass
+for net in ipaddress.collapse_addresses(nets):
+    print(net)' < "$TMP_DIR/asn_raw.txt" > "$ASN_FILE"
+        
         log "INFO" "ASN Blocklist updated successfully."
     else
         log "WARN" "ASN Blocklist is empty."
@@ -2155,7 +2166,7 @@ show_alerts_dashboard() {
 
         # 1. FAIL2BAN ENTRIES (Via Journalctl)
         if command -v journalctl >/dev/null; then
-            journalctl -u fail2ban -n 50 --no-pager 2>/dev/null | { grep " Ban " || true; } | tail -n 8 | while read -r line; do
+            journalctl -u fail2ban -n 100 --no-pager 2>/dev/null | { grep " Ban " || true; } | tail -n 10 | while read -r line; do
                 if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
                     jail="${BASH_REMATCH[1]}"
                     ip="${BASH_REMATCH[2]}"
@@ -2165,7 +2176,7 @@ show_alerts_dashboard() {
                 fi
             done
         elif [[ -f "/var/log/fail2ban.log" ]]; then
-             { grep " Ban " "/var/log/fail2ban.log" || true; } | tail -n 8 | while read -r line; do
+             { grep " Ban " "/var/log/fail2ban.log" || true; } | tail -n 10 | while read -r line; do
                 if [[ $line =~ \[([a-zA-Z0-9_-]+)\][[:space:]]+Ban[[:space:]]+([0-9.]+) ]]; then
                     jail="${BASH_REMATCH[1]}"
                     ip="${BASH_REMATCH[2]}"
@@ -2177,12 +2188,13 @@ show_alerts_dashboard() {
         fi
 
         # 2. FIREWALL ENTRIES (Via Journalctl)
-        # Increased journalctl to -n 100 to ensure enough lines are found
+        # Increased journalctl to -n 500 to ensure enough lines are found
         if command -v journalctl >/dev/null; then
-            journalctl -k -n 100 --no-pager 2>/dev/null | { grep "SysWarden-BLOCK" || true; } | tail -n 12 | while read -r line; do
+            journalctl -k -n 500 --no-pager 2>/dev/null | { grep -E "SysWarden-(BLOCK|GEO|ASN)" || true; } | tail -n 20 | while read -r line; do
                 if [[ $line =~ SRC=([0-9.]+) ]]; then
                     ip="${BASH_REMATCH[1]}"
-                    rule="SysWarden-BLOCK"
+                    rule="Unknown"
+                    if [[ $line =~ (SysWarden-[A-Z]+) ]]; then rule="${BASH_REMATCH[1]}"; fi
                     port="Global"
                     if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
                     dtime="Unknown"
@@ -2192,10 +2204,11 @@ show_alerts_dashboard() {
                 fi
             done
         elif [[ -f "/var/log/kern.log" ]]; then
-             { grep "SysWarden-BLOCK" "/var/log/kern.log" || true; } | tail -n 12 | while read -r line; do
+             { grep -E "SysWarden-(BLOCK|GEO|ASN)" "/var/log/kern.log" || true; } | tail -n 20 | while read -r line; do
                 if [[ $line =~ SRC=([0-9.]+) ]]; then
                     ip="${BASH_REMATCH[1]}"
-                    rule="SysWarden-BLOCK"
+                    rule="Unknown"
+                    if [[ $line =~ (SysWarden-[A-Z]+) ]]; then rule="${BASH_REMATCH[1]}"; fi
                     port="Global"
                     if [[ $line =~ DPT=([0-9]+) ]]; then port="TCP/${BASH_REMATCH[1]}"; fi
                     dtime="Unknown"
