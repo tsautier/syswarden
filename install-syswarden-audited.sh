@@ -137,11 +137,11 @@ install_dependencies() {
         log "WARN" "Installing package: cron daemon"
         if [[ -f /etc/debian_version ]]; then apt-get install -y cron
         elif [[ -f /etc/redhat-release ]]; then dnf install -y cronie; fi
-        
-        # Ensure it's enabled and started
-        if command -v systemctl >/dev/null; then
-            systemctl enable --now crond 2>/dev/null || systemctl enable --now cron 2>/dev/null || true
-        fi
+    fi
+    
+    # Ensure it's enabled and started (moved outside the install check)
+    if command -v systemctl >/dev/null; then
+        systemctl enable --now crond 2>/dev/null || systemctl enable --now cron 2>/dev/null || true
     fi
     # --------------------------------------------------------------------
 
