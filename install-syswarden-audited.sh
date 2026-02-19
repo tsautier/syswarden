@@ -138,6 +138,14 @@ install_dependencies() {
         elif [[ -f /etc/redhat-release ]]; then dnf install -y ipset; fi
     fi
 
+    # --- RHEL/ROCKY ZERO-REBOOT FIX ---
+    # Force kernel module load and restart Firewalld to detect ipset immediately
+    modprobe ip_set 2>/dev/null || true
+    if systemctl is-active --quiet firewalld; then
+        systemctl restart firewalld 2>/dev/null || true
+    fi
+    # ----------------------------------
+
     if ! command -v fail2ban-client >/dev/null; then
         log "WARN" "Installing package: fail2ban"
         if [[ -f /etc/debian_version ]]; then
