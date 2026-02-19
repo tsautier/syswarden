@@ -131,6 +131,19 @@ install_dependencies() {
              log "ERROR" "Failed to install 'python3-requests'. AbuseIPDB reporting feature will be disabled."
         fi
     fi
+	
+	# --- CRON DEPENDENCY (For modern minimal OS like Fedora / RHEL 9+) ---
+    if ! command -v crond >/dev/null && ! command -v cron >/dev/null; then
+        log "WARN" "Installing package: cron daemon"
+        if [[ -f /etc/debian_version ]]; then apt-get install -y cron
+        elif [[ -f /etc/redhat-release ]]; then dnf install -y cronie; fi
+        
+        # Ensure it's enabled and started
+        if command -v systemctl >/dev/null; then
+            systemctl enable --now crond 2>/dev/null || systemctl enable --now cron 2>/dev/null || true
+        fi
+    fi
+    # --------------------------------------------------------------------
 
     if ! command -v ipset >/dev/null; then
         log "WARN" "Installing package: ipset"
