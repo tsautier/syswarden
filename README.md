@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/powered%20by-DuggyTuxy-darkred?style=for-the-badge&logo=apachekafka">
   <img src="https://img.shields.io/badge/Status-Community--Professional-brightgreen?style=for-the-badge&logo=status">
   <img src="https://img.shields.io/badge/Security-Hardened-blue?style=for-the-badge&logo=security">
-  <img src="https://img.shields.io/badge/Platform-Debian%20%7C%20Ubuntu%20%7C%20AlmaLinux%20%7C%20RockyLinux%20%7C%20CENTOS%20%7C%20FEDORA-grey?style=for-the-badge&logo=platform">
+  <img src="https://img.shields.io/badge/Platform-Debian%20%7C%20Ubuntu%20%7C%20AlmaLinux%20%7C%20RockyLinux%20%7C%20CENTOS%20%7C%20FEDORA-blue?style=for-the-badge&logo=platform">
   <img src="https://img.shields.io/badge/License-GNU_GPLv3-0052cc?style=for-the-badge&logo=license">
   <img src="https://img.shields.io/github/last-commit/duggytuxy/syswarden?label=Last%20Update&color=informational&style=for-the-badge&logo=github">
 </p>
