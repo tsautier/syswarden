@@ -546,10 +546,10 @@ download_asn() {
     combined_asns=$(echo "$BLOCK_ASNS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
     for asn in $combined_asns; do
-        # Ignore empty strings or our "auto"/"none" placeholder keywords
+        # Ignore empty strings or our keywords
         if [[ -z "$asn" ]] || [[ "$asn" == "auto" ]] || [[ "$asn" == "none" ]]; then continue; fi
         
-        # Format the input properly (e.g., if user typed '12345' instead of 'AS12345')
+        # Format the input properly
         if [[ ! "$asn" =~ ^AS[0-9]+$ ]]; then 
             local clean_num="${asn//[!0-9]/}"
             if [[ -z "$clean_num" ]]; then continue; fi # Failsafe
@@ -558,28 +558,40 @@ download_asn() {
         
         echo -n "Fetching IP blocks for ${asn}... "
         
-        # --- FIX: ANTI-RATE LIMITING & RETRY LOGIC ---
+        # --- FIX: SMART RETRY (Distinguish Network Error vs Empty ASN) ---
         local success=false
+        local whois_out=""
+        
         for attempt in 1 2 3; do
-            # 2>/dev/null hides unsightly text "Connection reset by peer"
-            if whois -h whois.radb.net -- "-i origin $asn" 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' >> "$TMP_DIR/asn_raw.txt"; then
-                success=true
-                break # We exit the test loop if it is successful.
-            else
-                sleep 2 # If the server has disconnected, wait 2 seconds before trying again.
+            # Capture total output (stdout + stderr)
+            whois_out=$(whois -h whois.radb.net -- "-i origin $asn" 2>&1 || true)
+            
+            # If the RADB server drops the connection, pause and retry
+            if [[ "$whois_out" == *"Connection reset by peer"* ]] || [[ "$whois_out" == *"Timeout"* ]] || [[ "$whois_out" == *"refused"* ]]; then
+                sleep 2
+                continue
             fi
+            
+            # If we reach this point, the query succeeded (even if the result is empty)
+            success=true
+            break
         done
 
         if [ "$success" = true ]; then
-            echo -e "${GREEN}OK${NC}"
+            # Now search for IPv4 CIDRs in the valid response
+            if echo "$whois_out" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}' >> "$TMP_DIR/asn_raw.txt"; then
+                echo -e "${GREEN}OK${NC}"
+            else
+                echo -e "${YELLOW}Empty (IPv6-only/No routes)${NC}"
+            fi
         else
-            echo -e "${RED}FAIL${NC}"
-            log "WARN" "Failed to fetch data for $asn (May be empty or blocked by RADB)."
+            echo -e "${RED}FAIL (Blocked by RADB)${NC}"
+            log "WARN" "Failed to fetch data for $asn (Network dropped)."
         fi
         
-        # A brief, systematic pause of one second to avoid upsetting the Whois server
-        sleep 1
-        # ---------------------------------------------
+        # Ultra-short pause to prevent getting rate-limited while staying fast
+        sleep 0.5
+        # ---------------------------------------------------------------
     done
     
     # Restore strict security IFS
