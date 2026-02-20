@@ -84,10 +84,10 @@ SysWarden acts as an advanced, preemptive shield for your infrastructure. By dro
 
 ## Key Features
 
-- **Universal OS Support:** Auto-detects and adapts to **Debian, Ubuntu, RHEL, AlmaLinux, and Rocky Linux**.
+- **Universal OS Support:** Auto-detects and adapts to **Debian, Ubuntu, CentOS Stream, Fedora, AlmaLinux, and Rocky Linux**.
 
 - **Intelligent Backend Detection:** Automatically selects the best firewall technology present on your system:
-  - **Firewalld** (RHEL/Alma/Rocky native integration)
+  - **Firewalld** (CentOS Stream/Fedora/Alma/Rocky native integration)
   - **Nftables** (Modern Debian/Ubuntu standard)
   - **IPSet/Iptables** (Legacy support)
   
@@ -174,7 +174,7 @@ On Enterprise Linux, proper integration with `firewalld` is critical.
 apt update && apt upgrade -y
 apt install wget -y
 
-# For Rocky/AlmaLinux/RHEL
+# For Rocky/AlmaLinux/CentOS Stream/Fedora
 dnf update -y
 dnf install wget -y
 
