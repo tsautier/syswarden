@@ -366,6 +366,7 @@ define_asnblocking() {
             log "INFO" "Auto Mode: ASN List and Spamhaus preference loaded via env vars."
         else
             read -p "Enter custom ASN numbers separated by space (Leave empty for none): " asn_list
+            echo -e "${YELLOW}Note: Fetching and resolving the Spamhaus ASN-DROP list can take more than 5 minutes.${NC}"
             read -p "Include Spamhaus ASN-DROP list (Cybercrime Hosters)? (Y/n): " use_spamhaus
         fi
         
