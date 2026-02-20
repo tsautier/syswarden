@@ -341,7 +341,9 @@ define_geoblocking() {
 define_asnblocking() {
     if [[ "${1:-}" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
         if [[ -z "${BLOCK_ASNS:-}" ]]; then BLOCK_ASNS="none"; fi
-        log "INFO" "Update Mode: Preserving ASN-Blocking setting ($BLOCK_ASNS)"
+        # Rétrocompatibilité : si la variable Spamhaus n'existe pas dans le conf, on l'active par défaut
+        if [[ -z "${USE_SPAMHAUS_ASN:-}" ]]; then USE_SPAMHAUS_ASN="y"; fi
+        log "INFO" "Update Mode: Preserving ASN-Blocking setting ($BLOCK_ASNS, Spamhaus: $USE_SPAMHAUS_ASN)"
         return
     fi
 
@@ -360,27 +362,41 @@ define_asnblocking() {
     if [[ "$input_asn" =~ ^[Yy]$ ]]; then
         if [[ "${1:-}" == "auto" ]]; then
             asn_list=${SYSWARDEN_ASN_LIST:-""}
-            log "INFO" "Auto Mode: ASN List loaded via env var [${asn_list}]"
+            use_spamhaus=${SYSWARDEN_USE_SPAMHAUS:-y}
+            log "INFO" "Auto Mode: ASN List and Spamhaus preference loaded via env vars."
         else
-            read -p "Enter ASN numbers separated by space (e.g., AS123 AS456): " asn_list
+            read -p "Enter custom ASN numbers separated by space (Leave empty for none): " asn_list
+            read -p "Include Spamhaus ASN-DROP list (Cybercrime Hosters)? (Y/n): " use_spamhaus
         fi
         
         BLOCK_ASNS=${asn_list:-none}
+        USE_SPAMHAUS_ASN=${use_spamhaus:-y} # Default to yes if user just hits Enter
         
-        # Fail-Safe: Revert to 'none' if empty input was given
-        if [[ -z "$BLOCK_ASNS" ]] || [[ "$BLOCK_ASNS" == "none" ]]; then
-            BLOCK_ASNS="auto"
-            log "INFO" "No custom ASNs provided. Will use Spamhaus DROP list only."
+        # Normalize Spamhaus choice
+        if [[ "$USE_SPAMHAUS_ASN" =~ ^[Nn]$ ]]; then
+            USE_SPAMHAUS_ASN="n"
         else
-            # Force uppercase
-            BLOCK_ASNS=$(echo "$BLOCK_ASNS" | tr '[:lower:]' '[:upper:]')
-            log "INFO" "ASN Blocking ENABLED for: $BLOCK_ASNS"
+            USE_SPAMHAUS_ASN="y"
+        fi
+        
+        # Fail-Safe: If user typed nothing AND declined Spamhaus
+        if [[ "$BLOCK_ASNS" == "none" ]] && [[ "$USE_SPAMHAUS_ASN" == "n" ]]; then
+            BLOCK_ASNS="none"
+            log "WARN" "No custom ASNs provided and Spamhaus declined. ASN Blocking DISABLED."
+        else
+            # Force uppercase on custom ASNs if they exist
+            if [[ "$BLOCK_ASNS" != "none" ]]; then
+                BLOCK_ASNS=$(echo "$BLOCK_ASNS" | tr '[:lower:]' '[:upper:]')
+            fi
+            log "INFO" "ASN Blocking ENABLED. Custom: [$BLOCK_ASNS], Spamhaus: [$USE_SPAMHAUS_ASN]"
         fi
     else
         BLOCK_ASNS="none"
+        USE_SPAMHAUS_ASN="n"
         log "INFO" "ASN Blocking DISABLED."
     fi
     echo "BLOCK_ASNS='$BLOCK_ASNS'" >> "$CONF_FILE"
+    echo "USE_SPAMHAUS_ASN='$USE_SPAMHAUS_ASN'" >> "$CONF_FILE"
 }
 
 measure_latency() {
@@ -509,7 +525,8 @@ download_geoip() {
 }
 
 download_asn() {
-    if [[ "${BLOCK_ASNS:-none}" == "none" ]]; then
+    # On sort si l'utilisateur n'a rien mis en perso ET a dit non à Spamhaus
+    if [[ "${BLOCK_ASNS:-none}" == "none" ]] && [[ "${USE_SPAMHAUS_ASN:-n}" == "n" ]]; then
         return
     fi
 
@@ -518,21 +535,29 @@ download_asn() {
     mkdir -p "$SYSWARDEN_DIR"
     > "$TMP_DIR/asn_raw.txt"
 
-    # --- SPAMHAUS ASN-DROP INTEGRATION ---
-    echo -n "Fetching Spamhaus ASN-DROP list (Cybercrime Hosters)... "
-    local spamhaus_url="https://www.spamhaus.org/drop/asndrop.json"
-    
-    # Extract ASNs from JSON format securely using grep and sed
-    local spamhaus_asns
-    spamhaus_asns=$(curl -sS -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --retry 2 --connect-timeout 5 "$spamhaus_url" 2>/dev/null | grep -Eo '"asn":[[:space:]]*[0-9]+' | grep -Eo '[0-9]+' | sed 's/^/AS/' | tr '\n' ' ' || true)
-    
-    if [[ -n "$spamhaus_asns" ]]; then
-        echo -e "${GREEN}OK${NC}"
-        # Merge dynamic ASNs with user-defined ASNs
-        BLOCK_ASNS="$BLOCK_ASNS $spamhaus_asns"
+    # --- SPAMHAUS ASN-DROP INTEGRATION (CONDITIONAL) ---
+    if [[ "${USE_SPAMHAUS_ASN:-y}" == "y" ]]; then
+        echo -n "Fetching Spamhaus ASN-DROP list (Cybercrime Hosters)... "
+        local spamhaus_url="https://www.spamhaus.org/drop/asndrop.json"
+        
+        # Extract ASNs from JSON format securely using grep and sed
+        local spamhaus_asns
+        spamhaus_asns=$(curl -sS -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --retry 2 --connect-timeout 5 "$spamhaus_url" 2>/dev/null | grep -Eo '"asn":[[:space:]]*[0-9]+' | grep -Eo '[0-9]+' | sed 's/^/AS/' | tr '\n' ' ' || true)
+        
+        if [[ -n "$spamhaus_asns" ]]; then
+            echo -e "${GREEN}OK${NC}"
+            # Clean merge: replace 'none' or 'auto' from older configs
+            if [[ "$BLOCK_ASNS" == "none" ]] || [[ "$BLOCK_ASNS" == "auto" ]]; then
+                BLOCK_ASNS="$spamhaus_asns"
+            else
+                BLOCK_ASNS="$BLOCK_ASNS $spamhaus_asns"
+            fi
+        else
+            echo -e "${YELLOW}Failed/Skipped${NC}"
+            log "WARN" "Could not fetch Spamhaus ASN-DROP. Proceeding with custom ASNs only."
+        fi
     else
-        echo -e "${YELLOW}Failed/Skipped${NC}"
-        log "WARN" "Could not fetch Spamhaus ASN-DROP. Proceeding with custom ASNs only."
+        log "INFO" "Spamhaus ASN-DROP integration skipped by user."
     fi
     # -------------------------------------
 
