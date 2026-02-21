@@ -100,24 +100,20 @@ detect_os_backend() {
 install_dependencies() {
     log "INFO" "Installing required dependencies..."
     
-    # Base dependencies required for SysWarden v8.00
-    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois"
+    # Using a Bash array to respect the strict IFS=$'\n\t' security setting
+    local deps=(curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois)
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
-        deps="$deps nftables"
+        deps+=(nftables)
     else
-        deps="$deps iptables ip6tables"
+        deps+=(iptables ip6tables)
     fi
 
-    # Using --no-cache is the Alpine standard. It updates the index, installs, and cleans up in one go.
-    # We pass the entire list to apk add directly (it is fast and idempotent).
-    # shellcheck disable=SC2086
-    if ! apk add --no-cache $deps >/dev/null; then
+    if ! apk add --no-cache "${deps[@]}" >/dev/null; then
         log "ERROR" "Failed to install dependencies via apk. Check your network or repositories."
         exit 1
     fi
 
-    # Ensure OpenRC services are available
     if ! command -v rc-update >/dev/null; then
         log "ERROR" "OpenRC is missing. This script requires a standard Alpine setup."
         exit 1
