@@ -1663,7 +1663,7 @@ def monitor_logs():
     p = select.poll()
     p.register(tail_proc.stdout)
 
-    regex_fw = re.compile(r"\[SysWarden-(BLOCK|GEO|ASN|DOCKER)\].*SRC=([\d\.]+).*DPT=(\d+)")
+    regex_fw = re.compile(r"\[SysWarden-(BLOCK|GEO|ASN|DOCKER)\].*SRC=([\d\.]+)(?:.*DPT=(\d+))?")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
     while True:
@@ -1676,9 +1676,11 @@ def monitor_logs():
                 match_fw = regex_fw.search(line)
                 if match_fw:
                     ip = match_fw.group(2)
+                    port_val = match_fw.group(3)
                     try:
-                        port = int(match_fw.group(3))
-                    except ValueError:
+                        # If port_val exists, convert it; otherwise, set port = 0.
+                        port = int(port_val) if port_val else 0
+                    except (ValueError, TypeError):
                         port = 0
                     
                     cats = ["14"]
@@ -1747,6 +1749,9 @@ description="SysWarden Unified Reporter for AbuseIPDB"
 command="/usr/local/bin/syswarden_reporter.py"
 command_background=true
 pidfile="/run/${name}.pid"
+# Add these two lines to see what happens!
+output_log="/var/log/syswarden-reporter.log"
+error_log="/var/log/syswarden-reporter.log"
 
 depend() {
     need net rsyslog
