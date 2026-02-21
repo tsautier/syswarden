@@ -26,12 +26,14 @@ ASN_SET_NAME="syswarden_asn"
 ASN_FILE="$SYSWARDEN_DIR/asn.txt"
 
 # --- LIST URLS ---
+# shellcheck disable=SC2034
 declare -A URLS_STANDARD
 URLS_STANDARD[GitHub]="https://raw.githubusercontent.com/duggytuxy/Data-Shield_IPv4_Blocklist/refs/heads/main/prod_data-shield_ipv4_blocklist.txt"
 URLS_STANDARD[GitLab]="https://gitlab.com/duggytuxy/data-shield-ipv4-blocklist/-/raw/main/prod_data-shield_ipv4_blocklist.txt"
 URLS_STANDARD[Bitbucket]="https://bitbucket.org/duggytuxy/data-shield-ipv4-blocklist/raw/HEAD/prod_data-shield_ipv4_blocklist.txt"
 URLS_STANDARD[Codeberg]="https://codeberg.org/duggytuxy21/Data-Shield_IPv4_Blocklist/raw/branch/main/prod_data-shield_ipv4_blocklist.txt"
 
+# shellcheck disable=SC2034
 declare -A URLS_CRITICAL
 URLS_CRITICAL[GitHub]="https://raw.githubusercontent.com/duggytuxy/Data-Shield_IPv4_Blocklist/refs/heads/main/prod_critical_data-shield_ipv4_blocklist.txt"
 URLS_CRITICAL[GitLab]="https://gitlab.com/duggytuxy/data-shield-ipv4-blocklist/-/raw/main/prod_critical_data-shield_ipv4_blocklist.txt"
@@ -45,7 +47,7 @@ URLS_CRITICAL[Codeberg]="https://codeberg.org/duggytuxy21/Data-Shield_IPv4_Block
 log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+    local timestamp; timestamp=$(date "+%Y-%m-%d %H:%M:%S")
     echo -e "${timestamp} [${level}] ${message}" | tee -a "$LOG_FILE"
 }
 
@@ -248,6 +250,7 @@ define_docker_integration() {
 
 select_list_type() {
     if [[ "${1:-}" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
+        # shellcheck source=/dev/null
         source "$CONF_FILE"
         log "INFO" "Update Mode: Loaded configuration (Type: $LIST_TYPE)"
         return
@@ -414,6 +417,7 @@ measure_latency() {
 
 select_mirror() {
     if [[ "${1:-}" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
+        # shellcheck source=/dev/null
         source "$CONF_FILE"
         log "INFO" "Update Mode: keeping mirror $SELECTED_URL"
         return
@@ -499,7 +503,7 @@ download_geoip() {
     # FIX: Create required directories before doing anything
     mkdir -p "$TMP_DIR"
     mkdir -p "$SYSWARDEN_DIR"
-    > "$TMP_DIR/geoip_raw.txt"
+    : > "$TMP_DIR/geoip_raw.txt"
 
     # FIX: Bypass strict IFS by transforming spaces into newlines for the loop
     for country in $(echo "$GEOBLOCK_COUNTRIES" | tr ' ' '\n'); do
@@ -534,7 +538,7 @@ download_asn() {
     echo -e "\n${BLUE}=== Step: Downloading ASN Data ===${NC}"
     mkdir -p "$TMP_DIR"
     mkdir -p "$SYSWARDEN_DIR"
-    > "$TMP_DIR/asn_raw.txt"
+    : > "$TMP_DIR/asn_raw.txt"
 
     # --- SPAMHAUS ASN-DROP INTEGRATION (CONDITIONAL) ---
     if [[ "${USE_SPAMHAUS_ASN:-y}" == "y" ]]; then
@@ -588,7 +592,7 @@ download_asn() {
         local success=false
         local whois_out=""
         
-        for attempt in 1 2 3; do
+        for _ in 1 2 3; do
             # Capture total output (stdout + stderr)
             whois_out=$(whois -h whois.radb.net -- "-i origin $asn" 2>&1 || true)
             
@@ -2275,7 +2279,7 @@ setup_siem_logging() {
 
 setup_cron_autoupdate() {
     if [[ "${1:-}" != "update" ]]; then
-        local script_path=$(realpath "$0")
+        local script_path; script_path=$(realpath "$0")
         local cron_file="/etc/cron.d/syswarden-update"
         local random_min=$((RANDOM % 60))
         echo "$random_min * * * * root $script_path update >/dev/null 2>&1" > "$cron_file"
@@ -2305,7 +2309,10 @@ uninstall_syswarden() {
     log "WARN" "Starting Deep Clean Uninstallation..."
 
     # Load config to retrieve variables (Wazuh IP, etc.)
-    if [[ -f "$CONF_FILE" ]]; then source "$CONF_FILE"; fi
+    if [[ -f "$CONF_FILE" ]]; then 
+        # shellcheck source=/dev/null
+        source "$CONF_FILE"
+    fi
 
     # 1. Stop & Remove Reporter Service
     log "INFO" "Removing SysWarden Reporter..."
@@ -2702,7 +2709,7 @@ protect_docker_jail() {
 
     # Display active jails to help the user
     if command -v fail2ban-client >/dev/null && systemctl is-active --quiet fail2ban; then
-        local active_jails=$(fail2ban-client status 2>/dev/null | grep "Jail list" | sed 's/.*Jail list://g' || true)
+        local active_jails; active_jails=$(fail2ban-client status 2>/dev/null | grep "Jail list" | sed 's/.*Jail list://g' || true)
         echo -e "Currently active Jails: ${YELLOW}${active_jails}${NC}"
     fi
 
@@ -2725,7 +2732,7 @@ protect_docker_jail() {
     log "INFO" "Configuring jail [${jail_name}] to use Docker banaction..."
 
     # Safely inject or update banaction exclusively within the specified jail block
-    local temp_file=$(mktemp)
+    local temp_file; temp_file=$(mktemp)
     local in_target_jail=0
 
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -2816,7 +2823,7 @@ show_alerts_dashboard() {
 
     while true; do
         clear
-        local NOW=$(date "+%H:%M:%S")
+        local NOW; NOW=$(date "+%H:%M:%S")
         
         echo -e "${BLUE}====================================================================================================${NC}"
         echo -e "${BLUE}   SysWarden Live Attack Dashboard (Last Update: $NOW)        ${NC}"
@@ -2962,11 +2969,12 @@ chmod 640 "$LOG_FILE" 2>/dev/null || true
 # ------------------------------------------
 
 if [[ "$MODE" == "update" ]] && [[ -f "$CONF_FILE" ]]; then
+    # shellcheck source=/dev/null
     source "$CONF_FILE"
 fi
 
 if [[ "$MODE" != "update" ]]; then
-    > "$CONF_FILE"
+    : > "$CONF_FILE"
     install_dependencies
     
     # --- CRITICAL ARCHITECTURE FIX ---
