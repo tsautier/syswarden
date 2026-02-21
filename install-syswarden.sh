@@ -40,6 +40,11 @@ URLS_CRITICAL[GitLab]="https://gitlab.com/duggytuxy/data-shield-ipv4-blocklist/-
 URLS_CRITICAL[Bitbucket]="https://bitbucket.org/duggytuxy/data-shield-ipv4-blocklist/raw/HEAD/prod_critical_data-shield_ipv4_blocklist.txt"
 URLS_CRITICAL[Codeberg]="https://codeberg.org/duggytuxy21/Data-Shield_IPv4_Blocklist/raw/branch/main/prod_critical_data-shield_ipv4_blocklist.txt"
 
+# --- SHELLCHECK FIX (Nameref workaround) ---
+: "${URLS_STANDARD[@]}"
+: "${URLS_CRITICAL[@]}"
+# -------------------------------------------
+
 # ==============================================================================
 # HELPER FUNCTIONS
 # ==============================================================================
