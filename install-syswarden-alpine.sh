@@ -1663,7 +1663,8 @@ def monitor_logs():
     p = select.poll()
     p.register(tail_proc.stdout)
 
-    regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+)(?:.*?DPT=(\d+))?")
+    # Filter ONLY [SysWarden-BLOCK] as per v8.00 logic. Port (DPT) is optional.
+    regex_fw = re.compile(r"\[SysWarden-(BLOCK)\].*?SRC=([\d\.]+)(?:.*?DPT=(\d+))?")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
     while True:
@@ -1676,9 +1677,11 @@ def monitor_logs():
                 match_fw = regex_fw.search(line)
                 if match_fw:
                     ip = match_fw.group(2)
-                    port_val = match_fw.group(3)
-                    # Use port if found, otherwise default to 0 for standard category mapping
-                    port = int(port_val) if port_val else 0
+                    port_str = match_fw.group(3)
+                    
+                    # Correct try/except block to avoid SyntaxError
+                    try:
+                        port = int(port_str) if port_str else 0
                     except (ValueError, TypeError):
                         port = 0
                     
