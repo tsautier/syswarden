@@ -101,7 +101,7 @@ detect_os_backend() {
 install_dependencies() {
     log "INFO" "Installing required dependencies..."
     
-    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois rsyslog"
+    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois rsyslog util-linux"
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
         deps="$deps nftables"
@@ -1672,13 +1672,20 @@ def monitor_logs():
     while True:
         for fd, event in p.poll(100):
             if event & select.POLLIN:
-                source = fd_map[fd]
+                source = fd_map.get(fd)
+                
                 if source == 'fw':
                     line = proc_fw.stdout.readline().decode('utf-8', errors='ignore')
-                else:
+                    if not line:
+                        time.sleep(1) # Sécurité : Empêche le CPU à 100%
+                        continue
+                elif source == 'f2b':
                     line = proc_f2b.stdout.readline().decode('utf-8', errors='ignore')
-                
-                if not line: continue
+                    if not line:
+                        time.sleep(1) # Sécurité : Empêche le CPU à 100%
+                        continue
+                else:
+                    continue
 
                 # --- FIREWALL LOGIC ---
                 if source == 'fw' and ENABLE_FW:
