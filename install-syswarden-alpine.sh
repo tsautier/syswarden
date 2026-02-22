@@ -1649,78 +1649,89 @@ def monitor_logs():
     print("🚀 Monitoring logs (dmesg + fail2ban)...", flush=True)
     load_cache() # Load JSON cache on startup
     
-    # We combine dmesg (for Firewall) and tail (for Fail2ban)
-    # Added explicit error suppression and continuous reading for dmesg
-    cmd = "dmesg -w --facility=kern 2>/dev/null & tail -F /var/log/fail2ban.log 2>/dev/null"
+    # FIX: BusyBox dmesg does NOT support '--facility=kern'. 
+    # We now spawn two separate native processes to avoid silent shell crashes.
+    proc_fw = subprocess.Popen(['dmesg', '-w'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc_f2b = subprocess.Popen(['tail', '-F', '/var/log/fail2ban.log'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     
-    # shell=True interleaves the output of both commands into our single pipe
-    tail_proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    tail_proc = proc_fw # Kept for the cleanup_and_exit reference
+    
     p = select.poll()
-    p.register(tail_proc.stdout)
+    p.register(proc_fw.stdout, select.POLLIN)
+    p.register(proc_f2b.stdout, select.POLLIN)
+    
+    fd_map = {
+        proc_fw.stdout.fileno(): 'fw',
+        proc_f2b.stdout.fileno(): 'f2b'
+    }
 
     # v8.00 Logic: STRICT filter on [SysWarden-BLOCK] only.
-    # We use a broad regex that handles Alpine's dmesg timestamp prefixes
     regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+).*?DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
     while True:
-        if p.poll(100):
-            line = tail_proc.stdout.readline().decode('utf-8', errors='ignore')
-            if not line: continue
+        for fd, event in p.poll(100):
+            if event & select.POLLIN:
+                source = fd_map[fd]
+                if source == 'fw':
+                    line = proc_fw.stdout.readline().decode('utf-8', errors='ignore')
+                else:
+                    line = proc_f2b.stdout.readline().decode('utf-8', errors='ignore')
+                
+                if not line: continue
 
-            # --- FIREWALL LOGIC ---
-            if ENABLE_FW:
-                match_fw = regex_fw.search(line)
-                if match_fw:
-                    ip = match_fw.group(1)
-                    try:
-                        port = int(match_fw.group(2))
-                    except ValueError:
-                        port = 0
-                    
-                    cats = ["14"]
-                    attack_type = "Port Scan"
+                # --- FIREWALL LOGIC ---
+                if source == 'fw' and ENABLE_FW:
+                    match_fw = regex_fw.search(line)
+                    if match_fw:
+                        ip = match_fw.group(1)
+                        try:
+                            port = int(match_fw.group(2))
+                        except ValueError:
+                            port = 0
+                        
+                        cats = ["14"]
+                        attack_type = "Port Scan"
 
-                    # Original v8.00 categorization logic
-                    if port in [80, 443, 4443, 8080, 8443]: cats.extend(["20", "21"]); attack_type = "Web Attack"
-                    elif port in [22, 2222, 22222]: cats.extend(["18", "22"]); attack_type = "SSH Attack"
-                    elif port == 23: cats.extend(["18", "23"]); attack_type = "Telnet IoT Attack"
-                    elif port == 88: cats.extend(["15", "20"]); attack_type = "Kerberos Attack"
-                    elif port in [139, 445]: cats.extend(["15", "18"]); attack_type = "SMB/Possible Ransomware Attack"
-                    elif port in [389, 636]: cats.extend(["15", "20"]); attack_type = "LDAP/LDAPS Attack"
-                    elif port == 1433: cats.extend(["18", "15"]); attack_type = "MSSQL Attack"
-                    elif port == 8006: cats.extend(["18", "21"]); attack_type = "Proxmox VE Brute-Force"
-                    elif port == 3000: cats.extend(["15", "20"]); attack_type = "Possible Vulns Exploit"
-                    elif port == 4444: cats.extend(["15", "20"]); attack_type = "Possible C2 Host"
-                    elif port in [3389, 5900]: cats.extend(["18"]); attack_type = "RDP/VNC Attack"
-                    elif port == 21: cats.extend(["5", "18"]); attack_type = "FTP Attack"
-                    elif port in [25, 110, 143, 465, 587, 993, 995]: cats.extend(["18"]); attack_type = "Mail Service Attack"
-                    elif port in [1080, 3128, 8118]: cats.extend(["9", "15"]); attack_type = "Open Proxy Probe"
-                    elif port in [2375, 2376]: cats.extend(["15", "20"]); attack_type = "Docker API Attack"
-                    elif port in [3306, 5432, 27017]: cats.extend(["15", "18"]); attack_type = "DB Attack (MySQL/PgSQL/Mongo)"
-                    elif port in [5060, 5061]: cats.extend(["8", "18"]); attack_type = "SIP/VoIP Attack"
-                    elif port in [6379, 9200, 11211]: cats.extend(["15", "20"]); attack_type = "NoSQL/Cache Attack"
-                    elif port == 1194: cats.extend(["15", "18"]); attack_type = "OpenVPN Attack"
-                    elif port in [51820, 51821]: cats.extend(["15", "18"]); attack_type = "WireGuard Attack"
-                    elif port == 9090: cats.extend(["18", "21"]); attack_type = "Cockpit Web Console Attack"
+                        # Original v8.00 categorization logic
+                        if port in [80, 443, 4443, 8080, 8443]: cats.extend(["20", "21"]); attack_type = "Web Attack"
+                        elif port in [22, 2222, 22222]: cats.extend(["18", "22"]); attack_type = "SSH Attack"
+                        elif port == 23: cats.extend(["18", "23"]); attack_type = "Telnet IoT Attack"
+                        elif port == 88: cats.extend(["15", "20"]); attack_type = "Kerberos Attack"
+                        elif port in [139, 445]: cats.extend(["15", "18"]); attack_type = "SMB/Possible Ransomware Attack"
+                        elif port in [389, 636]: cats.extend(["15", "20"]); attack_type = "LDAP/LDAPS Attack"
+                        elif port == 1433: cats.extend(["18", "15"]); attack_type = "MSSQL Attack"
+                        elif port == 8006: cats.extend(["18", "21"]); attack_type = "Proxmox VE Brute-Force"
+                        elif port == 3000: cats.extend(["15", "20"]); attack_type = "Possible Vulns Exploit"
+                        elif port == 4444: cats.extend(["15", "20"]); attack_type = "Possible C2 Host"
+                        elif port in [3389, 5900]: cats.extend(["18"]); attack_type = "RDP/VNC Attack"
+                        elif port == 21: cats.extend(["5", "18"]); attack_type = "FTP Attack"
+                        elif port in [25, 110, 143, 465, 587, 993, 995]: cats.extend(["18"]); attack_type = "Mail Service Attack"
+                        elif port in [1080, 3128, 8118]: cats.extend(["9", "15"]); attack_type = "Open Proxy Probe"
+                        elif port in [2375, 2376]: cats.extend(["15", "20"]); attack_type = "Docker API Attack"
+                        elif port in [3306, 5432, 27017]: cats.extend(["15", "18"]); attack_type = "DB Attack (MySQL/PgSQL/Mongo)"
+                        elif port in [5060, 5061]: cats.extend(["8", "18"]); attack_type = "SIP/VoIP Attack"
+                        elif port in [6379, 9200, 11211]: cats.extend(["15", "20"]); attack_type = "NoSQL/Cache Attack"
+                        elif port == 1194: cats.extend(["15", "18"]); attack_type = "OpenVPN Attack"
+                        elif port in [51820, 51821]: cats.extend(["15", "18"]); attack_type = "WireGuard Attack"
+                        elif port == 9090: cats.extend(["18", "21"]); attack_type = "Cockpit Web Console Attack"
 
-                    threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Blocked by SysWarden Firewall ({attack_type} Port {port})")).start()
-                    continue
+                        threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Blocked by SysWarden Firewall ({attack_type} Port {port})")).start()
 
-            # --- FAIL2BAN LOGIC ---
-            if ENABLE_F2B:
-                match_f2b = regex_f2b.search(line)
-                if match_f2b and "SysWarden-BLOCK" not in line:
-                    jail = match_f2b.group(1)
-                    ip = match_f2b.group(2)
-                    
-                    cats = ["18"] # General Abuse
-                    if "ssh" in jail.lower(): cats.extend(["22"])
-                    elif "nginx" in jail.lower() or "apache" in jail.lower() or "wordpress" in jail.lower(): cats.extend(["21"])
-                    elif "postfix" in jail.lower() or "sendmail" in jail.lower(): cats.extend(["5", "11"])
-                    elif "mariadb" in jail.lower() or "mongodb" in jail.lower(): cats.extend(["15"])
+                # --- FAIL2BAN LOGIC ---
+                elif source == 'f2b' and ENABLE_F2B:
+                    match_f2b = regex_f2b.search(line)
+                    if match_f2b and "SysWarden-BLOCK" not in line:
+                        jail = match_f2b.group(1)
+                        ip = match_f2b.group(2)
+                        
+                        cats = ["18"] # General Abuse
+                        if "ssh" in jail.lower(): cats.extend(["22"])
+                        elif "nginx" in jail.lower() or "apache" in jail.lower() or "wordpress" in jail.lower(): cats.extend(["21"])
+                        elif "postfix" in jail.lower() or "sendmail" in jail.lower(): cats.extend(["5", "11"])
+                        elif "mariadb" in jail.lower() or "mongodb" in jail.lower(): cats.extend(["15"])
 
-                    threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Banned by Fail2ban (Jail: {jail})")).start()
+                        threading.Thread(target=send_report, args=(ip, ",".join(cats), f"Banned by Fail2ban (Jail: {jail})")).start()
 
 if __name__ == "__main__":
     monitor_logs()
