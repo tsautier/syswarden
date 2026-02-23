@@ -2442,9 +2442,9 @@ setup_ztna_spa() {
     echo -e "\n${BLUE}=== Step: Configuring ZTNA / fwknop ===${NC}"
     log "INFO" "Generating SPA cryptographic keys..."
 
-    # Generate secure Alphanumeric keys (Bypasses fwknopd strict Base64 bugs)
-    local KEY_NORMAL; KEY_NORMAL=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
-    local HMAC_NORMAL; HMAC_NORMAL=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64)
+    # Generate secure Alphanumeric keys (Bypasses fwknopd strict Base64 bugs and pipefail traps)
+    local KEY_NORMAL; KEY_NORMAL=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || true)
+    local HMAC_NORMAL; HMAC_NORMAL=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64 || true)
     
     # Auto-detect the primary network interface facing the internet
     local ACTIVE_IF; ACTIVE_IF=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' | head -n 1)
