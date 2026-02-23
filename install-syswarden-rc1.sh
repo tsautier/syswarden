@@ -2454,7 +2454,10 @@ setup_ebpf_hids() {
 #!/usr/bin/python3
 from bcc import BPF
 import time
+import subprocess
+import sys
 import os
+import ctypes
 import signal
 import syslog
 
@@ -2487,15 +2490,62 @@ int syscall__execve(struct pt_regs *ctx, const char __user *filename) {
     events.perf_submit(ctx, &data, sizeof(data));
     return 0;
 }
+
+/* --- RING 0 SELF-DEFENSE MODULE --- */
+    
+    // Array to store the PID of our own Python daemon
+    BPF_ARRAY(protected_pid_map, u32, 1);
+    
+    // Hook the 'kill' system call entry point natively
+    TRACEPOINT_PROBE(syscalls, sys_enter_kill) {
+        u32 key = 0;
+        u32 *my_pid_ptr = protected_pid_map.lookup(&key);
+        
+        // 1. If defense is not armed (map is empty or zeroed), let the syscall pass
+        if (!my_pid_ptr || *my_pid_ptr == 0) return 0;
+        
+        // 2. Is the signal targeting our daemon's PID?
+        if (args->pid == *my_pid_ptr) {
+            
+            // 3. SECURE BYPASS: Allow systemd (PID 1) to manage the service.
+            // This is CRITICAL to prevent Kernel Panic during server reboots.
+            u64 pid_tgid = bpf_get_current_pid_tgid();
+            u32 sender_pid = pid_tgid >> 32;
+            if (sender_pid == 1) return 0;
+            
+            // 4. MAGIC DISARM SIGNAL: Signal 62 acts as the kill-switch.
+            // If the admin sends 'kill -62 <pid>', we disarm the shield globally.
+            if (args->sig == 62) {
+                u32 disarm = 0;
+                protected_pid_map.update(&key, &disarm);
+                bpf_trace_printk("[SysWarden] Shield DISARMED via Magic Signal (62).\\n");
+                return 0; // Allow the magic signal to pass without killing the sender
+            }
+            
+            // 5. PREEMPTIVE STRIKE: For any other signal (9, 15) from a non-systemd process.
+            bpf_send_signal(9);
+            bpf_trace_printk("[SysWarden] Unauthorized kill attempt blocked. Attacker destroyed.\\n");
+        }
+        return 0;
+    }
 """
 
 try:
     b = BPF(text=bpf_text)
-    b.attach_kprobe(event=b.get_syscall_fnname("execve"), fn_name="syscall__execve")
 except Exception as e:
-    syslog.syslog(syslog.LOG_ERR, f"SysWarden eBPF failed to load. Kernel headers missing? Error: {e}")
-    exit(1)
+    print(f"Failed to compile eBPF code: {e}")
+    sys.exit(1)
 
+# --- ARM THE SELF-DEFENSE MODULE ---
+# Inject the daemon's current PID into the eBPF kernel map
+try:
+    current_pid = os.getpid()
+    b["protected_pid_map"][0] = ctypes.c_uint32(current_pid)
+    print(f"[+] eBPF Self-Defense armed for PID: {current_pid}")
+except Exception as e:
+    print(f"[-] Warning: Failed to arm self-defense module: {e}")
+# -----------------------------------	
+	
 # --- USERSPACE LOGIC ---
 WEB_SERVERS = [b"nginx", b"apache2", b"httpd", b"php-fpm", b"php-cgi"]
 # Zero-Trust payloads for a web server process
@@ -2606,7 +2656,22 @@ uninstall_syswarden() {
     rm -f /etc/systemd/system/syswarden-reporter.service /usr/local/bin/syswarden_reporter.py
     
     # eBPF HIDS
-    systemctl disable --now syswarden-ebpf 2>/dev/null || true
+    # --- DISARM RING 0 DEFENSE BEFORE UNINSTALL ---
+    local EBPF_PID
+    EBPF_PID=$(systemctl show -p MainPID syswarden-ebpf 2>/dev/null | cut -d= -f2)
+    
+    if [[ -n "$EBPF_PID" && "$EBPF_PID" -gt 0 ]]; then
+        log "INFO" "Transmitting Magic Signal (62) to disarm eBPF Ring 0 defense..."
+        # We send signal 62. The kernel clears the BPF map, dropping the shield.
+        kill -62 "$EBPF_PID" 2>/dev/null || true
+        sleep 1
+    fi
+    # ----------------------------------------------
+
+    log "INFO" "Stopping and disabling SysWarden eBPF service..."
+    systemctl stop syswarden-ebpf 2>/dev/null || true
+    systemctl disable syswarden-ebpf 2>/dev/null || true
+    
     rm -f /etc/systemd/system/syswarden-ebpf.service /usr/local/bin/syswarden_ebpf.py
     rm -f /var/log/syswarden-ebpf.log
 	
