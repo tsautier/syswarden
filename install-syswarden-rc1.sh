@@ -871,7 +871,10 @@ EOF
 
         # --- PERSISTENCE & SERVICE ENABLEMENT ---
         log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
-        nft list ruleset > /etc/nftables.conf
+        echo "#!/usr/sbin/nft -f" > /etc/nftables.conf
+        echo "flush ruleset" >> /etc/nftables.conf
+        nft list table inet syswarden_table >> /etc/nftables.conf 2>/dev/null || true
+        
         if command -v systemctl >/dev/null; then
             systemctl enable --now nftables 2>/dev/null || true
         fi
@@ -2439,9 +2442,9 @@ setup_ztna_spa() {
     echo -e "\n${BLUE}=== Step: Configuring ZTNA / fwknop ===${NC}"
     log "INFO" "Generating SPA cryptographic keys..."
 
-    # Generate secure Base64 keys
-    local KEY_BASE64; KEY_BASE64=$(head -c 32 /dev/urandom | base64 -w 0)
-    local HMAC_BASE64; HMAC_BASE64=$(head -c 64 /dev/urandom | base64 -w 0)
+    # Generate secure Alphanumeric keys (Bypasses fwknopd strict Base64 bugs)
+    local KEY_NORMAL; KEY_NORMAL=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32)
+    local HMAC_NORMAL; HMAC_NORMAL=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64)
     
     # Auto-detect the primary network interface facing the internet
     local ACTIVE_IF; ACTIVE_IF=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' | head -n 1)
@@ -2454,8 +2457,8 @@ setup_ztna_spa() {
     mkdir -p /etc/fwknop
     cat <<EOF > /etc/fwknop/access.conf
 SOURCE ANY
-KEY_BASE64 $KEY_BASE64
-HMAC_KEY_BASE64 $HMAC_BASE64
+KEY $KEY_NORMAL
+HMAC_KEY $HMAC_NORMAL
 FW_ACCESS_TIMEOUT 30
 EOF
 
@@ -2478,7 +2481,7 @@ EOF
 
     echo -e "\n${RED}!!! CRITICAL: SAVE THESE INSTRUCTIONS NOW !!!${NC}"
     echo -e "Your SSH port ($SSH_PORT) is now INVISIBLE. To connect, you must run this on your client machine:\n"
-    echo -e "${YELLOW}fwknop -n $(hostname) -A tcp/$SSH_PORT -a \$(curl -s ifconfig.me) --key-base64-hmac $HMAC_BASE64 --use-hmac --key-base64 $KEY_BASE64 -D $SERVER_IP${NC}\n"
+    echo -e "${YELLOW}fwknop -n \$(hostname) -A tcp/$SSH_PORT -a \$(curl -s ifconfig.me) --hmac-key $HMAC_NORMAL --use-hmac --key $KEY_NORMAL -D $SERVER_IP${NC}\n"
     echo -e "${RED}!!! DO NOT LOSE THIS COMMAND. THE SCREEN WILL CONTINUE IN 10 SECONDS !!!${NC}"
     
     sleep 10
