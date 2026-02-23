@@ -839,6 +839,14 @@ EOF
         fi
 
     elif [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
+        # --- ZTNA COMPATIBILITY FIX ---
+        if [[ "${USE_SPA:-n}" == "y" ]]; then
+            log "INFO" "ZTNA: Switching Firewalld backend to iptables for fwknop compatibility..."
+            sed -i 's/^FirewallBackend=nftables/FirewallBackend=iptables/' /etc/firewalld/firewalld.conf
+            systemctl restart firewalld
+        fi
+        # ------------------------------
+
         if ! systemctl is-active --quiet firewalld; then systemctl enable --now firewalld; fi
         
         if [[ "${USE_SPA:-n}" == "y" ]]; then
