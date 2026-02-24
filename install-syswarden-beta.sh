@@ -779,6 +779,15 @@ apply_firewall_rules() {
             asn_rule="ip saddr @$ASN_SET_NAME log prefix \"[SysWarden-ASN] \" flags all drop"
         fi
 
+        # 3.5 WireGuard SSH Cloaking Rule
+        local wg_ssh_rule=""
+        local ct_rule=""
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            ct_rule="ct state established,related accept"
+            # Si ce n'est ni l'interface VPN (wg0), ni le localhost (lo), on DROP le SSH.
+            wg_ssh_rule="iifname != \"wg0\" iifname != \"lo\" tcp dport ${SSH_PORT:-22} log prefix \"[SysWarden-SSH-DROP] \" drop"
+        fi
+
         # 4. Build and Apply Nftables config (Respecting Priority)
         cat <<EOF > "$TMP_DIR/syswarden.nft"
 table inet syswarden_table {
@@ -791,6 +800,9 @@ table inet syswarden_table {
     chain input {
         type filter hook input priority filter - 10; policy accept;
         
+        # State tracking to keep current SSH session alive during installation
+        $ct_rule
+        
         # PRIORITY 1: Geo-Blocking (Broadest scope)
         $geoip_rule
         
@@ -800,6 +812,9 @@ table inet syswarden_table {
         # PRIORITY 3: Standard Blocklist & Scanners
         ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " flags all drop
         tcp dport { 23, 445, 1433, 3389, 5900 } log prefix "[SysWarden-BLOCK] " flags all drop
+        
+        # PRIORITY 4: WireGuard SSH Cloaking
+        $wg_ssh_rule
     }
 }
 EOF
@@ -815,15 +830,19 @@ EOF
     elif [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
         if ! systemctl is-active --quiet firewalld; then systemctl enable --now firewalld; fi
         
-        if [[ -n "${SSH_PORT:-}" ]]; then
+        # --- WIREGUARD SSH CLOAKING ---
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            log "INFO" "WireGuard: Removing public SSH port access from Firewalld..."
+            firewall-cmd --permanent --remove-port="${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-service="ssh" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
+            
+            # Explicitly allow SSH from the WireGuard Subnet ONLY
+            firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
+        elif [[ -n "${SSH_PORT:-}" ]]; then
             firewall-cmd --permanent --add-port="${SSH_PORT}/tcp" >/dev/null 2>&1 || true
         fi
-        
-        # --- WIREGUARD FIREWALL ALLOW ---
-        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
-            firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
-        fi
-        # --------------------------------
+        # ------------------------------
 
         log "INFO" "Preparing Firewalld IPSets (Bypassing DBus limitations)..."
         
@@ -929,11 +948,18 @@ EOF
             echo "-A ufw-before-input -m set --match-set $SET_NAME src -j DROP" >> "$UFW_RULES"
         fi
 
-        # --- WIREGUARD FIREWALL ALLOW ---
+        # --- WIREGUARD SSH CLOAKING ---
         if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            # 1. Allow UDP port for WireGuard Tunnel
             ufw allow "${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
+            
+            # 2. Allow SSH strictly from the WG Subnet
+            ufw allow from "${WG_SUBNET}" to any port "${SSH_PORT:-22}" proto tcp >/dev/null 2>&1 || true
+            
+            # 3. Deny public SSH access
+            ufw deny "${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
         fi
-        # --------------------------------
+        # ------------------------------
 
         # --- GEOIP INJECTION ---
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
@@ -1018,6 +1044,20 @@ EOF
                 iptables -I INPUT 1 -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] "
             fi
         fi
+		
+		# --- WIREGUARD SSH CLOAKING ---
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            # Clean existing WG rules first to prevent duplicates
+            while iptables -D INPUT -p tcp --dport "${SSH_PORT:-22}" -j DROP 2>/dev/null; do :; done
+            while iptables -D INPUT -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT 2>/dev/null; do :; done
+            while iptables -D INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; do :; done
+            
+            # Insert top-priority rules (inserted in reverse order, position 1)
+            iptables -I INPUT 1 -p tcp --dport "${SSH_PORT:-22}" -j DROP
+            iptables -I INPUT 1 -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT
+            iptables -I INPUT 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        fi
+        # ------------------------------
         
         # Save IPtables persistence for legacy OS
         if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
@@ -2548,14 +2588,25 @@ uninstall_syswarden() {
         rm -f /etc/sysctl.d/99-syswarden-wireguard.conf
         sysctl --system >/dev/null 2>&1 || true
         
-        # 4. Clean specific firewall port openings
+        # 4. Clean specific firewall port openings & RESTORE PUBLIC SSH
         if [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
             firewall-cmd --permanent --remove-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
+            firewall-cmd --permanent --remove-rich-rule="rule family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
+            # EMERGENCY SSH RESTORE
+            firewall-cmd --permanent --add-port="${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
             firewall-cmd --reload >/dev/null 2>&1 || true
         elif [[ "$FIREWALL_BACKEND" == "ufw" ]]; then
-            # UFW syntax requires exact match to delete
             ufw delete allow "${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
+            ufw delete allow from "${WG_SUBNET}" to any port "${SSH_PORT:-22}" proto tcp >/dev/null 2>&1 || true
+            # EMERGENCY SSH RESTORE
+            ufw delete deny "${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
             ufw reload >/dev/null 2>&1 || true
+        fi
+        
+        # EMERGENCY SSH RESTORE FOR IPTABLES
+        if command -v iptables >/dev/null; then
+            while iptables -D INPUT -p tcp --dport "${SSH_PORT:-22}" -j DROP 2>/dev/null; do :; done
+            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save 2>/dev/null || true; fi
         fi
     fi
     # -------------------------
