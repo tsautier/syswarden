@@ -2484,14 +2484,19 @@ EOF
     log "INFO" "Orchestrating fwknop-server service..."
     if command -v systemctl >/dev/null; then
         systemctl daemon-reload
-        # Kill any zombie/orphaned fwknopd processes to free the PID
+        # Kill any zombie/orphaned fwknopd processes
         killall fwknopd 2>/dev/null || true
+        
+        # --- THE MASTER KEY: Reset Systemd rate-limit jail caused by APT ---
+        systemctl reset-failed fwknop-server.service 2>/dev/null || true
+        systemctl reset-failed fwknopd.service 2>/dev/null || true
+        
         systemctl enable fwknop-server >/dev/null 2>&1
         
-        # Attempting restart with error capture
+        # Attempting restart with clear history
         if ! systemctl restart fwknop-server; then
             log "WARN" "Systemd service failed, forcing manual daemon start..."
-            /usr/sbin/fwknopd -R >/dev/null 2>&1 || true
+            /usr/sbin/fwknopd >/dev/null 2>&1 || true
         fi
     fi
 
