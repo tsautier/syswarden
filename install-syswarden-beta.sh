@@ -790,6 +790,9 @@ apply_firewall_rules() {
 
         # 4. Build and Apply Nftables config (Respecting Priority)
         cat <<EOF > "$TMP_DIR/syswarden.nft"
+add table inet syswarden_table
+flush table inet syswarden_table
+
 table inet syswarden_table {
     set $SET_NAME {
         type ipv4_addr
