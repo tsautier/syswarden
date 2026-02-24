@@ -2115,7 +2115,11 @@ setup_wireguard() {
     local ACTIVE_IF; ACTIVE_IF=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' | head -n 1)
     [[ -z "$ACTIVE_IF" ]] && ACTIVE_IF="eth0"
     
-    local SERVER_IP; SERVER_IP=$(curl -4 -s ifconfig.me 2>/dev/null || echo "YOUR_SERVER_IP")
+    local SERVER_IP
+    SERVER_IP=$(curl -4 -s --connect-timeout 3 api.ipify.org 2>/dev/null || \
+                curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null || \
+                curl -4 -s --connect-timeout 3 icanhazip.com 2>/dev/null || \
+                ip -4 addr show "$ACTIVE_IF" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
     
     # Safely extract base network (e.g., 10.66.66.0/24 -> 10.66.66)
     local SUBNET_BASE; SUBNET_BASE=$(echo "$WG_SUBNET" | cut -d'.' -f1,2,3)
