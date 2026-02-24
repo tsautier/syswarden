@@ -2180,8 +2180,9 @@ setup_wireguard() {
             POSTDOWN="nft delete table inet syswarden_wg 2>/dev/null || true"
             ;;
         "firewalld")
-            POSTUP="firewall-cmd --add-masquerade; firewall-cmd --direct --add-rule ipv4 filter FORWARD 0 -i wg0 -j ACCEPT; firewall-cmd --direct --add-rule ipv4 filter FORWARD 0 -o wg0 -j ACCEPT"
-            POSTDOWN="firewall-cmd --remove-masquerade; firewall-cmd --direct --remove-rule ipv4 filter FORWARD 0 -i wg0 -j ACCEPT; firewall-cmd --direct --remove-rule ipv4 filter FORWARD 0 -o wg0 -j ACCEPT"
+            # Smart fallback: Attempts the modern method (add-forward), otherwise reverts to Direct Rules (old RHEL)
+            POSTUP="firewall-cmd --add-masquerade; firewall-cmd --add-interface=wg0 2>/dev/null || true; firewall-cmd --add-forward 2>/dev/null || { firewall-cmd --direct --add-rule ipv4 filter FORWARD 0 -i wg0 -j ACCEPT; firewall-cmd --direct --add-rule ipv4 filter FORWARD 0 -o wg0 -j ACCEPT; }"
+            POSTDOWN="firewall-cmd --remove-masquerade; firewall-cmd --remove-interface=wg0 2>/dev/null || true; firewall-cmd --remove-forward 2>/dev/null || { firewall-cmd --direct --remove-rule ipv4 filter FORWARD 0 -i wg0 -j ACCEPT; firewall-cmd --direct --remove-rule ipv4 filter FORWARD 0 -o wg0 -j ACCEPT; }"
             ;;
         *)
             # Standard Iptables / UFW Fallback
