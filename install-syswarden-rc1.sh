@@ -2439,50 +2439,72 @@ setup_ztna_spa() {
         return
     fi
 
-    echo -e "\n${BLUE}=== Step: Configuring ZTNA / fwknop ===${NC}"
-    log "INFO" "Generating SPA cryptographic keys..."
+    echo -e "\n${BLUE}=== Step: Configuring ZTNA / fwknop (SPA) ===${NC}"
+    log "INFO" "Initializing SPA cryptographic engine..."
 
-    # Bypass fwknopd strict bugs and pipefail traps
+    # 1. Generate ultra-secure alphanumeric keys (Bypassing Base64 parsing bugs)
+    # Using LC_ALL=C to ensure predictable character sets across different locales
     local KEY_NORMAL; KEY_NORMAL=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || true)
     local HMAC_NORMAL; HMAC_NORMAL=$(LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 64 || true)
     
+    # 2. Network Interface Detection
     local ACTIVE_IF; ACTIVE_IF=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' | head -n 1)
-    if [[ -z "$ACTIVE_IF" ]]; then
-        ACTIVE_IF="eth0"
+    [[ -z "$ACTIVE_IF" ]] && ACTIVE_IF="eth0"
+
+    # 3. Directory & Permission Management
+    # CRITICAL: We DO NOT use 'rm -rf' to preserve AppArmor labels on Ubuntu/Debian
+    if [[ ! -d "/etc/fwknop" ]]; then
+        mkdir -p /etc/fwknop
+        chmod 700 /etc/fwknop
     fi
 
-    # 1. Purge and recreate directory with EXPLICIT permissions
-    mkdir -p /etc/fwknop
-    chmod 755 /etc/fwknop
+    # 4. Configuration Deployment (Atomic Writes)
+    log "INFO" "Deploying SPA access policies..."
+    cat <<EOF > /etc/fwknop/access.conf
+# SysWarden ZTNA Access Policy
+SOURCE ANY
+KEY $KEY_NORMAL
+HMAC_KEY $HMAC_NORMAL
+FW_ACCESS_TIMEOUT 30
+EOF
 
-    # 2. Use ECHO to prevent any nano/copy-paste indentation corruption
-    echo "SOURCE ANY" > /etc/fwknop/access.conf
-    echo "KEY $KEY_NORMAL" >> /etc/fwknop/access.conf
-    echo "HMAC_KEY $HMAC_NORMAL" >> /etc/fwknop/access.conf
-    echo "FW_ACCESS_TIMEOUT 30" >> /etc/fwknop/access.conf
+    cat <<EOF > /etc/fwknop/fwknopd.conf
+# SysWarden ZTNA Server Configuration
+PCAP_INTF $ACTIVE_IF;
+ENABLE_IPT_FORWARDING N;
+EOF
 
-    echo "PCAP_INTF $ACTIVE_IF;" > /etc/fwknop/fwknopd.conf
-
-    # 3. Explicit ownership and file permissions
-    chown -R root:root /etc/fwknop
+    # 5. Security Hardening (Mandatory for fwknopd startup)
+    # fwknopd will REFUSE to start if permissions are wider than 600
+    chown root:root /etc/fwknop/access.conf /etc/fwknop/fwknopd.conf
     chmod 600 /etc/fwknop/access.conf
     chmod 600 /etc/fwknop/fwknopd.conf
 
-    # 4. Reload systemd to clear namespace caches
+    # 6. Service Orchestration
+    log "INFO" "Orchestrating fwknop-server service..."
     if command -v systemctl >/dev/null; then
         systemctl daemon-reload
-        systemctl enable fwknop-server 2>/dev/null || systemctl enable fwknopd 2>/dev/null || true
-        systemctl restart fwknop-server 2>/dev/null || systemctl restart fwknopd 2>/dev/null || true
+        # Kill any zombie/orphaned fwknopd processes to free the PID
+        killall fwknopd 2>/dev/null || true
+        systemctl enable fwknop-server >/dev/null 2>&1
+        
+        # Attempting restart with error capture
+        if ! systemctl restart fwknop-server; then
+            log "WARN" "Systemd service failed, forcing manual daemon start..."
+            /usr/sbin/fwknopd -R >/dev/null 2>&1 || true
+        fi
     fi
 
-    log "INFO" "SPA configured successfully on interface $ACTIVE_IF."
+    log "INFO" "SPA configured successfully on $ACTIVE_IF."
 
+    # 7. Final Output & Client Command Generation
     local SERVER_IP; SERVER_IP=$(curl -4 -s ifconfig.me 2>/dev/null || echo "YOUR_SERVER_IP")
 
-    echo -e "\n${RED}!!! CRITICAL: SAVE THESE INSTRUCTIONS NOW !!!${NC}"
-    echo -e "Your SSH port ($SSH_PORT) is now INVISIBLE. To connect, you must run this on your client machine:\n"
+    echo -e "\n${RED}!!! CRITICAL: SECURITY ACCESS PROTOCOL !!!${NC}"
+    echo -e "Your SSH port ($SSH_PORT) is now stealth-protected by ZTNA."
+    echo -e "To unlock access, execute this command on your local workstation:\n"
     echo -e "${YELLOW}fwknop -n \$(hostname) -A tcp/$SSH_PORT -a \$(curl -s ifconfig.me) --hmac-key $HMAC_NORMAL --use-hmac --key $KEY_NORMAL -D $SERVER_IP${NC}\n"
-    echo -e "${RED}!!! DO NOT LOSE THIS COMMAND. THE SCREEN WILL CONTINUE IN 10 SECONDS !!!${NC}"
+    echo -e "${RED}FAILURE TO SAVE THIS COMMAND WILL LOCK YOU OUT OF SSH.${NC}"
     
     sleep 10
 }
