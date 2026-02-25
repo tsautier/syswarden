@@ -743,93 +743,70 @@ apply_firewall_rules() {
     # -----------------------------------
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
-        log "INFO" "Configuring Nftables Base Structure..."
+        log "INFO" "Configuring Nftables Base Structure (Flat Syntax for Debian 11 compatibility)..."
 
-        # 1. Create Base Structure with Empty Sets
+        # 1. Create Base Structure using Flat Commands (Bypasses nested parser Segfaults)
         cat <<EOF > "$TMP_DIR/syswarden.nft"
 add table inet syswarden_table
 flush table inet syswarden_table
-
-table inet syswarden_table {
-    set $SET_NAME {
-        type ipv4_addr
-        flags interval
-        auto-merge
-    }
+add set inet syswarden_table $SET_NAME { type ipv4_addr; flags interval; auto-merge; }
 EOF
 
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
-            cat <<EOF >> "$TMP_DIR/syswarden.nft"
-    set $GEOIP_SET_NAME {
-        type ipv4_addr
-        flags interval
-        auto-merge
-    }
-EOF
+            echo "add set inet syswarden_table $GEOIP_SET_NAME { type ipv4_addr; flags interval; auto-merge; }" >> "$TMP_DIR/syswarden.nft"
         fi
 
         if [[ "${BLOCK_ASNS:-none}" != "none" ]] && [[ -s "$ASN_FILE" ]]; then
-            cat <<EOF >> "$TMP_DIR/syswarden.nft"
-    set $ASN_SET_NAME {
-        type ipv4_addr
-        flags interval
-        auto-merge
-    }
-EOF
+            echo "add set inet syswarden_table $ASN_SET_NAME { type ipv4_addr; flags interval; auto-merge; }" >> "$TMP_DIR/syswarden.nft"
         fi
 
-        # 2. WireGuard SSH Cloaking Rule setup
-        local wg_ssh_rule=""
-        local ct_rule=""
+        cat <<EOF >> "$TMP_DIR/syswarden.nft"
+add chain inet syswarden_table input { type filter hook input priority filter - 10; policy accept; }
+EOF
+
+        # 2. Add Rules (Removed 'flags all' which causes crashes on older kernels)
         if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
-            ct_rule="ct state established,related accept"
-            wg_ssh_rule="iifname != \"wg0\" iifname != \"lo\" tcp dport ${SSH_PORT:-22} log prefix \"[SysWarden-SSH-DROP] \" drop"
+            echo "add rule inet syswarden_table input ct state established,related accept" >> "$TMP_DIR/syswarden.nft"
         fi
 
-        # 3. Define Chain & Rules
-        cat <<EOF >> "$TMP_DIR/syswarden.nft"
-    chain input {
-        type filter hook input priority filter - 10; policy accept;
-        
-        $ct_rule
-EOF
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
-            echo "        ip saddr @$GEOIP_SET_NAME log prefix \"[SysWarden-GEO] \" flags all drop" >> "$TMP_DIR/syswarden.nft"
+            echo "add rule inet syswarden_table input ip saddr @$GEOIP_SET_NAME log prefix \"[SysWarden-GEO] \" drop" >> "$TMP_DIR/syswarden.nft"
         fi
 
         if [[ "${BLOCK_ASNS:-none}" != "none" ]] && [[ -s "$ASN_FILE" ]]; then
-            echo "        ip saddr @$ASN_SET_NAME log prefix \"[SysWarden-ASN] \" flags all drop" >> "$TMP_DIR/syswarden.nft"
+            echo "add rule inet syswarden_table input ip saddr @$ASN_SET_NAME log prefix \"[SysWarden-ASN] \" drop" >> "$TMP_DIR/syswarden.nft"
         fi
 
         cat <<EOF >> "$TMP_DIR/syswarden.nft"
-        ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " flags all drop
-        tcp dport { 23, 445, 1433, 3389, 5900 } log prefix "[SysWarden-BLOCK] " flags all drop
-        
-        $wg_ssh_rule
-    }
-}
+add rule inet syswarden_table input ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " drop
+add rule inet syswarden_table input tcp dport { 23, 445, 1433, 3389, 5900 } log prefix "[SysWarden-BLOCK] " drop
 EOF
+
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            echo "add rule inet syswarden_table input iifname != \"wg0\" iifname != \"lo\" tcp dport ${SSH_PORT:-22} log prefix \"[SysWarden-SSH-DROP] \" drop" >> "$TMP_DIR/syswarden.nft"
+        fi
+
         # Apply Base Structure First
         nft -f "$TMP_DIR/syswarden.nft"
 
-        # 4. Populate Sets in Chunks to prevent Bison Parser Segfaults on older kernels
+        # 3. Populate Sets in Chunks
         log "INFO" "Populating Nftables sets in chunks (Bypassing memory limits)..."
         
         if [[ -s "$FINAL_LIST" ]]; then
             cat "$FINAL_LIST" | xargs -n 5000 | while read -r chunk; do
-                nft "add element inet syswarden_table $SET_NAME { $(echo "$chunk" | tr ' ' ',') }"
+                nft "add element inet syswarden_table $SET_NAME { $(echo "$chunk" | tr ' ' ',') }" 2>/dev/null || true
             done
         fi
 
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
             cat "$GEOIP_FILE" | xargs -n 5000 | while read -r chunk; do
-                nft "add element inet syswarden_table $GEOIP_SET_NAME { $(echo "$chunk" | tr ' ' ',') }"
+                nft "add element inet syswarden_table $GEOIP_SET_NAME { $(echo "$chunk" | tr ' ' ',') }" 2>/dev/null || true
             done
         fi
 
         if [[ "${BLOCK_ASNS:-none}" != "none" ]] && [[ -s "$ASN_FILE" ]]; then
             cat "$ASN_FILE" | xargs -n 5000 | while read -r chunk; do
-                nft "add element inet syswarden_table $ASN_SET_NAME { $(echo "$chunk" | tr ' ' ',') }"
+                nft "add element inet syswarden_table $ASN_SET_NAME { $(echo "$chunk" | tr ' ' ',') }" 2>/dev/null || true
             done
         fi
 
