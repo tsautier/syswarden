@@ -755,6 +755,11 @@ for net in ipaddress.collapse_addresses(nets):
 apply_firewall_rules() {
     echo -e "\n${BLUE}=== Step 4: Applying Firewall Rules ($FIREWALL_BACKEND) ===${NC}"
     
+    # --- LOCAL PERSISTENCE INJECTION ---
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$WHITELIST_FILE" "$BLOCKLIST_FILE"
+    # -----------------------------------
+    
     # 1. Inject local blocklist into the global list
     cat "$BLOCKLIST_FILE" >> "$FINAL_LIST"
     
