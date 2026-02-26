@@ -1859,7 +1859,8 @@ EOF
 # --- Privilege Escalation Protection (PAM/Su/Sudo) ---
 [syswarden-privesc]
 enabled = true
-port    = all
+# FIX: Use 0:65535 instead of 'all' for nftables-multiport compatibility
+port    = 0:65535
 filter  = syswarden-privesc
 logpath = $AUTH_LOG
 backend = auto
@@ -2031,7 +2032,8 @@ EOF
 # --- Port Scanner & Lateral Movement Protection ---
 [syswarden-portscan]
 enabled  = true
-port     = all
+# FIX: Use 0:65535 instead of 'all' for nftables-multiport compatibility
+port     = 0:65535
 filter   = syswarden-portscan
 logpath  = $FIREWALL_LOG
 backend  = auto
@@ -2064,7 +2066,8 @@ EOF
 # --- System Integrity & Kernel Audit Protection ---
 [syswarden-auditd]
 enabled  = true
-port     = all
+# FIX: Use 0:65535 instead of 'all' for nftables-multiport compatibility
+port     = 0:65535
 filter   = syswarden-auditd
 logpath  = $AUDIT_LOG
 backend  = auto
@@ -2093,9 +2096,10 @@ EOF
             # Catches common payloads: bash interactive, netcat, wget/curl drops, and python/php one-liners
             # Includes URL-encoded equivalents (%2F = /, %20 = space) to catch obfuscated attacks
             if [[ ! -f "/etc/fail2ban/filter.d/syswarden-revshell.conf" ]]; then
+                # FIX: Escape '%' with '%%' to prevent Python configparser InterpolationError
                 cat <<'EOF' > /etc/fail2ban/filter.d/syswarden-revshell.conf
 [Definition]
-failregex = ^<HOST> .* "(?:GET|POST|HEAD|PUT) .*(?:/bin/bash|%2Fbin%2Fbash|/bin/sh|%2Fbin%2Fsh|nc\s+-e|nc%20-e|nc\s+-c|curl\s+http|curl%20http|wget\s+http|wget%20http|python\s+-c|php\s+-r|;\s*bash\s+-i|&\s*bash\s+-i).*" .*$
+failregex = ^<HOST> .* "(?:GET|POST|HEAD|PUT) .*(?:/bin/bash|%%2Fbin%%2Fbash|/bin/sh|%%2Fbin%%2Fsh|nc\s+-e|nc%%20-e|nc\s+-c|curl\s+http|curl%%20http|wget\s+http|wget%%20http|python\s+-c|php\s+-r|;\s*bash\s+-i|&\s*bash\s+-i).*" .*$
 ignoreregex = 
 EOF
             fi
