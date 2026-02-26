@@ -2219,6 +2219,7 @@ EOF
 [Interface]
 PrivateKey = $CLIENT_PRIV
 Address = ${CLIENT_VPN_IP}/24
+MTU = 1360
 DNS = 1.1.1.1, 1.0.0.1
 
 [Peer]
@@ -2327,6 +2328,7 @@ EOF
 [Interface]
 PrivateKey = $CLIENT_PRIV
 Address = ${CLIENT_VPN_IP}/24
+MTU = 1360
 DNS = 1.1.1.1, 1.0.0.1
 
 [Peer]
