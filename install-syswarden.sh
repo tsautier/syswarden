@@ -32,7 +32,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v9.11"
+VERSION="v9.21"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -3385,12 +3385,34 @@ show_alerts_dashboard() {
 # ==============================================================================
 
 MODE="${1:-install}"
-# --- AUTOMATION / CI-CD SUPPORT ---
-# Permet de capturer ./install.sh --auto et de le normaliser
-if [[ "$MODE" == "--auto" ]]; then
+
+# --- HEADLESS / UNATTENDED INSTALLATION PARSER ---
+# Safely parses a provided .conf file to inject environment variables
+if [[ -f "${1:-}" ]]; then
+    echo -e "${GREEN}>>> Unattended configuration file detected: $1${NC}"
+    while IFS='=' read -r key val; do
+        # Ignore comments and empty lines
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        
+        # Clean up the key and value (remove whitespaces and quotes)
+        key=$(echo "$key" | xargs)
+        val=$(echo "$val" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+        
+        # STRICT SECURITY: Only export variables starting with SYSWARDEN_
+        # Prevents arbitrary code execution or PATH manipulation
+        if [[ "$key" =~ ^SYSWARDEN_[A-Z0-9_]+$ ]]; then
+            export "$key"="$val"
+        fi
+    done < "$1"
+    
+    # Force auto mode to bypass all interactive prompts
+    MODE="auto"
+elif [[ "$MODE" == "--auto" ]]; then
+    # Legacy CI/CD support
     MODE="auto"
 fi
-# ----------------------------------
+# -------------------------------------------------
 
 if [[ "$MODE" == "whitelist" ]]; then
     check_root
@@ -3439,7 +3461,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v9.11)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v9.21)     #"
     echo -e "#############################################################${NC}"
 fi
 

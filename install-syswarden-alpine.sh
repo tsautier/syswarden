@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v9.12"
+VERSION="v9.22"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -172,8 +172,15 @@ define_ssh_port() {
     fi
     # ----------------------------------
 
-    read -p "Please enter your current SSH Port [Default: $detected_port]: " input_port
-    SSH_PORT=${input_port:-$detected_port}
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        SSH_PORT=${SYSWARDEN_SSH_PORT:-$detected_port}
+        log "INFO" "Auto Mode: SSH Port configured via env var [${SSH_PORT}]"
+    else
+        read -p "Please enter your current SSH Port [Default: $detected_port]: " input_port
+        SSH_PORT=${input_port:-$detected_port}
+    fi
+    # -----------------------------
 
     if ! [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || [ "$SSH_PORT" -lt 1 ] || [ "$SSH_PORT" -gt 65535 ]; then
         log "WARN" "Invalid port detected. Defaulting to 22."
@@ -192,15 +199,27 @@ define_wireguard() {
     fi
 
     echo -e "\n${BLUE}=== Step: WireGuard Management VPN ===${NC}"
-    echo -e "${YELLOW}Deploy an ultra-secure, invisible WireGuard VPN for administration?${NC}"
-    read -p "Enable WireGuard Management VPN? (y/N): " input_wg
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        input_wg=${SYSWARDEN_ENABLE_WG:-n}
+        log "INFO" "Auto Mode: WireGuard choice loaded via env var [${input_wg}]"
+    else
+        echo -e "${YELLOW}Deploy an ultra-secure, invisible WireGuard VPN for administration?${NC}"
+        read -p "Enable WireGuard Management VPN? (y/N): " input_wg
+    fi
+    # -----------------------------
 
     if [[ "$input_wg" =~ ^[Yy]$ ]]; then
         USE_WIREGUARD="y"
-        read -p "Enter WireGuard Port [Default: 51820]: " input_wg_port
-        WG_PORT=${input_wg_port:-51820}
-        read -p "Enter VPN Subnet (CIDR) [Default: 10.66.66.0/24]: " input_wg_subnet
-        WG_SUBNET=${input_wg_subnet:-"10.66.66.0/24"}
+        if [[ "${1:-}" == "auto" ]]; then
+            WG_PORT=${SYSWARDEN_WG_PORT:-51820}
+            WG_SUBNET=${SYSWARDEN_WG_SUBNET:-"10.66.66.0/24"}
+        else
+            read -p "Enter WireGuard Port [Default: 51820]: " input_wg_port
+            WG_PORT=${input_wg_port:-51820}
+            read -p "Enter VPN Subnet (CIDR) [Default: 10.66.66.0/24]: " input_wg_subnet
+            WG_SUBNET=${input_wg_subnet:-"10.66.66.0/24"}
+        fi
         
         # PRE-CREATION: Ensure /etc/wireguard exists EARLY
         mkdir -p /etc/wireguard
@@ -225,7 +244,14 @@ define_docker_integration() {
     fi
 
     echo -e "\n${BLUE}=== Step: Docker Integration ===${NC}"
-    read -p "Do you use Docker on this server? (y/N): " input_docker
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        input_docker=${SYSWARDEN_USE_DOCKER:-n}
+        log "INFO" "Auto Mode: Docker integration loaded via env var [${input_docker}]"
+    else
+        read -p "Do you use Docker on this server? (y/N): " input_docker
+    fi
+    # -----------------------------
     
     if [[ "$input_docker" =~ ^[Yy]$ ]]; then
         USE_DOCKER="y"
@@ -245,11 +271,24 @@ define_geoblocking() {
     fi
 
     echo -e "\n${BLUE}=== Step: Geo-Blocking (High-Risk Countries) ===${NC}"
-    echo "Do you want to block all inbound traffic from specific countries?"
-    read -p "Enable Geo-Blocking? (y/N): " input_geo
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        input_geo=${SYSWARDEN_ENABLE_GEO:-n}
+        log "INFO" "Auto Mode: Geo-Blocking choice loaded via env var [${input_geo}]"
+    else
+        echo "Do you want to block all inbound traffic from specific countries?"
+        read -p "Enable Geo-Blocking? (y/N): " input_geo
+    fi
+    # -----------------------------
 
     if [[ "$input_geo" =~ ^[Yy]$ ]]; then
-        read -p "Enter country codes separated by space [Default: ru cn kp ir]: " geo_codes
+        if [[ "${1:-}" == "auto" ]]; then
+            geo_codes=${SYSWARDEN_GEO_CODES:-"ru cn kp ir"}
+            log "INFO" "Auto Mode: Geo-Codes loaded via env var [${geo_codes}]"
+        else
+            read -p "Enter country codes separated by space [Default: ru cn kp ir]: " geo_codes
+        fi
+        
         GEOBLOCK_COUNTRIES=${geo_codes:-ru cn kp ir}
         # Force lowercase for the URL formatting
         GEOBLOCK_COUNTRIES=$(echo "$GEOBLOCK_COUNTRIES" | tr '[:upper:]' '[:lower:]')
@@ -270,13 +309,26 @@ define_asnblocking() {
     fi
 
     echo -e "\n${BLUE}=== Step: ASN Blocking (Hosters/ISPs) ===${NC}"
-    echo "Do you want to block entire Autonomous Systems (e.g., AS16276 for OVH)?"
-    read -p "Enable ASN Blocking? (y/N): " input_asn
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        input_asn=${SYSWARDEN_ENABLE_ASN:-n}
+        log "INFO" "Auto Mode: ASN-Blocking choice loaded via env var [${input_asn}]"
+    else
+        echo "Do you want to block entire Autonomous Systems (e.g., AS16276 for OVH)?"
+        read -p "Enable ASN Blocking? (y/N): " input_asn
+    fi
+    # -----------------------------
 
     if [[ "$input_asn" =~ ^[Yy]$ ]]; then
-        read -p "Enter custom ASN numbers separated by space (Leave empty for none): " asn_list
-        echo -e "${YELLOW}Note: Fetching and resolving the Spamhaus ASN-DROP list can take more than 5 minutes.${NC}"
-        read -p "Include Spamhaus ASN-DROP list (Cybercrime Hosters)? (Y/n): " use_spamhaus
+        if [[ "${1:-}" == "auto" ]]; then
+            asn_list=${SYSWARDEN_ASN_LIST:-""}
+            use_spamhaus=${SYSWARDEN_USE_SPAMHAUS:-y}
+            log "INFO" "Auto Mode: ASN List and Spamhaus preference loaded via env vars."
+        else
+            read -p "Enter custom ASN numbers separated by space (Leave empty for none): " asn_list
+            echo -e "${YELLOW}Note: Fetching and resolving the Spamhaus ASN-DROP list can take more than 5 minutes.${NC}"
+            read -p "Include Spamhaus ASN-DROP list (Cybercrime Hosters)? (Y/n): " use_spamhaus
+        fi
         
         BLOCK_ASNS=${asn_list:-none}
         USE_SPAMHAUS_ASN=${use_spamhaus:-y} # Default to yes
@@ -342,17 +394,36 @@ select_list_type() {
     fi
 
     echo -e "\n${BLUE}=== Step 1: Select Blocklist Type ===${NC}"
-    echo "1) Standard List (~85,000 IPs) - Recommended for Web Servers"
-    echo "2) Critical List (~100,000 IPs) - Recommended for High Security"
-    echo "3) Custom List"
-    read -p "Enter choice [1/2/3]: " choice
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        choice=${SYSWARDEN_LIST_CHOICE:-1}
+        log "INFO" "Auto Mode: Blocklist choice loaded via env var [${choice}]"
+    else
+        echo "1) Standard List (~85,000 IPs) - Recommended for Web Servers"
+        echo "2) Critical List (~100,000 IPs) - Recommended for High Security"
+        echo "3) Custom List"
+        read -p "Enter choice [1/2/3]: " choice
+    fi
+    # -----------------------------
 
     case "$choice" in
         1) LIST_TYPE="Standard";;
         2) LIST_TYPE="Critical";;
         3) 
            LIST_TYPE="Custom"
-           read -p "Enter the full URL: " CUSTOM_URL
+           if [[ "${1:-}" == "auto" ]]; then
+               CUSTOM_URL=${SYSWARDEN_CUSTOM_URL:-""}
+               log "INFO" "Auto Mode: Custom URL loaded via env var"
+           else
+               read -p "Enter the full URL: " CUSTOM_URL
+           fi
+           
+           # Sanitize: Remove spaces, quotes, and dangerous shell characters
+           CUSTOM_URL=$(echo "$CUSTOM_URL" | tr -d " '\"\;\\$\|\&\<\>\`")
+           if [[ -z "$CUSTOM_URL" ]]; then
+               log "WARN" "Custom URL is empty. Defaulting to Standard List."
+               LIST_TYPE="Standard"
+           fi
            ;;
         *) log "ERROR" "Invalid choice. Exiting."; exit 1;;
     esac
@@ -1644,11 +1715,22 @@ EOF
 
 setup_abuse_reporting() {
     echo -e "\n${BLUE}=== Step 7: AbuseIPDB Reporting Setup ===${NC}"
-    echo "Would you like to automatically report blocked IPs to AbuseIPDB?"
-    read -p "Enable AbuseIPDB reporting? (y/N): " response
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        response=${SYSWARDEN_ENABLE_ABUSE:-n}
+        log "INFO" "Auto Mode: AbuseIPDB choice loaded via env var [${response}]"
+    else
+        echo "Would you like to automatically report blocked IPs to AbuseIPDB?"
+        read -p "Enable AbuseIPDB reporting? (y/N): " response
+    fi
+    # -----------------------------
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
-        read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+        if [[ "${1:-}" == "auto" ]]; then
+            USER_API_KEY=${SYSWARDEN_ABUSE_API_KEY:-""}
+        else
+            read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+        fi
         
         # Sanitize API Key
         USER_API_KEY=$(echo "$USER_API_KEY" | tr -cd 'a-zA-Z0-9_-')
@@ -1658,13 +1740,18 @@ setup_abuse_reporting() {
             return
         fi
 
-        echo ""
-        read -p "Report Fail2ban Bans (SSH/Web brute-force)? [Y/n]: " REPORT_F2B
-        REPORT_F2B=${REPORT_F2B:-y}
+        if [[ "${1:-}" == "auto" ]]; then
+            REPORT_F2B=${SYSWARDEN_REPORT_F2B:-y}
+            REPORT_FW=${SYSWARDEN_REPORT_FW:-y}
+        else
+            echo ""
+            read -p "Report Fail2ban Bans (SSH/Web brute-force)? [Y/n]: " REPORT_F2B
+            REPORT_F2B=${REPORT_F2B:-y}
 
-        echo ""
-        read -p "Report Firewall Drops (Port Scans/Blacklist)? [Y/n]: " REPORT_FW
-        REPORT_FW=${REPORT_FW:-y}
+            echo ""
+            read -p "Report Firewall Drops (Port Scans/Blacklist)? [Y/n]: " REPORT_FW
+            REPORT_FW=${REPORT_FW:-y}
+        fi
 
         if [[ "$REPORT_F2B" =~ ^[Nn]$ ]] && [[ "$REPORT_FW" =~ ^[Nn]$ ]]; then
             log "INFO" "Both reporting options declined. Skipping."
@@ -2295,20 +2382,39 @@ uninstall_syswarden() {
 setup_wazuh_agent() {
     echo -e "\n${BLUE}=== Step 8: Wazuh Agent Installation (Alpine) ===${NC}"
     
-    read -p "Install Wazuh Agent? (y/N): " response
+    # --- CI/CD AUTO MODE CHECK ---
+    if [[ "${1:-}" == "auto" ]]; then
+        response=${SYSWARDEN_ENABLE_WAZUH:-n}
+        log "INFO" "Auto Mode: Wazuh Agent choice loaded via env var [${response}]"
+    else
+        read -p "Install Wazuh Agent? (y/N): " response
+    fi
+    # -----------------------------
+    
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
         log "INFO" "Skipping Wazuh Agent installation."
         return
     fi
 
-    read -p "Enter Wazuh Manager IP: " WAZUH_IP
-    if [[ -z "$WAZUH_IP" ]]; then log "ERROR" "Missing IP. Skipping."; return; fi
+    # 2. Gather Configuration Data
+    if [[ "${1:-}" == "auto" ]]; then
+        WAZUH_IP=${SYSWARDEN_WAZUH_IP:-""}
+        W_PORT_COMM=${SYSWARDEN_WAZUH_COMM_PORT:-1514}
+        W_PORT_ENROLL=${SYSWARDEN_WAZUH_ENROLL_PORT:-1515}
+        log "INFO" "Auto Mode: Wazuh settings loaded via env vars."
+    else
+        read -p "Enter Wazuh Manager IP: " WAZUH_IP
+        if [[ -z "$WAZUH_IP" ]]; then log "ERROR" "Missing IP. Skipping."; return; fi
 
-    read -p "Agent Communication Port [Press Enter for '1514']: " W_PORT_COMM
-    W_PORT_COMM=${W_PORT_COMM:-1514}
+        read -p "Agent Communication Port [Press Enter for '1514']: " W_PORT_COMM
+        W_PORT_COMM=${W_PORT_COMM:-1514}
 
-    read -p "Enrollment Port [Press Enter for '1515']: " W_PORT_ENROLL
-    W_PORT_ENROLL=${W_PORT_ENROLL:-1515}
+        read -p "Enrollment Port [Press Enter for '1515']: " W_PORT_ENROLL
+        W_PORT_ENROLL=${W_PORT_ENROLL:-1515}
+    fi
+
+    # Fail-Safe: Interdire l'installation si l'IP n'est pas fournie en mode auto
+    if [[ -z "$WAZUH_IP" ]]; then log "ERROR" "Missing Wazuh IP. Skipping."; return; fi
 
     log "INFO" "Whitelisting Wazuh Manager IP ($WAZUH_IP) on Alpine Firewall..."
     
@@ -2581,6 +2687,31 @@ show_alerts_dashboard() {
 
 MODE="${1:-install}"
 
+# --- HEADLESS / UNATTENDED INSTALLATION PARSER ---
+# Safely parses a provided .conf file to inject environment variables
+if [[ -f "${1:-}" ]]; then
+    echo -e "${GREEN}>>> Unattended configuration file detected: $1${NC}"
+    while IFS='=' read -r key val; do
+        # Ignore comments and empty lines
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        
+        # Clean up the key and value (remove whitespaces and quotes)
+        key=$(echo "$key" | xargs)
+        val=$(echo "$val" | xargs | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+        
+        # STRICT SECURITY: Only export variables starting with SYSWARDEN_
+        if [[ "$key" =~ ^SYSWARDEN_[A-Z0-9_]+$ ]]; then
+            export "$key"="$val"
+        fi
+    done < "$1"
+    
+    MODE="auto"
+elif [[ "$MODE" == "--auto" ]]; then
+    MODE="auto"
+fi
+# -------------------------------------------------
+
 if [[ "$MODE" == "whitelist" ]]; then
     check_root
     detect_os_backend
@@ -2663,14 +2794,19 @@ fi
 if [[ "$MODE" != "update" ]]; then
     setup_wireguard
     setup_siem_logging
-    setup_abuse_reporting
-    setup_wazuh_agent
+    setup_abuse_reporting "$MODE"
+    setup_wazuh_agent "$MODE"
     setup_cron_autoupdate "$MODE"
     
     echo -e "\n${GREEN}INSTALLATION SUCCESSFUL${NC}"
     echo -e " -> OS Detected: Alpine Linux (OpenRC)"
     echo -e " -> List loaded: $LIST_TYPE"
+    if [[ "$MODE" == "auto" ]]; then
+        echo -e " -> Mode: Automated (CI/CD Deployment)"
+    else
+        echo -e " -> Mode: Interactive"
+    fi
     echo -e " -> Protection: Active"
-	
-	display_wireguard_qr
+    
+    display_wireguard_qr
 fi
