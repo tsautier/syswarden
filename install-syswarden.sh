@@ -2219,7 +2219,7 @@ EOF
 [Interface]
 PrivateKey = $CLIENT_PRIV
 Address = ${CLIENT_VPN_IP}/24
-DNS = 1.1.1.1, 9.9.9.9
+DNS = 1.1.1.1, 1.0.0.1
 
 [Peer]
 PublicKey = $SERVER_PUB
@@ -2327,7 +2327,7 @@ EOF
 [Interface]
 PrivateKey = $CLIENT_PRIV
 Address = ${CLIENT_VPN_IP}/24
-DNS = 1.1.1.1, 9.9.9.9
+DNS = 1.1.1.1, 1.0.0.1
 
 [Peer]
 PublicKey = $SERVER_PUB
