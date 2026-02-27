@@ -314,6 +314,7 @@ Once installed, SysWarden acts as a standalone CLI tool. You can manage your inf
 ├── usr/local/bin/
 │   ├── install-syswarden.sh                # Main CLI Orchestrator (Universal OS)
 │   ├── install-syswarden-alpine.sh         # Main CLI Orchestrator (Alpine Linux)
+│   ├── syswarden-auto.conf                 # Auto-configuration file
 │   └── syswarden_reporter.py               # Python Log Analyzer & API Outbound Client
 │
 └── var/
