@@ -179,7 +179,7 @@ On Enterprise Linux distributions, adhering to native `firewalld` architecture i
 > For organizations operating under strict compliance or utilizing centralized SIEM architectures, SysWarden includes a fully automated deployment pipeline for the **Wazuh XDR Agent**, flawlessly bridging edge firewall protection with centralized security telemetry.
 
 - **Zero-Touch Deployment:** The orchestrator automatically identifies the host OS, securely fetches the official GPG keys and repositories, and installs the latest stable agent.
-- **Dynamic Provisioning:** By supplying your Wazuh Manager IP, Agent Name, and Agent Group during the setup prompt, the script natively injects these exact parameters into the `ossec.conf` file—eliminating tedious manual post-install configuration.
+- **Dynamic Provisioning:** By supplying your [Wazuh](https://github.com/wazuh/) Manager IP, Agent Name, and Agent Group during the setup prompt, the script natively injects these exact parameters into the `ossec.conf` file—eliminating tedious manual post-install configuration.
 - **Auto-Whitelisting & Continuity:** To guarantee uninterrupted log streaming, SysWarden automatically enforces high-priority bypass rules for your Wazuh Manager (ports 1514 and 1515), ensuring your SIEM traffic is never inadvertently disrupted by the overarching blocklists.
 
 ## Installation & Usage (Root Privileges Required)
