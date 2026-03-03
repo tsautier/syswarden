@@ -882,9 +882,29 @@ EOF
             done
         fi
 
-        # --- PERSISTENCE & SERVICE ENABLEMENT ---
-        log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
-        nft list ruleset > /etc/nftables.conf
+        # --- MODULAR PERSISTENCE (ZERO-TOUCH) ---
+        log "INFO" "Saving SysWarden Nftables table to isolated config..."
+        mkdir -p /etc/syswarden
+        # FIX: Export ONLY our specific table, preserving user custom rules
+        nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
+
+        local MAIN_NFT_CONF="/etc/nftables.conf"
+        if [[ -f "$MAIN_NFT_CONF" ]]; then
+            # Inject include directive securely if not already present
+            if ! grep -q 'include "/etc/syswarden/syswarden.nft"' "$MAIN_NFT_CONF"; then
+                log "INFO" "Injecting include directive into $MAIN_NFT_CONF..."
+                echo -e '\n# Added by SysWarden' >> "$MAIN_NFT_CONF"
+                echo 'include "/etc/syswarden/syswarden.nft"' >> "$MAIN_NFT_CONF"
+            fi
+        else
+            # Create a basic standard configuration if the file doesn't exist at all
+            log "WARN" "$MAIN_NFT_CONF not found. Creating basic layout."
+            echo '#!/usr/sbin/nft -f' > "$MAIN_NFT_CONF"
+            echo 'flush ruleset' >> "$MAIN_NFT_CONF"
+            echo 'include "/etc/syswarden/syswarden.nft"' >> "$MAIN_NFT_CONF"
+            chmod 755 "$MAIN_NFT_CONF"
+        fi
+
         if command -v systemctl >/dev/null; then
             systemctl enable --now nftables 2>/dev/null || true
         fi
@@ -3129,6 +3149,12 @@ uninstall_syswarden() {
     # Nftables
     if command -v nft >/dev/null; then 
         nft delete table inet syswarden_table 2>/dev/null || true
+        # Clean modular config and remove include from main OS config
+        rm -f /etc/syswarden/syswarden.nft
+        if [[ -f "/etc/nftables.conf" ]]; then
+            sed -i '\|include "/etc/syswarden/syswarden.nft"|d' /etc/nftables.conf
+            sed -i '/# Added by SysWarden/d' /etc/nftables.conf
+        fi
     fi
     
     # UFW
@@ -3301,10 +3327,9 @@ setup_wazuh_agent() {
          nft insert rule inet syswarden_table input ip saddr "$WAZUH_IP" accept 2>/dev/null || true
          log "INFO" "Nftables rule added for Wazuh Manager (Full Trust)."
 		 
-		 # ### PERSISTENCE FIX ###
-         # Save current RAM ruleset to disk so it survives reboot
-         log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
-         nft list ruleset > /etc/nftables.conf
+		 # ### MODULAR PERSISTENCE FIX ###
+         log "INFO" "Saving SysWarden Nftables table to isolated config..."
+         nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
          # Enable service just in case
          systemctl enable nftables >/dev/null 2>&1 || true
 
@@ -3950,9 +3975,9 @@ whitelist_ip() {
         "nftables")
             # Insert Rule at position 1 (Pre-Filter)
             nft insert rule inet syswarden_table input ip saddr "$WL_IP" accept
-            # Persistence
-            nft list ruleset > /etc/nftables.conf
-            log "INFO" "Rule added to Nftables and saved."
+            # Modular Persistence
+            nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
+            log "INFO" "Rule added to Nftables and saved to modular config."
             ;;
         
         "firewalld")
@@ -4006,9 +4031,9 @@ blocklist_ip() {
         "nftables")
             # Insert Rule at position 1 (Immediate Drop)
             nft insert rule inet syswarden_table input ip saddr "$BL_IP" drop
-            # Persistence
-            nft list ruleset > /etc/nftables.conf
-            log "INFO" "Drop rule added to Nftables and saved."
+            # Modular Persistence
+            nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
+            log "INFO" "Drop rule added to Nftables and saved to modular config."
             ;;
         
         "firewalld")
