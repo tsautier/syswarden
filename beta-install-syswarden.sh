@@ -168,6 +168,19 @@ install_dependencies() {
     fi
     # --------------------------------------------------------------------
 	
+	# --- RSYSLOG DEPENDENCY (For modern OS like Debian 12+ / Ubuntu 24.04+) ---
+    # Required to generate /var/log/auth.log and /var/log/kern.log for Fail2ban
+    if ! command -v rsyslogd >/dev/null && [ ! -f /usr/sbin/rsyslogd ]; then
+        log "WARN" "Installing package: rsyslog"
+        if [[ -f /etc/debian_version ]]; then apt-get install -y rsyslog
+        elif [[ -f /etc/redhat-release ]]; then dnf install -y rsyslog; fi
+    fi
+    
+    if command -v systemctl >/dev/null; then
+        systemctl enable --now rsyslog 2>/dev/null || true
+    fi
+    # --------------------------------------------------------------------------
+	
 	# --- WIREGUARD & QR-CODE DEPENDENCIES ---
     if ! command -v wg >/dev/null || ! command -v qrencode >/dev/null; then
         log "WARN" "Installing package: WireGuard & Qrencode"
@@ -3411,7 +3424,8 @@ fi
 
 L7_TOTAL_BANNED=0; L7_ACTIVE_JAILS=0; JAIL_JSON_ARRAY=""
 if command -v fail2ban-client >/dev/null && fail2ban-client ping >/dev/null 2>&1; then
-    JAIL_LIST=$(fail2ban-client status | grep "Jail list:" | sed 's/.*Jail list:[ \t]*//' | tr -d ',')
+    # FIX: Convert space-separated list to newline-separated to respect strict IFS=$'\n\t'
+    JAIL_LIST=$(fail2ban-client status | grep "Jail list:" | sed 's/.*Jail list:[ \t]*//' | tr -d ' ' | tr ',' '\n')
     for JAIL in $JAIL_LIST; do
         # FIX: Using standard POSIX addition instead of ((++)) which causes Bash Exit Code 1
         L7_ACTIVE_JAILS=$((L7_ACTIVE_JAILS + 1))
