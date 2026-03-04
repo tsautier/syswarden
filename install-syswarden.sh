@@ -32,7 +32,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v9.26"
+VERSION="v9.30"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -167,6 +167,22 @@ install_dependencies() {
         systemctl enable --now crond 2>/dev/null || systemctl enable --now cron 2>/dev/null || true
     fi
     # --------------------------------------------------------------------
+	
+	# --- RSYSLOG DEPENDENCY (For modern OS like Debian 12+ / Ubuntu 24.04+) ---
+    # Required to generate /var/log/auth.log and /var/log/kern.log for Fail2ban
+    if ! command -v rsyslogd >/dev/null && [ ! -f /usr/sbin/rsyslogd ]; then
+        log "WARN" "Installing package: rsyslog"
+        if [[ -f /etc/debian_version ]]; then apt-get install -y rsyslog
+        elif [[ -f /etc/redhat-release ]]; then dnf install -y rsyslog; fi
+    fi
+    
+    if command -v systemctl >/dev/null; then
+        systemctl enable --now rsyslog 2>/dev/null || true
+        # FIX: Force log files creation immediately so dynamic detection never fails
+        touch /var/log/auth.log /var/log/kern.log /var/log/secure /var/log/messages 2>/dev/null || true
+        systemctl restart rsyslog 2>/dev/null || true
+    fi
+    # --------------------------------------------------------------------------
 	
 	# --- WIREGUARD & QR-CODE DEPENDENCIES ---
     if ! command -v wg >/dev/null || ! command -v qrencode >/dev/null; then
@@ -770,7 +786,6 @@ apply_firewall_rules() {
     # --- LOCAL PERSISTENCE INJECTION ---
     mkdir -p "$SYSWARDEN_DIR"
     touch "$WHITELIST_FILE" "$BLOCKLIST_FILE"
-    # -----------------------------------
     
     # 1. Inject local blocklist into the global list
     cat "$BLOCKLIST_FILE" >> "$FINAL_LIST"
@@ -783,6 +798,11 @@ apply_firewall_rules() {
         grep -vFf "$WHITELIST_FILE" "$FINAL_LIST" > "$TMP_DIR/clean_final.txt" || true
         mv "$TMP_DIR/clean_final.txt" "$FINAL_LIST"
     fi
+    
+    # --- FIX: TELEMETRY PERSISTENCE ---
+    # Save the massive compiled list to disk so the telemetry engine can count it instantly
+    # without running heavy queries against the kernel every minute.
+    cp "$FINAL_LIST" "$SYSWARDEN_DIR/active_global_blocklist.txt"
     # -----------------------------------
     
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
@@ -807,19 +827,29 @@ EOF
 add chain inet syswarden_table input { type filter hook input priority filter - 10; policy accept; }
 EOF
 
-        # 2. Add Rules (Removed 'flags all' which causes crashes on older kernels)
+        # 2. Top Priority Rules (Connection Tracking)
         if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
             echo "add rule inet syswarden_table input ct state established,related accept" >> "$TMP_DIR/syswarden.nft"
         fi
-		
-		# --- FIX: RE-INJECT WHITELIST ACCEPT RULES (Top Priority) ---
+
+        # --- STRICT WIREGUARD SSH CLOAKING ---
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            # Fix: Multiple iifname negations in a single rule cause Nftables parser to fail silently.
+            # We explicitly accept wg0/lo, and strictly drop all other SSH traffic.
+            # Placed BEFORE the Whitelist, ensuring even whitelisted admins must use the VPN for SSH.
+            echo "add rule inet syswarden_table input iifname { \"wg0\", \"lo\" } tcp dport ${SSH_PORT:-22} accept" >> "$TMP_DIR/syswarden.nft"
+            echo "add rule inet syswarden_table input tcp dport ${SSH_PORT:-22} log prefix \"[SysWarden-SSH-DROP] \" drop" >> "$TMP_DIR/syswarden.nft"
+        fi
+        # -------------------------------------
+
+        # --- FIX: RE-INJECT WHITELIST ACCEPT RULES ---
         if [[ -s "$WHITELIST_FILE" ]]; then
             while IFS= read -r wl_ip; do
                 [[ -z "$wl_ip" ]] && continue
                 echo "add rule inet syswarden_table input ip saddr $wl_ip accept" >> "$TMP_DIR/syswarden.nft"
             done < "$WHITELIST_FILE"
         fi
-        # ------------------------------------------------------------
+        # ---------------------------------------------
 
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
             echo "add rule inet syswarden_table input ip saddr @$GEOIP_SET_NAME log prefix \"[SysWarden-GEO] \" drop" >> "$TMP_DIR/syswarden.nft"
@@ -833,10 +863,6 @@ EOF
 add rule inet syswarden_table input ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " drop
 add rule inet syswarden_table input tcp dport { 23, 445, 1433, 3389, 5900 } log prefix "[SysWarden-BLOCK] " drop
 EOF
-
-        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
-            echo "add rule inet syswarden_table input iifname != \"wg0\" iifname != \"lo\" tcp dport ${SSH_PORT:-22} log prefix \"[SysWarden-SSH-DROP] \" drop" >> "$TMP_DIR/syswarden.nft"
-        fi
 
         # Apply Base Structure First
         nft -f "$TMP_DIR/syswarden.nft"
@@ -862,9 +888,29 @@ EOF
             done
         fi
 
-        # --- PERSISTENCE & SERVICE ENABLEMENT ---
-        log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
-        nft list ruleset > /etc/nftables.conf
+        # --- MODULAR PERSISTENCE (ZERO-TOUCH) ---
+        log "INFO" "Saving SysWarden Nftables table to isolated config..."
+        mkdir -p /etc/syswarden
+        # FIX: Export ONLY our specific table, preserving user custom rules
+        nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
+
+        local MAIN_NFT_CONF="/etc/nftables.conf"
+        if [[ -f "$MAIN_NFT_CONF" ]]; then
+            # Inject include directive securely if not already present
+            if ! grep -q 'include "/etc/syswarden/syswarden.nft"' "$MAIN_NFT_CONF"; then
+                log "INFO" "Injecting include directive into $MAIN_NFT_CONF..."
+                echo -e '\n# Added by SysWarden' >> "$MAIN_NFT_CONF"
+                echo 'include "/etc/syswarden/syswarden.nft"' >> "$MAIN_NFT_CONF"
+            fi
+        else
+            # Create a basic standard configuration if the file doesn't exist at all
+            log "WARN" "$MAIN_NFT_CONF not found. Creating basic layout."
+            echo '#!/usr/sbin/nft -f' > "$MAIN_NFT_CONF"
+            echo 'flush ruleset' >> "$MAIN_NFT_CONF"
+            echo 'include "/etc/syswarden/syswarden.nft"' >> "$MAIN_NFT_CONF"
+            chmod 755 "$MAIN_NFT_CONF"
+        fi
+
         if command -v systemctl >/dev/null; then
             systemctl enable --now nftables 2>/dev/null || true
         fi
@@ -999,19 +1045,6 @@ EOF
             echo "-A ufw-before-input -m set --match-set $SET_NAME src -j DROP" >> "$UFW_RULES"
         fi
 
-        # --- WIREGUARD SSH CLOAKING ---
-        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
-            # 1. Allow UDP port for WireGuard Tunnel
-            ufw allow "${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
-            
-            # 2. Allow SSH strictly from the WG Subnet
-            ufw allow from "${WG_SUBNET}" to any port "${SSH_PORT:-22}" proto tcp >/dev/null 2>&1 || true
-            
-            # 3. Deny public SSH access
-            ufw deny "${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
-        fi
-        # ------------------------------
-
         # --- GEOIP INJECTION ---
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
             log "INFO" "Configuring UFW GeoIP Set..."
@@ -1045,6 +1078,7 @@ EOF
         fi
 		
 		# --- FIX: RE-INJECT WHITELIST ACCEPT RULES ---
+        # Inserted FIRST so they can be safely overridden by stricter SSH rules below
         if [[ -s "$WHITELIST_FILE" ]]; then
             while IFS= read -r wl_ip; do
                 [[ -z "$wl_ip" ]] && continue
@@ -1052,6 +1086,20 @@ EOF
             done < "$WHITELIST_FILE"
         fi
         # ---------------------------------------------
+
+        # --- STRICT WIREGUARD SSH CLOAKING ---
+        # Inserted AFTER Whitelist using 'insert 1' to guarantee absolute top priority
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            # Priority 3: Deny public SSH access
+            ufw insert 1 deny "${SSH_PORT:-22}/tcp" >/dev/null 2>&1 || true
+            
+            # Priority 2: Allow SSH strictly from the WG Subnet
+            ufw insert 1 allow from "${WG_SUBNET}" to any port "${SSH_PORT:-22}" proto tcp >/dev/null 2>&1 || true
+            
+            # Priority 1: Allow UDP port for WireGuard Tunnel to establish connection
+            ufw insert 1 allow "${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
+        fi
+        # -------------------------------------
 
         ufw reload
         log "INFO" "UFW rules applied."
@@ -1105,22 +1153,8 @@ EOF
             fi
         fi
 		
-		# --- WIREGUARD SSH CLOAKING ---
-        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
-            # Clean existing WG rules first to prevent duplicates
-            while iptables -D INPUT -p tcp --dport "${SSH_PORT:-22}" -j DROP 2>/dev/null; do :; done
-            while iptables -D INPUT -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT 2>/dev/null; do :; done
-            while iptables -D INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; do :; done
-            
-            # Insert top-priority rules (inserted in reverse order, position 1)
-            iptables -I INPUT 1 -p tcp --dport "${SSH_PORT:-22}" -j DROP
-            iptables -I INPUT 1 -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT
-            iptables -I INPUT 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-        fi
-        # ------------------------------
-
-        # --- FIX: RE-INJECT WHITELIST ACCEPT RULES ---
-        # Ensures whitelisted IPs bypass all subsequent drops and are re-applied on update
+		# --- FIX: RE-INJECT WHITELIST ACCEPT RULES ---
+        # Inserted BEFORE WireGuard Cloaking so that WG rules push this down and stay on top.
         if [[ -s "$WHITELIST_FILE" ]]; then
             while IFS= read -r wl_ip; do
                 [[ -z "$wl_ip" ]] && continue
@@ -1130,6 +1164,23 @@ EOF
             done < "$WHITELIST_FILE"
         fi
         # ---------------------------------------------
+
+        # --- STRICT WIREGUARD SSH CLOAKING ---
+        if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+            # Clean existing WG rules first to prevent duplicates
+            while iptables -D INPUT -p tcp --dport "${SSH_PORT:-22}" -j DROP 2>/dev/null; do :; done
+            while iptables -D INPUT -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT 2>/dev/null; do :; done
+            while iptables -D INPUT -i lo -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT 2>/dev/null; do :; done
+            while iptables -D INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; do :; done
+            
+            # Insert top-priority rules (inserted in reverse order, so ESTABLISHED stays at absolute position 1)
+            # This explicitly overwrites the Whitelist for SSH traffic.
+            iptables -I INPUT 1 -p tcp --dport "${SSH_PORT:-22}" -j DROP
+            iptables -I INPUT 1 -i wg0 -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT
+            iptables -I INPUT 1 -i lo -p tcp --dport "${SSH_PORT:-22}" -j ACCEPT
+            iptables -I INPUT 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        fi
+        # -------------------------------------
         
         # Save IPtables persistence for legacy OS
         if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
@@ -3051,6 +3102,12 @@ uninstall_syswarden() {
     rm -f /etc/systemd/system/syswarden-ipset.service /etc/syswarden/ipsets.save
     systemctl daemon-reload
 	
+	log "INFO" "Removing UI Dashboard Service..."
+    systemctl disable --now syswarden-ui 2>/dev/null || true
+    rm -f /etc/systemd/system/syswarden-ui.service /usr/local/bin/syswarden-telemetry.sh
+    systemctl daemon-reload
+    rm -rf /etc/syswarden/ui
+	
 	# --- WIREGUARD CLEANUP ---
     if [[ -d "/etc/wireguard" ]] || [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
         log "INFO" "Stopping and removing WireGuard VPN..."
@@ -3103,6 +3160,12 @@ uninstall_syswarden() {
     # Nftables
     if command -v nft >/dev/null; then 
         nft delete table inet syswarden_table 2>/dev/null || true
+        # Clean modular config and remove include from main OS config
+        rm -f /etc/syswarden/syswarden.nft
+        if [[ -f "/etc/nftables.conf" ]]; then
+            sed -i '\|include "/etc/syswarden/syswarden.nft"|d' /etc/nftables.conf
+            sed -i '/# Added by SysWarden/d' /etc/nftables.conf
+        fi
     fi
     
     # UFW
@@ -3275,10 +3338,9 @@ setup_wazuh_agent() {
          nft insert rule inet syswarden_table input ip saddr "$WAZUH_IP" accept 2>/dev/null || true
          log "INFO" "Nftables rule added for Wazuh Manager (Full Trust)."
 		 
-		 # ### PERSISTENCE FIX ###
-         # Save current RAM ruleset to disk so it survives reboot
-         log "INFO" "Saving Nftables ruleset to /etc/nftables.conf for persistence..."
-         nft list ruleset > /etc/nftables.conf
+		 # ### MODULAR PERSISTENCE FIX ###
+         log "INFO" "Saving SysWarden Nftables table to isolated config..."
+         nft list table inet syswarden_table > /etc/syswarden/syswarden.nft
          # Enable service just in case
          systemctl enable nftables >/dev/null 2>&1 || true
 
@@ -3355,6 +3417,551 @@ EOF
     fi
 }
 
+# ==============================================================================
+# SYSWARDEN V9.30 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# ==============================================================================
+function setup_telemetry_backend() {
+    log "INFO" "Installation of the advanced telemetry engine (Backend)..."
+    
+    local BIN_PATH="/usr/local/bin/syswarden-telemetry.sh"
+    local UI_DIR="/etc/syswarden/ui"
+    
+    # 1. Writing the Telemetry Bash script
+    cat << 'EOF' > "$BIN_PATH"
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# --- Configuration Paths ---
+SYSWARDEN_DIR="/etc/syswarden"
+UI_DIR="/etc/syswarden/ui"
+TMP_FILE="$UI_DIR/data.json.tmp"
+DATA_FILE="$UI_DIR/data.json"
+
+mkdir -p "$UI_DIR"
+
+# --- System Metrics Gathering ---
+SYS_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+SYS_HOSTNAME=$(hostname)
+SYS_UPTIME=$(uptime -p | sed 's/up //')
+SYS_LOAD=$(cat /proc/loadavg | awk '{print $1", "$2", "$3}')
+SYS_RAM_USED=$(free -m | awk '/^Mem:/{print $3}')
+SYS_RAM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
+
+# --- Layer 3 Metrics (Persistent lists) ---
+L3_GLOBAL=0; L3_GEOIP=0; L3_ASN=0
+
+if [[ -f "$SYSWARDEN_DIR/active_global_blocklist.txt" ]]; then
+    L3_GLOBAL=$(wc -l < "$SYSWARDEN_DIR/active_global_blocklist.txt")
+fi
+
+if [[ -f "$SYSWARDEN_DIR/geoip.txt" ]]; then
+    L3_GEOIP=$(wc -l < "$SYSWARDEN_DIR/geoip.txt")
+fi
+
+if [[ -f "$SYSWARDEN_DIR/asn.txt" ]]; then
+    L3_ASN=$(wc -l < "$SYSWARDEN_DIR/asn.txt")
+fi
+
+# --- Layer 7 Metrics & IP Registry ---
+L7_TOTAL_BANNED=0; L7_ACTIVE_JAILS=0; JAIL_JSON_ARRAY=""; L7_BANNED_IPS_JSON=""
+
+if command -v fail2ban-client >/dev/null && fail2ban-client ping >/dev/null 2>&1; then
+    # Respecting strict IFS for multi-jail extraction
+    JAIL_LIST=$(fail2ban-client status | grep "Jail list:" | sed 's/.*Jail list:[ \t]*//' | tr -d ' ' | tr ',' '\n')
+    
+    for JAIL in $JAIL_LIST; do
+        L7_ACTIVE_JAILS=$((L7_ACTIVE_JAILS + 1))
+        
+        # Get detailed status per jail
+        STATUS_OUT=$(fail2ban-client status "$JAIL")
+        BANNED_COUNT=$(echo "$STATUS_OUT" | grep "Currently banned:" | awk '{print $4}' || echo "0")
+        BANNED_COUNT=${BANNED_COUNT:-0}
+        L7_TOTAL_BANNED=$((L7_TOTAL_BANNED + BANNED_COUNT))
+        
+        if [[ "$BANNED_COUNT" -gt 0 ]]; then
+            JAIL_JSON_ARRAY+="{\"name\": \"$JAIL\", \"count\": $BANNED_COUNT},"
+            
+            # Extract actual banned IPs (limiting to last 50 entries for browser performance)
+            BANNED_IPS=$(echo "$STATUS_OUT" | grep "Banned IP list:" | sed 's/.*Banned IP list:[ \t]*//' | tr -d ',' | tr ' ' '\n' | tail -n 50 || true)
+            for IP in $BANNED_IPS; do
+                if [[ -n "$IP" ]]; then
+                    L7_BANNED_IPS_JSON+="{\"ip\": \"$IP\", \"jail\": \"$JAIL\"},"
+                fi
+            done
+        fi
+    done
+fi
+
+# Remove trailing commas for valid JSON
+JAIL_JSON_ARRAY=${JAIL_JSON_ARRAY%,}
+L7_BANNED_IPS_JSON=${L7_BANNED_IPS_JSON%,}
+
+# --- Whitelist Registry Extraction ---
+WHITELIST_COUNT=0; WHITELIST_IPS_JSON=""
+
+if [[ -f "$SYSWARDEN_DIR/whitelist.txt" ]]; then
+    WHITELIST_COUNT=$(grep -cvE '^\s*(#|$)' "$SYSWARDEN_DIR/whitelist.txt" || true)
+    
+    # Extract actual Whitelist IPs (cleaning comments and empty lines)
+    WL_IPS=$(grep -vE '^\s*(#|$)' "$SYSWARDEN_DIR/whitelist.txt" || true)
+    for IP in $WL_IPS; do
+        if [[ -n "$IP" ]]; then
+            WHITELIST_IPS_JSON+="\"$IP\","
+        fi
+    done
+fi
+
+# Remove trailing comma for valid JSON
+WHITELIST_IPS_JSON=${WHITELIST_IPS_JSON%,}
+
+# --- Generate Atomic JSON Payload ---
+cat <<JSON_EOF > "$TMP_FILE"
+{
+  "timestamp": "$SYS_TIMESTAMP",
+  "system": { 
+      "hostname": "$SYS_HOSTNAME", 
+      "uptime": "$SYS_UPTIME", 
+      "load_average": "$SYS_LOAD", 
+      "ram_used_mb": $SYS_RAM_USED, 
+      "ram_total_mb": $SYS_RAM_TOTAL 
+  },
+  "layer3": { 
+      "global_blocked": $L3_GLOBAL, 
+      "geoip_blocked": $L3_GEOIP, 
+      "asn_blocked": $L3_ASN 
+  },
+  "layer7": { 
+      "total_banned": $L7_TOTAL_BANNED, 
+      "active_jails": $L7_ACTIVE_JAILS, 
+      "jails_data": [ $JAIL_JSON_ARRAY ],
+      "banned_ips": [ $L7_BANNED_IPS_JSON ]
+  },
+  "whitelist": { 
+      "active_ips": $WHITELIST_COUNT,
+      "ips": [ $WHITELIST_IPS_JSON ]
+  }
+}
+JSON_EOF
+
+mv -f "$TMP_FILE" "$DATA_FILE"
+chmod 644 "$DATA_FILE"
+EOF
+
+    # 2. Make executable
+    chmod +x "$BIN_PATH"
+    
+    # 3. Injection into CRON tasks (Execution every minute)
+    if ! crontab -l 2>/dev/null | grep -q "$BIN_PATH"; then
+        (crontab -l 2>/dev/null || true; echo "* * * * * $BIN_PATH >/dev/null 2>&1") | crontab -
+    fi
+    
+    # 4. First immediate run to generate data.json before the UI starts
+    if ! "$BIN_PATH"; then
+        log "WARN" "Initial telemetry run failed, but script will continue."
+    fi
+}
+
+# ==============================================================================
+# SYSWARDEN V9.30 - UI DASHBOARD GENERATION (EXPANDED REGISTRY)
+# ==============================================================================
+function generate_dashboard() {
+    log "INFO" "Generating the Serverless Dashboard UI (Expanded v9.30)..."
+    
+    local UI_DIR="/etc/syswarden/ui"
+    mkdir -p "$UI_DIR"
+	
+	# --- DYNAMIC BIND IP ---
+    local UI_BIND_IP="127.0.0.1" # Default to Localhost if no VPN
+    if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
+        local SUBNET_BASE
+        SUBNET_BASE=$(echo "$WG_SUBNET" | cut -d'.' -f1,2,3)
+        UI_BIND_IP="${SUBNET_BASE}.1"
+    fi
+    
+    # 1. Generating the HTML file
+    cat << 'EOF' > "$UI_DIR/index.html"
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysWarden | Fortress Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* Modern Thin Scrollbars for IP Registries */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 500: '#ef4444', 600: '#dc2626' },
+                        dark: { 800: '#1e293b', 900: '#0f172a' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script>
+        // Initial Theme Detection
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark')
+        } else {
+            document.documentElement.classList.remove('dark')
+        }
+    </script>
+</head>
+<body class="bg-gray-50 dark:bg-dark-900 text-gray-900 dark:text-gray-100 font-sans antialiased transition-colors duration-300 min-h-screen">
+
+    <nav class="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]" id="status-indicator"></div>
+                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v9.30</span></h1>
+                </div>
+                
+                <div class="flex items-center gap-2 bg-gray-100 dark:bg-dark-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <button onclick="setTheme('light')" class="px-3 py-1 rounded-md text-sm font-medium hover:bg-white dark:hover:bg-gray-800 transition">Light</button>
+                    <button onclick="setTheme('dark')" class="px-3 py-1 rounded-md text-sm font-medium hover:bg-white dark:hover:bg-gray-800 transition">Dark</button>
+                    <button onclick="setTheme('system')" class="px-3 py-1 rounded-md text-sm font-medium hover:bg-white dark:hover:bg-gray-800 transition">System</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hostname</p>
+                <p class="text-lg font-bold mt-1" id="sys-hostname">--</p>
+            </div>
+            <div class="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Uptime</p>
+                <p class="text-lg font-bold mt-1" id="sys-uptime">--</p>
+            </div>
+            <div class="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Load Average</p>
+                <p class="text-lg font-bold mt-1 text-yellow-600 dark:text-yellow-400" id="sys-load">--</p>
+            </div>
+            <div class="bg-white dark:bg-dark-800 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">RAM Usage</p>
+                <p class="text-lg font-bold mt-1" id="sys-ram">--</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Layer 3 Kernel Shield</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-300">Global Blocklist</span>
+                        <span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="l3-global">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-300">GeoIP Blocks</span>
+                        <span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="l3-geoip">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-300">ASN Blocks</span>
+                        <span class="font-mono font-bold text-blue-600 dark:text-blue-400" id="l3-asn">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-brand-500 shadow-[0_0_15px_rgba(239,68,68,0.1)] relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-brand-500 opacity-10 rounded-bl-full"></div>
+                <h2 class="text-sm font-bold text-brand-500 uppercase tracking-widest mb-2">Layer 7 Fail2ban WAF</h2>
+                <p class="text-gray-500 text-sm mb-4">Total Active Bans (Real-time)</p>
+                <p class="text-6xl font-black text-brand-500" id="l7-banned">0</p>
+                <p class="mt-4 text-sm text-gray-600 dark:text-gray-400"><span id="l7-jails" class="font-bold">0</span> Jails Monitoring</p>
+            </div>
+
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-green-500 uppercase tracking-widest mb-2">Safe Zone (Whitelist)</h2>
+                    <p class="text-3xl font-bold" id="wl-count">0</p>
+                    <p class="text-sm text-gray-500">Protected IP Addresses</p>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <p class="text-xs text-gray-400 text-right">Last Update: <span id="last-update">Never</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            
+            <div class="lg:col-span-2 bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">L7 Threat Telemetry (Live)</h2>
+                <div class="relative h-64 w-full">
+                    <canvas id="threatChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm h-64 lg:h-auto overflow-y-auto custom-scrollbar">
+                <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Active Jail Triggers</h2>
+                <ul id="jail-list" class="space-y-3">
+                    <li class="text-sm text-gray-500 italic">Awaiting telemetry data...</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">L7 Banned IP Registry</h2>
+                <div class="overflow-y-auto max-h-72 pr-2 custom-scrollbar">
+                     <table class="w-full text-left text-sm">
+                        <thead class="sticky top-0 bg-white dark:bg-dark-800 z-10">
+                            <tr class="text-gray-500 border-b border-gray-100 dark:border-gray-700/50">
+                                <th class="pb-2 font-semibold">IP Address</th>
+                                <th class="pb-2 font-semibold text-right">Target Jail</th>
+                            </tr>
+                        </thead>
+                        <tbody id="banned-ips-list">
+                            </tbody>
+                     </table>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-dark-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                <h2 class="text-sm font-bold text-green-500 uppercase tracking-widest mb-4">Global Whitelist Registry</h2>
+                <div class="overflow-y-auto max-h-72 pr-2 custom-scrollbar">
+                     <ul id="whitelist-ips-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        </ul>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <script>
+        // --- 1. THEME ENGINE ---
+        function setTheme(mode) {
+            if (mode === 'dark') {
+                localStorage.theme = 'dark';
+                document.documentElement.classList.add('dark');
+            } else if (mode === 'light') {
+                localStorage.theme = 'light';
+                document.documentElement.classList.remove('dark');
+            } else {
+                localStorage.removeItem('theme');
+                if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            }
+        }
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (!('theme' in localStorage)) {
+                if (e.matches) { document.documentElement.classList.add('dark'); } 
+                else { document.documentElement.classList.remove('dark'); }
+            }
+        });
+
+        // --- 2. CHART ENGINE ---
+        const ctx = document.getElementById('threatChart').getContext('2d');
+        const chartData = {
+            labels: [],
+            datasets: [{
+                label: 'L7 Active Bans',
+                data: [],
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 0
+            }]
+        };
+        
+        const threatChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: 'rgba(156, 163, 175, 0.1)' }
+                    }
+                },
+                animation: { duration: 0 }
+            }
+        });
+
+        // --- 3. DATA FETCH ENGINE ---
+        const MAX_DATA_POINTS = 30;
+
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch(`data.json?t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+
+                // Update System DOM
+                document.getElementById('sys-hostname').innerText = data.system.hostname;
+                document.getElementById('sys-uptime').innerText = data.system.uptime;
+                document.getElementById('sys-load').innerText = data.system.load_average;
+                document.getElementById('sys-ram').innerText = `${data.system.ram_used_mb} MB / ${data.system.ram_total_mb} MB`;
+
+                // Update L3 DOM
+                document.getElementById('l3-global').innerText = data.layer3.global_blocked.toLocaleString();
+                document.getElementById('l3-geoip').innerText = data.layer3.geoip_blocked.toLocaleString();
+                document.getElementById('l3-asn').innerText = data.layer3.asn_blocked.toLocaleString();
+
+                // Update L7 & Whitelist DOM
+                document.getElementById('l7-banned').innerText = data.layer7.total_banned.toLocaleString();
+                document.getElementById('l7-jails').innerText = data.layer7.active_jails;
+                document.getElementById('wl-count').innerText = data.whitelist.active_ips;
+
+                // --- DOM UPDATE: Active Jails List ---
+                const jailListEl = document.getElementById('jail-list');
+                if (data.layer7.jails_data && data.layer7.jails_data.length > 0) {
+                    jailListEl.innerHTML = '';
+                    data.layer7.jails_data.forEach(jail => {
+                        jailListEl.innerHTML += `
+                            <li class="flex justify-between items-center p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                <span class="font-mono text-sm">${jail.name}</span>
+                                <span class="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 py-0.5 px-2 rounded-full text-xs font-bold">${jail.count}</span>
+                            </li>
+                        `;
+                    });
+                } else {
+                    jailListEl.innerHTML = '<li class="text-sm text-gray-500 italic">No active bans found. Server is quiet.</li>';
+                }
+
+                // --- DOM UPDATE: Banned IPs Registry Table ---
+                const bannedIpsEl = document.getElementById('banned-ips-list');
+                if (data.layer7.banned_ips && data.layer7.banned_ips.length > 0) {
+                    bannedIpsEl.innerHTML = '';
+                    // Displaying in reverse order so the newest extracted IPs appear at the top
+                    data.layer7.banned_ips.reverse().forEach(entry => {
+                        bannedIpsEl.innerHTML += `
+                            <tr class="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-700/20 transition">
+                                <td class="py-2 font-mono text-xs text-brand-500 font-bold">${entry.ip}</td>
+                                <td class="py-2 text-right text-[10px] text-gray-500 font-black uppercase tracking-tighter">${entry.jail}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    bannedIpsEl.innerHTML = '<tr><td colspan="2" class="py-4 text-center text-xs text-gray-500 italic">Registry is empty.</td></tr>';
+                }
+
+                // --- DOM UPDATE: Whitelist IPs Registry Grid ---
+                const wlIpsEl = document.getElementById('whitelist-ips-list');
+                if (data.whitelist.ips && data.whitelist.ips.length > 0) {
+                    wlIpsEl.innerHTML = '';
+                    data.whitelist.ips.forEach(ip => {
+                        wlIpsEl.innerHTML += `
+                            <li class="flex justify-between items-center p-2 rounded bg-green-500/5 border border-green-500/10">
+                                <span class="font-mono text-[11px] text-green-600 dark:text-green-400 font-bold">${ip}</span>
+                                <span class="text-[9px] uppercase font-black text-green-500/30 select-none">Safe</span>
+                            </li>
+                        `;
+                    });
+                } else {
+                    wlIpsEl.innerHTML = '<li class="text-xs text-gray-500 italic col-span-2">Registry is empty.</li>';
+                }
+
+                // Update Chart
+                const now = new Date();
+                const timeString = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+                
+                chartData.labels.push(timeString);
+                chartData.datasets[0].data.push(data.layer7.total_banned);
+
+                if (chartData.labels.length > MAX_DATA_POINTS) {
+                    chartData.labels.shift();
+                    chartData.datasets[0].data.shift();
+                }
+                threatChart.update();
+
+                // Update Status UI
+                document.getElementById('last-update').innerText = timeString;
+                document.getElementById('status-indicator').classList.remove('bg-gray-500');
+                document.getElementById('status-indicator').classList.add('bg-red-500');
+
+            } catch (error) {
+                console.error("Telemetry Fetch Error:", error);
+                document.getElementById('last-update').innerText = "Offline / Error";
+                document.getElementById('status-indicator').classList.remove('bg-red-500');
+                document.getElementById('status-indicator').classList.add('bg-gray-500');
+            }
+        }
+
+        fetchTelemetry();
+        setInterval(fetchTelemetry, 5000);
+    </script>
+</body>
+</html>
+EOF
+
+    # 2. Creation of the Systemd/OpenRC service according to the OS
+    if command -v systemctl >/dev/null; then
+        # Backend Systemd (Debian, Ubuntu, RHEL)
+        # FIX: Removed quotes around EOF to allow $UI_BIND_IP expansion
+        cat << EOF > /etc/systemd/system/syswarden-ui.service
+[Unit]
+Description=SysWarden Minimal Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/syswarden/ui
+ExecStart=/usr/bin/python3 -m http.server 9999 --bind $UI_BIND_IP
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl enable --now syswarden-ui >/dev/null 2>&1
+    else
+        # Backend OpenRC (Alpine Linux)
+        # FIX: Removed quotes around EOF, used $UI_BIND_IP, and escaped \${name}
+        cat << EOF > /etc/init.d/syswarden-ui
+#!/sbin/openrc-run
+
+name="syswarden-ui"
+description="SysWarden Minimal Web UI"
+command="/usr/bin/python3"
+command_args="-m http.server 9999 --bind $UI_BIND_IP"
+command_background="yes"
+directory="/etc/syswarden/ui"
+pidfile="/run/\${name}.pid"
+
+depend() {
+    need net
+}
+EOF
+        chmod +x /etc/init.d/syswarden-ui
+        rc-update add syswarden-ui default >/dev/null 2>&1
+        rc-service syswarden-ui start >/dev/null 2>&1 || true
+    fi
+    
+    log "INFO" "Dashboard UI enabled at $UI_BIND_IP:9999"
+}
+
 whitelist_ip() {
     echo -e "\n${BLUE}=== SysWarden Whitelist Manager ===${NC}"
     read -p "Enter IP to Whitelist: " WL_IP
@@ -3364,105 +3971,82 @@ whitelist_ip() {
         log "ERROR" "Invalid IP format."
         return
     fi
-	
-	# --- LOCAL PERSISTENCE ---
+    
+    # --- LOCAL PERSISTENCE (SINGLE SOURCE OF TRUTH) ---
     mkdir -p "$SYSWARDEN_DIR"
     touch "$WHITELIST_FILE"
     if ! grep -q "^${WL_IP}$" "$WHITELIST_FILE" 2>/dev/null; then
         echo "$WL_IP" >> "$WHITELIST_FILE"
+        log "INFO" "IP $WL_IP securely saved to $WHITELIST_FILE."
+    else
+        log "INFO" "IP $WL_IP is already in the whitelist file."
     fi
-    # -------------------------
+    # --------------------------------------------------
 
     log "INFO" "Whitelisting IP: $WL_IP on backend: $FIREWALL_BACKEND"
 
-    case "$FIREWALL_BACKEND" in
-        "nftables")
-            # Insert Rule at position 1 (Pre-Filter)
-            nft insert rule inet syswarden_table input ip saddr "$WL_IP" accept
-            # Persistence
-            nft list ruleset > /etc/nftables.conf
-            log "INFO" "Rule added to Nftables and saved."
-            ;;
-        
-        "firewalld")
-            # Add Rich Rule with ACCEPT action
-            firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$WL_IP' accept"
-            firewall-cmd --reload
-            log "INFO" "Rule added to Firewalld."
-            ;;
-        
-        "ufw")
-            # 1. Add UFW Allow Rule (High priority on user chain)
-            ufw insert 1 allow from "$WL_IP"
-            # 2. Remove from Blacklist IPSet immediately (in case it was blocked there)
-            ipset del "$SET_NAME" "$WL_IP" 2>/dev/null || true
-            ufw reload
-            log "INFO" "Rule added to UFW (and removed from current blocklist)."
-            ;;
-        
-        *)
-            # Fallback IPSet / Iptables
-            iptables -I INPUT 1 -s "$WL_IP" -j ACCEPT
-            # Persistence
-            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
-            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
-            log "INFO" "Rule added to IPTables."
-            ;;
-    esac
+    # --- FIX: SAFE DYNAMIC WHITELISTING (STATE MACHINE) ---
+    log "INFO" "Rebuilding firewall framework to safely integrate the new IP..."
+    
+    # 1. Force loading config to ensure core variables (SSH_PORT, USE_WIREGUARD) are in RAM
+    if [[ -f "$CONF_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$CONF_FILE"
+    fi
+    
+    # 2. Universally remove the IP from the active blocklist in memory to prevent conflicts
+    if command -v ipset >/dev/null; then
+        ipset del "$SET_NAME" "$WL_IP" 2>/dev/null || true
+    fi
+    if command -v nft >/dev/null; then
+        # Bypasses the active drop rule temporarily before reload
+        nft delete element inet syswarden_table "$SET_NAME" { "$WL_IP" } 2>/dev/null || true
+    fi
+    
+    # 3. Trigger the orchestrator to rebuild rules with the strict hierarchy
+    apply_firewall_rules
+    
+    log "SUCCESS" "IP $WL_IP safely whitelisted. Strict firewall hierarchy preserved."
+    # ------------------------------------------------------
 }
 
 blocklist_ip() {
     echo -e "\n${RED}=== SysWarden Manual Blocklist Manager ===${NC}"
     read -p "Enter IP to Block: " BL_IP
 
-    # Validation simple de l'IP
+    # Simple IP validation
     if [[ ! "$BL_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         log "ERROR" "Invalid IP format."
         return
     fi
-	
-	# --- LOCAL PERSISTENCE ---
+    
+    # --- LOCAL PERSISTENCE (SINGLE SOURCE OF TRUTH) ---
     mkdir -p "$SYSWARDEN_DIR"
     touch "$BLOCKLIST_FILE"
     if ! grep -q "^${BL_IP}$" "$BLOCKLIST_FILE" 2>/dev/null; then
         echo "$BL_IP" >> "$BLOCKLIST_FILE"
+        log "INFO" "IP $BL_IP securely saved to $BLOCKLIST_FILE."
+    else
+        log "INFO" "IP $BL_IP is already in the blocklist file."
     fi
-    # -------------------------
+    # --------------------------------------------------
 
     log "INFO" "Blocking IP: $BL_IP on backend: $FIREWALL_BACKEND"
 
-    case "$FIREWALL_BACKEND" in
-        "nftables")
-            # Insert Rule at position 1 (Immediate Drop)
-            nft insert rule inet syswarden_table input ip saddr "$BL_IP" drop
-            # Persistence
-            nft list ruleset > /etc/nftables.conf
-            log "INFO" "Drop rule added to Nftables and saved."
-            ;;
-        
-        "firewalld")
-            # Add Rich Rule with DROP action
-            firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$BL_IP' drop"
-            firewall-cmd --reload
-            log "INFO" "Drop rule added to Firewalld."
-            ;;
-        
-        "ufw")
-            # Add UFW Deny Rule (High priority)
-            ufw insert 1 deny from "$BL_IP"
-            ufw reload
-            log "INFO" "Deny rule added to UFW."
-            ;;
-        
-        *)
-            # Fallback IPSet / Iptables
-            iptables -I INPUT 1 -s "$BL_IP" -j DROP
-            # Persistence
-            if command -v netfilter-persistent >/dev/null; then netfilter-persistent save; 
-            elif command -v service >/dev/null && [ -f /etc/init.d/iptables ]; then service iptables save; fi
-            log "INFO" "Drop rule added to IPTables."
-            ;;
-    esac
+    # --- FIX: SAFE DYNAMIC BLOCKLISTING (STATE MACHINE) ---
+    log "INFO" "Rebuilding firewall framework to safely integrate the new IP..."
+    
+    # 1. Force loading config to ensure core variables (SSH_PORT, USE_WIREGUARD) are in RAM
+    if [[ -f "$CONF_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$CONF_FILE"
+    fi
+    
+    # 2. Trigger the orchestrator to rebuild rules and load the IP into active sets
+    apply_firewall_rules
+    
+    log "SUCCESS" "IP $BL_IP safely blocklisted. Strict firewall hierarchy preserved."
+    # ------------------------------------------------------
 }
 
 protect_docker_jail() {
@@ -3742,7 +4326,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v9.26)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v9.30)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -3781,12 +4365,29 @@ if [[ "$MODE" != "update" ]]; then
     configure_fail2ban
 fi
 
+# --- FIX 1: THE SOURCE GAP ---
+# Force sourcing the config to ensure variables (GEOIP_ENABLED, ASN_ENABLED, etc.)
+# are loaded in RAM even during a fresh install.
+if [[ -f "$CONF_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONF_FILE"
+fi
+# -----------------------------
+
 select_list_type "$MODE"
 select_mirror "$MODE"
 download_list
+
+# --- FIX 2: THE COLD BOOT INJECTION ---
+# Apply the base firewall rules FIRST. This ensures that the kernel modules
+# and base chains/sets are fully initialized before we attempt to inject 
+# tens of thousands of IPs from GeoIP and ASN lists.
+apply_firewall_rules
+
 download_geoip
 download_asn
-apply_firewall_rules
+# --------------------------------------
+
 detect_protected_services
 
 if command -v systemctl >/dev/null && systemctl is-active --quiet syswarden-reporter; then
@@ -3799,6 +4400,11 @@ if [[ "$MODE" != "update" ]]; then
     setup_abuse_reporting "$MODE"
     setup_wazuh_agent "$MODE"
     setup_cron_autoupdate "$MODE"
+	
+	# --- DASHBOARD MODULE V9.30 ---
+    setup_telemetry_backend
+    generate_dashboard
+    # ------------------------------
     
     echo -e "\n${GREEN}INSTALLATION SUCCESSFUL${NC}"
     echo -e " -> List loaded: $LIST_TYPE"
