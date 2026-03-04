@@ -4377,12 +4377,29 @@ if [[ "$MODE" != "update" ]]; then
     configure_fail2ban
 fi
 
+# --- FIX 1: THE SOURCE GAP ---
+# Force sourcing the config to ensure variables (GEOIP_ENABLED, ASN_ENABLED, etc.)
+# are loaded in RAM even during a fresh install.
+if [[ -f "$CONF_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONF_FILE"
+fi
+# -----------------------------
+
 select_list_type "$MODE"
 select_mirror "$MODE"
 download_list
+
+# --- FIX 2: THE COLD BOOT INJECTION ---
+# Apply the base firewall rules FIRST. This ensures that the kernel modules
+# and base chains/sets are fully initialized before we attempt to inject 
+# tens of thousands of IPs from GeoIP and ASN lists.
+apply_firewall_rules
+
 download_geoip
 download_asn
-apply_firewall_rules
+# --------------------------------------
+
 detect_protected_services
 
 if command -v systemctl >/dev/null && systemctl is-active --quiet syswarden-reporter; then
