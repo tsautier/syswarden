@@ -63,31 +63,33 @@ It is highly recommended for securing:
 ## Architecture
 
 ```text
-SysWarden (Technology Stack)
-├── Core Orchestration
-│   ├── Bash Scripting             # Automation, Logic & Hot-Reloading
-│   └── Linux OS & Kernel          # Broad Support (Debian/Ubuntu, RHEL/Alma, Alpine)
+SysWarden (DevSecOps Technology Stack)
+├── Core Orchestration & Security
+│   ├── Bash Scripting             # OS Hardening, Automation & Zero Trust Logic
+│   ├── Linux OS & Kernel          # Broad Support (Debian/Ubuntu, RHEL/Alma, Alpine)
+│   └── awk & jq                   # Strict Semantic Validation & Atomic JSON Serialization
 │
 ├── Firewall & Networking Engine
-│   ├── Nftables                   # Modern Packet Filtering (Flat Syntax & Chunking)
-│   ├── IPSet + Iptables           # High-Performance Hashing (Legacy Fallback)
-│   ├── Firewalld                  # Dynamic Zone Management (RHEL Ecosystem)
-│   ├── Docker Integration         # Native DOCKER-USER Chain Isolation
-│   └── WireGuard VPN              # Stealth Management Interface & Dynamic Clients
+│   ├── Nftables                   # Modern Packet Filtering (Atomic Transactions)
+│   ├── IPSet + Iptables           # High-Performance Hashing (Legacy Fallback)
+│   ├── Firewalld                  # Dynamic Zone Management (RHEL Ecosystem)
+│   ├── Docker Integration         # Native DOCKER-USER Chain Isolation
+│   └── WireGuard VPN              # Stealth Management Interface & Dynamic Clients
 │
 ├── Active Defense & Daemons
-│   ├── Python 3 (Daemon)          # Asynchronous AbuseIPDB API Reporting
-│   ├── Python 3 (HTTP Server)     # Serverless Telemetry Dashboard UI
-│   ├── Fail2ban                   # Dynamic Intrusion Prevention System (Custom Jails)
-│   ├── Systemd / OpenRC           # OS-Specific Service & Persistence Management
-│   └── Logrotate                  # Log Maintenance & Space Optimization
+│   ├── Fail2ban                   # Dynamic IPS (Zero Trust Jails & Strict Anchoring)
+│   ├── Rsyslog                    # Kernel/Auth Log Isolation (Anti-Injection Shield)
+│   ├── Python 3 (Secure Wrapper)  # Sandboxed Telemetry Dashboard UI (Strict Headers)
+│   ├── Python 3 (Daemon)          # Asynchronous AbuseIPDB API Reporting
+│   ├── Systemd / OpenRC           # OS-Specific Service & Privilege Management
+│   └── Logrotate                  # Log Maintenance & Space Optimization
 │
 └── Threat Intelligence & Integrations
-    ├── Data-Shield IPv4 Blocklist # Primary Threat Intelligence Source
-    ├── Spamhaus / RADB            # Dynamic ASN Routing Data Validation
-    ├── IPDeny                     # Country-Level Geo-Blocking Data Sets
-    ├── AbuseIPDB API              # Community Attack Reporting (Outbound)
-    └── Wazuh XDR Agent            # SIEM, File Integrity & Vulnerability Detection
+    ├── Data-Shield IPv4 Blocklist # Primary Threat Intelligence Source
+    ├── Spamhaus / RADB            # Dynamic ASN Routing Data Validation
+    ├── IPDeny                     # Country-Level Geo-Blocking Data Sets
+    ├── AbuseIPDB API              # Community Attack Reporting (Outbound)
+    └── Wazuh XDR Agent            # SIEM, File Integrity & Vulnerability Detection
 ```
 
 ## Key Features
@@ -116,29 +118,30 @@ SysWarden (Technology Stack)
 ```text
 / (Inbound Network Traffic Flow)
 ├── Layer 1: Kernel-Space Shield (Preemptive Static Defense)
-│   ├── Orchestrator : Nftables (Flat Syntax) / Firewalld / IPSet (Auto-detected)
-│   ├── Threat Intel : 100k+ Malicious IPs, Global GeoIP & ASN Routing Data
-│   ├── Edge Routing : Handled natively, including DOCKER-USER chain isolation
-│   └── Action       : DROP packets silently before they ever reach User-Space
+│   ├── Orchestrator : Nftables (Atomic) / Firewalld / IPSet (Auto-detected)
+│   ├── Threat Intel : 100k+ Malicious IPs, Global GeoIP & ASN Routing Data
+│   ├── Validation   : Strict Semantic CIDR checking (Prevents Firewall Crashes)
+│   ├── Edge Routing : Handled natively, including DOCKER-USER chain isolation
+│   └── Action       : DROP packets silently before they ever reach User-Space
 │
 └── Layer 2: User-Space Applications (Permitted Traffic)
-    ├── Exposed Services & Proxies
-    │   ├── Custom Ports (SSH, Web, Database, APIs)
-    │   ├── WireGuard    (Stealth Management Interface & VPN)
-    │   └── System Logs  (e.g., /var/log/syslog, journalctl, dmesg)
-    │
-    └── Layer 3: Active Response (Dynamic & Behavioral Defense)
-        ├── Fail2ban Engine
-        │   ├── Monitor : Behavioral anomalies & Brute-force patterns across services
-        │   └── Action  : Inject dynamic, localized bans into the firewall backend
-        │
-        ├── SysWarden Python Daemon
-        │   ├── Monitor : Real-time Firewall drops & Fail2ban verdicts via buffer
-        │   └── Action  : Asynchronously report telemetry back to AbuseIPDB API
-        │
-        └── Wazuh XDR Agent (Optional)
-            ├── Monitor : File Integrity Monitoring (FIM) & Critical System Events
-            └── Action  : Stream encrypted security telemetry to Wazuh SIEM
+    ├── Exposed Services & Proxies
+    │   ├── Custom Ports (SSH, Web, Database, APIs)
+    │   ├── WireGuard    (Stealth Management Interface & VPN)
+    │   └── Log Routing  : Rsyslog isolated streams (kern-firewall.log & auth-syswarden.log)
+    │
+    └── Layer 3: Active Response (Dynamic & Behavioral Defense)
+        ├── Fail2ban Engine (Zero Trust)
+        │   ├── Monitor : Isolated Rsyslog files (Log Injection Immunity & Strict Anchoring)
+        │   └── Action  : Inject dynamic, localized bans into the firewall backend
+        │
+        ├── SysWarden Python Daemon
+        │   ├── Monitor : Real-time Firewall drops & Fail2ban verdicts via buffer
+        │   └── Action  : Asynchronously report telemetry back to AbuseIPDB API
+        │
+        └── Wazuh XDR Agent (Optional)
+            ├── Monitor : File Integrity Monitoring (FIM) & Critical System Events
+            └── Action  : Stream encrypted security telemetry to Wazuh SIEM
 ```
 
 ### 1. The Nftables Engine & Fail2ban Synergy (Debian, Ubuntu, Alpine)
@@ -402,41 +405,46 @@ Once installed, SysWarden acts as a standalone CLI tool. You can manage your inf
 ```text
 / (Root File System)
 ├── etc/
-│   ├── syswarden.conf                      # Centralized Configuration & Environment Variables
-│   ├── syswarden/                          # Local Threat Intelligence Directory
-│   │   ├── whitelist.txt                   # Custom IP/CIDR Routing Exceptions
-│   │   ├── blocklist.txt                   # Custom Permanent IP Bans
-│   │   ├── geoip.txt                       # Dynamic IPDeny Country-Level Blocklists
-│   │   ├── asn.txt                         # Dynamic Spamhaus/RADB ASN Blocklists
-│   │   └── ui/                             # Serverless Dashboard Web Root (HTML & JSON)
-│   ├── wireguard/                          # Stealth Management VPN Configurations
-│   │   ├── wg0.conf                        # Core Server Interface Configuration
-│   │   └── clients/                        # Generated Client Profiles & MTU Settings
-│   ├── fail2ban/
-│   │   └── jail.local                      # Custom Jails (SSH, Web, DB) Injected by SysWarden
-│   ├── logrotate.d/
-│   │   └── syswarden                       # Log Rotation Policy
-│   ├── cron.d/                             # (Mapped to /etc/crontabs/root on Alpine)
-│   │   └── syswarden-update                # Hourly Threat Intelligence Sync Job
-│   ├── systemd/system/                     # (For Debian/Ubuntu/RHEL Ecosystem)
-│   │   ├── syswarden-reporter.service      # AbuseIPDB Asynchronous Daemon Service
-│   │   └── syswarden-ui.service            # Serverless Telemetry Dashboard Service
-│   └── init.d/                             # (For Alpine Linux / OpenRC Ecosystem)
-│       ├── syswarden-reporter              # OpenRC AbuseIPDB Service
-│       └── syswarden-ui                    # OpenRC Dashboard Service
+│   ├── syswarden.conf                      # Centralized Configuration & Environment Variables
+│   ├── syswarden/                          # Local Threat Intelligence Directory
+│   │   ├── whitelist.txt                   # Custom IP/CIDR Routing Exceptions
+│   │   ├── blocklist.txt                   # Custom Permanent IP Bans
+│   │   ├── geoip.txt                       # Dynamic IPDeny Country-Level Blocklists
+│   │   ├── asn.txt                         # Dynamic Spamhaus/RADB ASN Blocklists
+│   │   └── ui/                             # Serverless Dashboard Web Root
+│   │       └── data.json                   # Atomic Telemetry Payload (Restricted 0600)
+│   ├── wireguard/                          # Stealth Management VPN Configurations
+│   │   ├── wg0.conf                        # Core Server Interface Configuration
+│   │   └── clients/                        # Generated Client Profiles & MTU Settings
+│   ├── fail2ban/
+│   │   └── jail.local                      # Zero Trust Jails (Conflicting OS defaults purged)
+│   ├── logrotate.d/
+│   │   └── syswarden                       # Log Rotation Policy
+│   ├── cron.allow                          # OS Hardening (Task scheduler restricted to root)
+│   ├── cron.d/                             # (Mapped to /etc/crontabs/root on Alpine)
+│   │   └── syswarden-update                # Hourly Threat Intelligence Sync Job
+│   ├── systemd/system/                     # (For Debian/Ubuntu/RHEL Ecosystem)
+│   │   ├── syswarden-reporter.service      # AbuseIPDB Daemon (DynamicUser Sandboxed)
+│   │   └── syswarden-ui.service            # Telemetry Dashboard (DynamicUser Sandboxed)
+│   └── init.d/                             # (For Alpine Linux / OpenRC Ecosystem)
+│       ├── syswarden-reporter              # OpenRC AbuseIPDB Service
+│       └── syswarden-ui                    # OpenRC Dashboard Service (Run as nobody)
 │
 ├── usr/local/bin/
-│   ├── install-syswarden.sh                # Main CLI Orchestrator (Universal OS)
-│   ├── install-syswarden-alpine.sh         # Main CLI Orchestrator (Alpine Linux)
-│   ├── syswarden-telemetry.sh              # Decoupled JSON Generator (Cron)
-│   └── syswarden_reporter.py               # Python Log Analyzer & API Outbound Client
+│   ├── install-syswarden.sh                # Main CLI Orchestrator (Universal OS)
+│   ├── install-syswarden-alpine.sh         # Main CLI Orchestrator (Alpine Linux)
+│   ├── syswarden-telemetry.sh              # Decoupled jq JSON Generator (Cron)
+│   ├── syswarden-ui-server.py              # Secure Python HTTP Wrapper (Strict Headers)
+│   └── syswarden_reporter.py               # Python Log Analyzer & API Outbound Client
 │
 └── var/
-    ├── log/
-    │   ├── syswarden-install.log           # Verbose Installation & Debug Telemetry
-    │   └── fail2ban.log                    # Dynamic Intrusion Prevention Logs
-    └── ossec/etc/
-        └── ossec.conf                      # Wazuh Agent Config
+    ├── log/
+    │   ├── kern-firewall.log               # Isolated Nftables/Iptables Drops (Anti-Injection)
+    │   ├── auth-syswarden.log              # Isolated PAM/Sudo Auth logs (Anti-Injection)
+    │   ├── syswarden-install.log           # Verbose Installation & Debug Telemetry
+    │   └── fail2ban.log                    # Dynamic Intrusion Prevention Logs
+    └── ossec/etc/
+        └── ossec.conf                      # Wazuh Agent Config
 ```
 
 ## Uninstallation & System Teardown (Root Privileges Required)
