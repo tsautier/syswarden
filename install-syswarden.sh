@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v9.69"
+VERSION="v9.70"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -428,20 +428,22 @@ auto_whitelist_admin() {
     
     # --- SECURITY FIX: BULLETPROOF KERNEL SOCKET DETECTION ---
     # If the user ran 'su -' or 'sudo su', SSH variables are wiped.
-    # Alpine 'who am i' is often empty. We query active SSH sockets directly.
+    # We query active SSH sockets directly. Order-independent grep ensures 
+    # compatibility across all versions of ss and netstat, while grep -oE 
+    # perfectly extracts IPv4 even from IPv4-mapped IPv6 addresses (::ffff:IP).
     if [[ -z "$admin_ip" || ! "$admin_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         # Use 'ss' if available (modern iproute2)
         if command -v ss >/dev/null; then
-            admin_ip=$(ss -tnp 2>/dev/null | grep -i 'sshd.*ESTAB' | awk '{print $5}' | cut -d: -f1 | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+            admin_ip=$(ss -tnp 2>/dev/null | grep -i 'estab' | grep -i 'sshd' | awk '{print $5}' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
         # Fallback to 'netstat' (net-tools / Alpine busybox)
         elif command -v netstat >/dev/null; then
-            admin_ip=$(netstat -tnpa 2>/dev/null | grep -i 'sshd.*ESTABLISHED' | awk '{print $5}' | cut -d: -f1 | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+            admin_ip=$(netstat -tnpa 2>/dev/null | grep -i 'established' | grep -i 'sshd' | awk '{print $5}' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
         fi
     fi
     
     # 3. Final Fallback: 'who' command
     if [[ -z "$admin_ip" || ! "$admin_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        admin_ip=$(who 2>/dev/null | awk '{print $5}' | tr -d '()' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+        admin_ip=$(who 2>/dev/null | awk '{print $5}' | tr -d '()' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
     fi
     # ---------------------------------------------------------
     
@@ -3936,7 +3938,7 @@ EOF
 # SYSWARDEN v9.40 - UI DASHBOARD GENERATION (EXPANDED REGISTRY)
 # ==============================================================================
 function generate_dashboard() {
-    log "INFO" "Generating the Serverless Dashboard UI (Expanded v9.69)..."
+    log "INFO" "Generating the Serverless Dashboard UI (Expanded v9.70)..."
     
     local UI_DIR="/etc/syswarden/ui"
     mkdir -p "$UI_DIR"
@@ -3999,7 +4001,7 @@ function generate_dashboard() {
             <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center gap-3">
                     <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]" id="status-indicator"></div>
-                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v9.69</span></h1>
+                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v9.70</span></h1>
                 </div>
                 
                 <div class="flex items-center gap-2 bg-gray-100 dark:bg-dark-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -4824,7 +4826,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v9.69)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v9.70)     #"
     echo -e "#############################################################${NC}"
 fi
 
