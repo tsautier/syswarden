@@ -1,5 +1,11 @@
 name: SysWarden Security Audit
 
+# --- GLOBAL ENVIRONMENT VARIABLES ---
+# Forces GitHub Actions to use Node.js 24 for all JavaScript-based actions,
+# bypassing the upcoming Node.js 20 deprecation warnings.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [ "main", "master" ]
