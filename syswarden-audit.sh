@@ -416,11 +416,9 @@ fi
 log_header "Phase 7: Exposed Services & Firewall Persistence (CSPM)"
 
 # --- 7.1 Firewall Persistence Check (Cold Boot Survivability) ---
-PERSISTENCE_PASSED=0
 if [[ "$FW_ENGINE" == "Nftables" ]]; then
     # Verify SysWarden anchor in Alpine/Standard Nftables main config
     if grep -q 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.nft 2>/dev/null || grep -q 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.conf 2>/dev/null; then
-        PERSISTENCE_PASSED=1
         pass "Firewall Persistence VERIFIED: SysWarden Nftables rules are firmly anchored in main OS config."
     else
         fail "Firewall Persistence FAILED: SysWarden include directive is missing in main Nftables config."
@@ -437,7 +435,6 @@ if [[ "$FW_ENGINE" == "Nftables" ]]; then
 
 elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
     if systemctl is-enabled firewalld 2>/dev/null | grep -q "enabled"; then
-        PERSISTENCE_PASSED=1
         pass "Firewall Persistence VERIFIED: Firewalld is enabled on boot (Rich Rules are persistent natively)."
     else
         fail "Firewall Persistence FAILED: Firewalld is not enabled on system boot."
@@ -445,7 +442,6 @@ elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
 
 elif [[ "$FW_ENGINE" == "UFW" ]]; then
     if systemctl is-enabled ufw 2>/dev/null | grep -q "enabled"; then
-        PERSISTENCE_PASSED=1
         pass "Firewall Persistence VERIFIED: UFW is enabled and will restore rules on boot."
     else
         fail "Firewall Persistence FAILED: UFW is not enabled on system boot."
@@ -453,7 +449,6 @@ elif [[ "$FW_ENGINE" == "UFW" ]]; then
 
 elif [[ "$FW_ENGINE" == "Iptables" ]]; then
     if [[ -f "/etc/iptables/rules.v4" ]] || [[ -f "/etc/sysconfig/iptables" ]] || [[ "$OS_TYPE" == "Alpine" && -f "/etc/iptables/iptables.rules" ]]; then
-        PERSISTENCE_PASSED=1
         pass "Firewall Persistence VERIFIED: Iptables static save files detected."
     else
         warn "Firewall Persistence UNKNOWN: Could not definitively locate Iptables persistent save files. Rules might flush on reboot."
