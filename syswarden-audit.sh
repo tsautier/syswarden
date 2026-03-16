@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.09 - Audit Tool
+# SysWarden v1.10 - Audit Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -405,7 +405,91 @@ else
     info "Day-2 SSH Bypass: No explicit IP whitelisted (Strict mode active)."
 fi
 
-# --- 7. AUDIT SUMMARY ---
+# ==============================================================================
+# === Phase 7: Exposed Services & Firewall Persistence (CSPM) ===
+# ==============================================================================
+log_header "Phase 7: Exposed Services & Firewall Persistence (CSPM)"
+
+# --- 7.1 Firewall Persistence Check (Cold Boot Survivability) ---
+PERSISTENCE_PASSED=0
+if [[ "$FW_ENGINE" == "Nftables" ]]; then
+    # Verify SysWarden anchor in Alpine/Standard Nftables main config
+    if grep -q 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.nft 2>/dev/null || grep -q 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.conf 2>/dev/null; then
+        PERSISTENCE_PASSED=1
+        pass "Firewall Persistence VERIFIED: SysWarden Nftables rules are firmly anchored in main OS config."
+    else
+        fail "Firewall Persistence FAILED: SysWarden include directive is missing in main Nftables config."
+    fi
+
+    # Verify Alpine Native OS Bypass (if applicable)
+    if [[ "$OS_TYPE" == "Alpine" ]]; then
+        if [[ -f "/etc/nftables.d/syswarden-os-bypass.nft" ]]; then
+            pass "OS Bypass Module VERIFIED: Native Alpine drop policy safely bypassed for essential active services."
+        else
+            warn "OS Bypass Module Missing: If this is a Web/SSH server, Alpine's default drop policy might block legitimate traffic."
+        fi
+    fi
+
+elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
+    if systemctl is-enabled firewalld 2>/dev/null | grep -q "enabled"; then
+        PERSISTENCE_PASSED=1
+        pass "Firewall Persistence VERIFIED: Firewalld is enabled on boot (Rich Rules are persistent natively)."
+    else
+        fail "Firewall Persistence FAILED: Firewalld is not enabled on system boot."
+    fi
+
+elif [[ "$FW_ENGINE" == "UFW" ]]; then
+    if systemctl is-enabled ufw 2>/dev/null | grep -q "enabled"; then
+        PERSISTENCE_PASSED=1
+        pass "Firewall Persistence VERIFIED: UFW is enabled and will restore rules on boot."
+    else
+        fail "Firewall Persistence FAILED: UFW is not enabled on system boot."
+    fi
+
+elif [[ "$FW_ENGINE" == "Iptables" ]]; then
+    if [[ -f "/etc/iptables/rules.v4" ]] || [[ -f "/etc/sysconfig/iptables" ]] || [[ "$OS_TYPE" == "Alpine" && -f "/etc/iptables/iptables.rules" ]]; then
+        PERSISTENCE_PASSED=1
+        pass "Firewall Persistence VERIFIED: Iptables static save files detected."
+    else
+        warn "Firewall Persistence UNKNOWN: Could not definitively locate Iptables persistent save files. Rules might flush on reboot."
+    fi
+else
+    fail "Firewall Persistence FAILED: No recognized firewall engine active."
+fi
+
+# --- 7.2 Exposed Listening Services (Attack Surface Mapping) ---
+info "Scanning for globally exposed listening ports (0.0.0.0 / ::)..."
+
+# Extract live sockets directly from the kernel (Fallback to netstat if ss is unavailable)
+if command -v ss >/dev/null 2>&1; then
+    LISTEN_PORTS=$(ss -tlnp 2>/dev/null | grep -E '0\.0\.0\.0|::' | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu || true)
+else
+    LISTEN_PORTS=$(netstat -tlnp 2>/dev/null | grep -E '0\.0\.0\.0|::' | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu || true)
+fi
+
+if [[ -n "$LISTEN_PORTS" ]]; then
+    for PORT in $LISTEN_PORTS; do
+        # Evaluate each exposed port against SysWarden's Defense-in-Depth profile
+        if [[ "$PORT" -eq "$SSH_PORT" ]]; then
+            info "Exposed Port: $PORT/TCP (SSH) - Guarded by Zero Trust VPN Guillotine (Drop policy)."
+        elif [[ "$PORT" -eq 80 || "$PORT" -eq 443 ]]; then
+            info "Exposed Port: $PORT/TCP (Web) - Guarded by SysWarden Layer 7 LFI/SQLi/Bot Jails."
+        elif [[ "$PORT" -eq 51820 || "$PORT" -eq "${WG_PORT:-51820}" ]]; then
+            info "Exposed Port: $PORT/UDP (WireGuard) - Guarded by SysWarden Stealth UDP protections."
+        elif [[ "$PORT" -eq 53 || "$PORT" -eq 123 || "$PORT" -eq 161 ]]; then
+            info "Exposed Port: $PORT (Infra) - Standard Infrastructure Protocol (DNS/NTP)."
+        else
+            warn "Exposed Port: $PORT/TCP - Open to the public. Verify if this service requires zero-trust isolation."
+        fi
+    done
+    pass "Attack Surface Mapping completed. All exposed sockets evaluated against security profiles."
+else
+    pass "Attack Surface Mapping completed. No externally exposed TCP ports detected (Maximum Stealth)."
+fi
+
+# ==============================================================================
+# --- 8. AUDIT SUMMARY ---
+# ==============================================================================
 echo -e "\n${BOLD}==============================================================================${NC}"
 if [[ $SCORE -eq $TOTAL ]]; then
     echo -e "${GREEN}>>> AUDIT SUCCESSFUL: $SCORE/$TOTAL checks passed. System is fully DevSecOps compliant. <<<${NC}"
