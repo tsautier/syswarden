@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.20"
+VERSION="v1.21"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -131,12 +131,28 @@ install_dependencies() {
     if ! command -v jq >/dev/null; then missing_common+=("jq"); fi
     # -----------------------------------------------------------------------
 
+    # --- DEVSECOPS FIX: NGINX & OPENSSL AS CORE DEPENDENCIES ---
+    if ! command -v nginx >/dev/null; then missing_common+=("nginx"); fi
+    if ! command -v openssl >/dev/null; then missing_common+=("openssl"); fi
+    # -----------------------------------------------------------
+
     # Check if array is not empty
     if [[ ${#missing_common[@]} -gt 0 ]]; then
         if [[ -f /etc/debian_version ]]; then
+            export DEBIAN_FRONTEND=noninteractive
             apt-get install -y "${missing_common[@]}"
-        elif [[ -f /etc/redhat-release ]]; then dnf install -y "${missing_common[@]}"; fi
+        elif [[ -f /etc/redhat-release ]]; then
+            dnf install -y "${missing_common[@]}"
+        fi
     fi
+
+    # --- DEVSECOPS FIX: PREEMPTIVE NGINX LOG CREATION ---
+    # We guarantee the existence of Nginx logs immediately after package installation.
+    # This ensures Fail2ban naturally detects them and activates Layer 7 Web Jails natively.
+    mkdir -p /var/log/nginx
+    touch /var/log/nginx/access.log /var/log/nginx/error.log
+    chmod 640 /var/log/nginx/*.log 2>/dev/null || true
+    # ----------------------------------------------------
 
     # Python Requests (Required for AbuseIPDB Reporter)
     # PEP 668 COMPLIANCE: We strictly use system packages (apt/dnf) to avoid 'externally-managed-environment' errors.
@@ -1106,7 +1122,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v1.20) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v1.21) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -3949,7 +3965,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.20 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.21 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4100,24 +4116,10 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.20 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
+# SYSWARDEN v1.21 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/IP-Restricted)..."
-
-    # --- 1. PACKAGE MANAGEMENT (Multi-OS) ---
-    if ! command -v nginx >/dev/null || ! command -v openssl >/dev/null; then
-        log "INFO" "Installing Nginx and OpenSSL..."
-        if command -v apt-get >/dev/null; then
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update -qq >/dev/null 2>&1 || true
-            apt-get install -y -qq nginx openssl >/dev/null
-        elif command -v dnf >/dev/null; then
-            dnf install -y -q nginx openssl >/dev/null
-        elif command -v yum >/dev/null; then
-            yum install -y -q nginx openssl >/dev/null
-        fi
-    fi
 
     local UI_DIR="/etc/syswarden/ui"
     mkdir -p "$UI_DIR"
@@ -4173,7 +4175,7 @@ function generate_dashboard() {
             <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center gap-3">
                     <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]" id="status-indicator"></div>
-                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.20</span></h1>
+                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.21</span></h1>
                 </div>
                 
                 <div class="flex items-center gap-2 bg-gray-100 dark:bg-dark-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -5048,7 +5050,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v1.20)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v1.21)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -5084,6 +5086,7 @@ if [[ "$MODE" != "update" ]]; then
     define_docker_integration "$MODE"
     define_geoblocking "$MODE"
     define_asnblocking "$MODE"
+    configure_fail2ban
 fi
 
 # --- FIX 1: THE SOURCE GAP ---
@@ -5117,19 +5120,8 @@ log "INFO" "Applying massive downloaded lists to active firewall..."
 apply_firewall_rules
 # --------------------------------------
 
-# --- DEVSECOPS FIX: DASHBOARD & FAIL2BAN ORCHESTRATION ---
-# 1. Telemetry & Dashboard ALWAYS run (Install & Update) to deploy/update Nginx.
-setup_telemetry_backend
-generate_dashboard
-
-# 2. Configure Fail2ban AFTER Nginx so it natively detects the web logs.
-configure_fail2ban
-# ---------------------------------------------------------
-
-# 3. Show active jails now that Fail2ban is fully aware of all services
 detect_protected_services
 
-# 4. Restart Reporter if active
 if command -v systemctl >/dev/null && systemctl is-active --quiet syswarden-reporter; then
     systemctl restart syswarden-reporter >/dev/null 2>&1 || true
 fi
@@ -5140,6 +5132,11 @@ if [[ "$MODE" != "update" ]]; then
     setup_abuse_reporting "$MODE"
     setup_wazuh_agent "$MODE"
     setup_cron_autoupdate "$MODE"
+
+    # --- DASHBOARD MODULE V1.20 ---
+    setup_telemetry_backend
+    generate_dashboard
+    # ------------------------------
 
     echo -e "\n${GREEN}INSTALLATION SUCCESSFUL${NC}"
     echo -e " -> List loaded: $LIST_TYPE"

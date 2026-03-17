@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.20"
+VERSION="v1.21"
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
@@ -116,7 +116,7 @@ detect_os_backend() {
 install_dependencies() {
     log "INFO" "Installing required dependencies..."
 
-    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois rsyslog util-linux wireguard-tools libqrencode libqrencode-tools"
+    local deps="curl python3 py3-requests ipset fail2ban bash coreutils grep gawk sed procps logrotate ncurses whois rsyslog util-linux wireguard-tools libqrencode libqrencode-tools nginx openssl"
 
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
         deps="$deps nftables"
@@ -138,6 +138,12 @@ install_dependencies() {
 
     IFS="$OLD_IFS" # Restore strict IFS for the rest of the script
     # ----------------------------------
+
+    # --- DEVSECOPS FIX: PREEMPTIVE NGINX LOG CREATION ---
+    mkdir -p /var/log/nginx
+    touch /var/log/nginx/access.log /var/log/nginx/error.log
+    chmod 640 /var/log/nginx/*.log 2>/dev/null || true
+    # ----------------------------------------------------
 
     if ! command -v rc-update >/dev/null; then
         log "ERROR" "OpenRC is missing. This script requires a standard Alpine setup."
@@ -3282,7 +3288,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v1.20 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.21 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -3427,15 +3433,10 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.20 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
+# SYSWARDEN v1.21 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/IP-Restricted)..."
-
-    # Ensure Nginx and OpenSSL are installed for the UI
-    if ! command -v nginx >/dev/null || ! command -v openssl >/dev/null; then
-        apk add -q nginx openssl
-    fi
 
     local UI_DIR="/etc/syswarden/ui"
     mkdir -p "$UI_DIR"
@@ -3491,7 +3492,7 @@ function generate_dashboard() {
             <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center gap-3">
                     <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]" id="status-indicator"></div>
-                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.20</span></h1>
+                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.21</span></h1>
                 </div>
                 
                 <div class="flex items-center gap-2 bg-gray-100 dark:bg-dark-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -4309,6 +4310,7 @@ if [[ "$MODE" != "update" ]]; then
     define_docker_integration "$MODE"
     define_geoblocking "$MODE"
     define_asnblocking "$MODE"
+    configure_fail2ban
 fi
 
 # --- FIX 1: THE SOURCE GAP ---
@@ -4342,19 +4344,8 @@ log "INFO" "Applying massive downloaded lists to active firewall..."
 apply_firewall_rules
 # --------------------------------------
 
-# --- DEVSECOPS FIX: DASHBOARD & FAIL2BAN ORCHESTRATION ---
-# 1. Telemetry & Dashboard ALWAYS run (Install & Update) to deploy/update Nginx.
-setup_telemetry_backend
-generate_dashboard
-
-# 2. Configure Fail2ban AFTER Nginx so it natively detects the web logs.
-configure_fail2ban
-# ---------------------------------------------------------
-
-# 3. Show active jails now that Fail2ban is fully aware of all services
 detect_protected_services
 
-# 4. Restart Reporter if active
 if command -v rc-service >/dev/null && rc-service syswarden-reporter status 2>/dev/null | grep -q "started"; then
     rc-service syswarden-reporter restart >/dev/null 2>&1 || true
 fi
@@ -4365,6 +4356,11 @@ if [[ "$MODE" != "update" ]]; then
     setup_abuse_reporting "$MODE"
     setup_wazuh_agent "$MODE"
     setup_cron_autoupdate "$MODE"
+
+    # --- DASHBOARD MODULE V1.20 ---
+    setup_telemetry_backend
+    generate_dashboard
+    # ------------------------------
 
     echo -e "\n${GREEN}INSTALLATION SUCCESSFUL${NC}"
     echo -e " -> OS Detected: Alpine Linux (OpenRC)"
