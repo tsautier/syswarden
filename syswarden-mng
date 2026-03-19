@@ -2,7 +2,7 @@
 
 # SysWarden Management - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v1.25
+# Version: v1.26
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v1.25"
+VERSION="v1.26"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
@@ -232,6 +232,46 @@ whitelist_ip() {
             ;;
     esac
     echo -e "${GREEN}[✔] Hot-injected VIP Accept Rule into Kernel ($FW_BACKEND)${NC}"
+
+    # ==============================================================================
+    # --- DEVSECOPS FIX: DYNAMIC NGINX ACL INJECTION ---
+    # Automatically authorize the IP in the Dashboard UI without requiring a full
+    # system update. Uses atomic sed injection and safe Nginx config validation.
+    # ==============================================================================
+    local nginx_conf="/etc/nginx/conf.d/syswarden-ui.conf"
+    # Fallback for Debian/Ubuntu environments
+    [[ -f "/etc/nginx/sites-available/syswarden-ui.conf" ]] && nginx_conf="/etc/nginx/sites-available/syswarden-ui.conf"
+
+    if [[ -f "$nginx_conf" ]]; then
+        echo -e "${BLUE}>> Injecting $target_ip into Nginx UI Access Control List (ACL)...${NC}"
+
+        # 1. Idempotency: Verify if the IP is already allowed in the Nginx config
+        if ! grep -q "allow $target_ip;" "$nginx_conf"; then
+
+            # 2. Surgical Injection: Insert 'allow <IP>;' strictly before the 'deny all;' directive
+            sed -i "/deny all;/i \        allow $target_ip;" "$nginx_conf"
+
+            # 3. Safety Check: Validate Nginx syntax before reloading to prevent web server crash
+            if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
+
+                # 4. Zero-Downtime Hot Reload
+                if command -v systemctl >/dev/null; then
+                    systemctl reload nginx >/dev/null 2>&1 || true
+                elif command -v rc-service >/dev/null; then
+                    rc-service nginx reload >/dev/null 2>&1 || true
+                fi
+                echo -e "${GREEN}[✔] Dashboard UI access instantly granted to $target_ip via Nginx.${NC}"
+            else
+                # Rollback mechanism if injection corrupted the file
+                echo -e "${RED}[!] Nginx configuration test failed. Reverting ACL injection.${NC}"
+                sed -i "/allow $target_ip;/d" "$nginx_conf"
+            fi
+        else
+            echo -e "${YELLOW}[i] IP $target_ip is already authorized in Nginx ACL.${NC}"
+        fi
+    fi
+    # ==============================================================================
+
     echo -e "${CYAN}>> IP $target_ip is now Whitelisted.${NC}\n"
 }
 
@@ -434,7 +474,7 @@ list_ips() {
 # --- CLI ROUTER & HELP MENU ---
 show_help() {
     echo -e "${GREEN}======================================================${NC}"
-    echo -e "${YELLOW}  SysWarden Management CLI (v1.25) - Day 2 Operations ${NC}"
+    echo -e "${YELLOW}  SysWarden Management CLI (v1.26) - Day 2 Operations ${NC}"
     echo -e "${GREEN}======================================================${NC}"
     echo -e "Usage: syswarden-mng [COMMAND] [IP] [PORT]"
     echo -e ""
