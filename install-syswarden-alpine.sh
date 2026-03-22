@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.46"
+VERSION="v1.47"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -3008,13 +3008,15 @@ setup_siem_logging() {
 }
 
 setup_cron_autoupdate() {
-    if [[ "${1:-}" != "update" ]]; then
+    # Prevent recreating the cron during manual or silent updates
+    if [[ "${1:-}" != "update" ]] && [[ "${1:-}" != "cron-update" ]]; then
         local script_path
         script_path=$(realpath "$0")
+        local random_min=$((RANDOM % 60))
 
-        # Add to root's crontab natively for Alpine
+        # Add to root's crontab natively for Alpine with cron-update mode
         if ! grep -q "syswarden-update" /etc/crontabs/root 2>/dev/null; then
-            echo "5 * * * * $script_path update >/dev/null 2>&1 # syswarden-update" >>/etc/crontabs/root
+            echo "$random_min * * * * $script_path cron-update >/dev/null 2>&1 # syswarden-update" >>/etc/crontabs/root
             rc-update add crond default >/dev/null 2>&1 || true
             rc-service crond restart >/dev/null 2>&1 || true
             log "INFO" "Automatic updates enabled via Crond."
@@ -3580,7 +3582,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v1.46 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.47 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -3744,7 +3746,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.46 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
+# SYSWARDEN v1.47 - NGINX SECURE DASHBOARD (HTTPS / CSP / IP-RESTRICTED)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/IP-Restricted)..."
@@ -3803,7 +3805,7 @@ function generate_dashboard() {
             <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center gap-3">
                     <div class="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.7)]" id="status-indicator"></div>
-                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.46</span></h1>
+                    <h1 class="text-xl font-bold tracking-tight">SysWarden <span class="text-brand-500">v1.47</span></h1>
                 </div>
                 
                 <div class="flex items-center gap-2 bg-gray-100 dark:bg-dark-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -4725,6 +4727,35 @@ if [[ "$MODE" == "uninstall" ]]; then
     uninstall_syswarden
 fi
 
+if [[ "$MODE" == "cron-update" ]]; then
+    log "INFO" "Starting silent CRON update (Threat Intelligence only)..."
+    check_root
+    detect_os_backend
+
+    if [[ -f "$CONF_FILE" ]]; then
+        # shellcheck source=/dev/null
+        source "$CONF_FILE"
+    else
+        log "ERROR" "Config file missing. Aborting cron update."
+        exit 1
+    fi
+
+    # 1. Download fresh lists
+    select_list_type "update"
+    select_mirror "update"
+    download_list
+    download_geoip
+    download_asn
+
+    # 2. Inject silently into Kernel (Zero-Downtime)
+    discover_active_services
+    apply_firewall_rules
+
+    log "INFO" "CRON Update Complete. Firewall rules refreshed securely."
+    # Crucial exit to prevent background process duplication
+    exit 0
+fi
+
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
@@ -4748,7 +4779,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.46 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.47 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -4867,6 +4898,16 @@ if [[ "$MODE" != "update" ]]; then
 
     display_wireguard_qr
 else
+    # --- DEVSECOPS FIX: FORCE CRON SYNTAX UPGRADE DURING UPDATE ---
+    if [[ -f /etc/crontabs/root ]]; then
+        sed -i 's/\.sh update >/\.sh cron-update >/g' /etc/crontabs/root 2>/dev/null || true
+        rc-service crond restart 2>/dev/null || true
+    fi
+    if [[ -f /etc/cron.d/syswarden-update ]]; then
+        sed -i 's/\.sh update >/\.sh cron-update >/g' /etc/cron.d/syswarden-update 2>/dev/null || true
+    fi
+    # --------------------------------------------------------------
+
     # Give clear feedback during an update
     echo -e "\n${GREEN}UPDATE SUCCESSFUL${NC}"
     echo -e " -> SysWarden Engine & Dashboard UI have been updated to the latest version."
