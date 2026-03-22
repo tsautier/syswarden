@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.40 - DevSecOps Audit & Compliance Tool
+# SysWarden v1.41 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -237,7 +237,36 @@ else
     fail "SysWarden firewall rules not found in kernel space."
 fi
 
-# --- DEVSECOPS FIX: STATEFUL DOCKER ROUTING AUDIT (v1.40) ---
+# --- Verify Catch-All Drop Policy (v1.41 Zero Trust Architecture) ---
+CATCH_ALL_PASSED=0
+if [[ "$FW_ENGINE" == "Nftables" ]]; then
+    if nft list chain inet syswarden_table input 2>/dev/null | grep -q "\[Catch-All\]"; then
+        CATCH_ALL_PASSED=1
+    fi
+elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
+    # In Firewalld, our Catch-All is setting the zone target to DROP
+    if firewall-cmd --get-target --zone=public 2>/dev/null | grep -q "DROP"; then
+        CATCH_ALL_PASSED=1
+    fi
+elif [[ "$FW_ENGINE" == "UFW" ]]; then
+    # In UFW, our Catch-All is the default deny incoming policy
+    if ufw status verbose 2>/dev/null | grep -q "Default: deny (incoming)"; then
+        CATCH_ALL_PASSED=1
+    fi
+elif [[ "$FW_ENGINE" == "Iptables" ]]; then
+    if iptables -S INPUT 2>/dev/null | grep -q "\[Catch-All\]"; then
+        CATCH_ALL_PASSED=1
+    fi
+fi
+
+if [[ $CATCH_ALL_PASSED -eq 1 ]]; then
+    pass "Zero Trust Architecture VERIFIED: Catch-All Drop policy is active at the network edge."
+else
+    fail "Zero Trust Architecture FAILED: Catch-All Drop policy is missing. Run 'install-syswarden update'."
+fi
+# ----------------------------------------------------------------
+
+# --- DEVSECOPS FIX: STATEFUL DOCKER ROUTING AUDIT (v1.41) ---
 if command -v docker >/dev/null 2>&1 && is_service_active "docker"; then
     if command -v iptables >/dev/null 2>&1 && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
 
