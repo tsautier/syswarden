@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.63 - DevSecOps Audit & Compliance Tool
+# SysWarden v1.64 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -38,9 +38,12 @@ TOTAL=0
 
 # --- SECURE AUDIT LOGGING ---
 AUDIT_LOG="/var/log/syswarden-audit.log"
-# Secure the log file immediately (Prevent unauthorized reading of the audit results)
-touch "$AUDIT_LOG" && chmod 600 "$AUDIT_LOG"
+
+# --- DEVSECOPS FIX: Atomic secure file creation (Anti-TOCTOU) ---
+# Create the file within a subshell using a strict umask to prevent local eavesdropping
+(umask 077 && touch "$AUDIT_LOG")
 echo "=== SYSWARDEN PURPLE TEAM AUDIT STARTED: $(date -u +"%Y-%m-%dT%H:%M:%SZ") ===" >"$AUDIT_LOG"
+# ----------------------------------------------------------------
 
 # --- HELPERS (Dual-Output: Console + Standardized Log) ---
 log_header() {
@@ -177,7 +180,7 @@ else
     info "OS Hardening was skipped during installation (Existing Server). Strict compliance bypassed."
 fi
 
-# --- DEVSECOPS FIX: CRON ORCHESTRATION & IDEMPOTENCE (v1.63) ---
+# --- DEVSECOPS FIX: CRON ORCHESTRATION & IDEMPOTENCE (v1.64) ---
 # Scan for legacy update loops that cause ghost processes
 CRON_SAFE=1
 CRON_FOUND=0
@@ -274,7 +277,7 @@ else
     fail "SysWarden firewall rules not found in kernel space."
 fi
 
-# --- Verify Catch-All Drop Policy (v1.63 Zero Trust Architecture) ---
+# --- Verify Catch-All Drop Policy (v1.64 Zero Trust Architecture) ---
 CATCH_ALL_PASSED=0
 if [[ "$FW_ENGINE" == "Nftables" ]]; then
     # DEVSECOPS FIX: grep >/dev/null prevents SIGPIPE pipefail crashes
@@ -305,7 +308,7 @@ else
     fail "Zero Trust Architecture FAILED: Catch-All Drop policy is missing. Run 'install-syswarden update'."
 fi
 
-# --- DEVSECOPS FIX: STATEFUL DOCKER ROUTING AUDIT (v1.63) ---
+# --- DEVSECOPS FIX: STATEFUL DOCKER ROUTING AUDIT (v1.64) ---
 if command -v docker >/dev/null 2>&1 && is_service_active "docker"; then
     if command -v iptables >/dev/null 2>&1 && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
 
@@ -344,7 +347,7 @@ if is_service_active "fail2ban"; then
     if fail2ban-client ping >/dev/null 2>&1; then
         pass "Fail2ban socket is highly responsive (Pong)."
 
-        # --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.63) ---
+        # --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.64) ---
         # Count running instances. Using regex bracket trick [f] to exclude the grep process itself safely.
         # wc -l ensures exit code 0 even if no process is found, respecting 'set -e'.
         F2B_PROC_COUNT=$(ps aux | grep "[f]ail2ban-server" | wc -l)
@@ -412,7 +415,7 @@ else
     fail "Telemetry Orchestrator script is missing."
 fi
 
-# --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.63) ---
+# --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.64) ---
 # We force a single numeric value by taking only the first line and removing spaces
 # This prevents the "0 0" or "1 1" error on some distributions
 TELEMETRY_RAW=$(ps aux | grep "[s]yswarden-telemetry.sh" | wc -l || echo 0)

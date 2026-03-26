@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.63"
+VERSION="v1.64"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -658,6 +658,11 @@ define_geoblocking() {
             read -p "Enter country codes separated by space [Default: ru cn kp ir]: " geo_codes
         fi
 
+        # --- DEVSECOPS FIX: Input validation to prevent Configuration Injection ---
+        # Strip all characters except letters, numbers, and spaces.
+        geo_codes=$(echo "$geo_codes" | tr -cd 'a-zA-Z0-9 ' | xargs)
+        # ------------------------------------------------------------------------
+
         GEOBLOCK_COUNTRIES=${geo_codes:-ru cn kp ir}
         # Force lowercase for the URL
         GEOBLOCK_COUNTRIES=$(echo "$GEOBLOCK_COUNTRIES" | tr '[:upper:]' '[:lower:]')
@@ -697,6 +702,12 @@ define_asnblocking() {
             log "INFO" "Auto Mode: ASN List and Spamhaus preference loaded via env vars."
         else
             read -p "Enter custom ASN numbers separated by space (Leave empty for none): " asn_list
+
+            # --- DEVSECOPS FIX: Input validation to prevent Configuration Injection ---
+            # Allow only letters, numbers, and spaces to prevent shell breakouts.
+            asn_list=$(echo "$asn_list" | tr -cd 'a-zA-Z0-9 ' | xargs)
+            # ------------------------------------------------------------------------
+
             echo -e "${YELLOW}Note: Fetching and resolving the Spamhaus ASN-DROP list can take more than 5 minutes.${NC}"
             read -p "Include Spamhaus ASN-DROP list (Cybercrime Hosters)? (Y/n): " use_spamhaus
         fi
@@ -815,11 +826,12 @@ download_list() {
         # --- SECURITY FIX: STRICT CIDR SEMANTIC VALIDATION ---
         # Validates exact octet ranges (0-255) and subnet masks (0-32) to prevent firewall crash (F13)
         tr -d '\r' <"$output_file" | awk -F'[/.]' 'NF==4 || NF==5 {
-            valid=1; for(i=1;i<=4;i++) if($i<0 || $i>255 || $i=="") valid=0;
-            if(NF==5 && ($5<0 || $5>32 || $5=="")) valid=0;
+            valid=1; 
+            for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i<0 || $i>255 || $i=="") valid=0;
+            if(NF==5 && ($5 !~ /^[0-9]+$/ || $5<0 || $5>32 || $5=="")) valid=0;
             if(valid) print $0;
-        }' >"$TMP_DIR/clean_list.txt"
-        # -----------------------------------------------------ist.txt"
+        }' "$output_file" >"$TMP_DIR/clean_list.txt"
+        # -----------------------------------------------------
         FINAL_LIST="$TMP_DIR/clean_list.txt"
         log "INFO" "Download success."
     else
@@ -858,8 +870,9 @@ download_geoip() {
         # Ensure valid CIDR formats and remove duplicates
         # --- SECURITY FIX: STRICT CIDR SEMANTIC VALIDATION ---
         awk -F'[/.]' 'NF==4 || NF==5 {
-            valid=1; for(i=1;i<=4;i++) if($i<0 || $i>255 || $i=="") valid=0;
-            if(NF==5 && ($5<0 || $5>32 || $5=="")) valid=0;
+            valid=1; 
+            for(i=1;i<=4;i++) if($i !~ /^[0-9]+$/ || $i<0 || $i>255 || $i=="") valid=0;
+            if(NF==5 && ($5 !~ /^[0-9]+$/ || $5<0 || $5>32 || $5=="")) valid=0;
             if(valid) print $0;
         }' "$TMP_DIR/geoip_raw.txt" | sort -u >"$GEOIP_FILE"
         # -----------------------------------------------------
@@ -1224,7 +1237,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v1.63) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v1.64) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -4402,7 +4415,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.63 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.64 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4567,7 +4580,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.63 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS)
+# SYSWARDEN v1.64 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4758,7 +4771,7 @@ function generate_dashboard() {
         <div class="container flex-between">
             <div class="flex-align">
                 <div class="status-dot" id="status-indicator"></div>
-                <h1 style="font-size: 1.25rem; font-weight: bold;">SysWarden <span class="text-brand">v1.63</span></h1>
+                <h1 style="font-size: 1.25rem; font-weight: bold;">SysWarden <span class="text-brand">v1.64</span></h1>
             </div>
             <div class="theme-controls">
                 <button onclick="setTheme('light')" class="theme-btn">Light</button>
@@ -5794,7 +5807,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v1.63)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v1.64)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -5831,7 +5844,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.63 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.64 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
