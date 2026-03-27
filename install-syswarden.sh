@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.65"
+VERSION="v1.66"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1224,7 +1224,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v1.65) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v1.66) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -4402,7 +4402,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.65 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.66 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4567,7 +4567,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.65 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS)
+# SYSWARDEN v1.66 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS / BENTO-DARK)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4589,7 +4589,7 @@ function generate_dashboard() {
     # 1. Generating the HTML file
     cat <<'EOF' >"$UI_DIR/index.html"
 <!DOCTYPE html>
-<html lang="en" class="system">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4598,7 +4598,7 @@ function generate_dashboard() {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     
     <style>
-        /* --- HYPER MODERN TERMINAL THEME (Vanilla CSS) --- */
+        /* --- HYPER MODERN DEVSECOPS THEME (Bento Box + Glassmorphism) --- */
         
         /* Font Integration */
         @font-face {
@@ -4612,56 +4612,71 @@ function generate_dashboard() {
             font-weight: bold; font-style: normal; font-display: swap;
         }
 
-        /* Color Variables */
+        /* Color Variables - Deep Dark Cyberpunk */
         :root {
-            --bg-base: #f1f5f9;
-            --bg-panel: #ffffff;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border: #cbd5e1;
-            --brand: #ef4444;
-            --brand-glow: rgba(239, 68, 68, 0.15);
-            --success: #10b981;
-            --success-glow: rgba(16, 185, 129, 0.15);
-            --accent: #3b82f6;
-            --font-mono: 'JetBrains Mono', monospace;
-        }
-
-        html.dark {
-            --bg-base: #050505;       /* Deep Terminal Black */
-            --bg-panel: #111111;      /* Elevated Panel */
-            --text-main: #e5e5e5;
-            --text-muted: #737373;
-            --border: #262626;
-            --brand: #ff453a;         /* Cyberpunk Red */
-            --brand-glow: rgba(255, 69, 58, 0.15);
-            --success: #32d74b;       /* Terminal Green */
-            --success-glow: rgba(50, 215, 75, 0.15);
-            --accent: #0a84ff;
+            --bg-base: #050507;               /* Ultra deep dark background */
+            --bg-panel: rgba(20, 20, 25, 0.4); /* Glassmorphism base */
+            --bg-panel-hover: rgba(30, 30, 38, 0.6);
+            --text-main: #f8fafc;
+            --text-muted: #8b9bb4;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(255, 255, 255, 0.15);
+            --brand: #ff003c;                 /* Red Neon */
+            --brand-glow: rgba(255, 0, 60, 0.2);
+            --success: #00ff88;               /* Matrix Green */
+            --success-glow: rgba(0, 255, 136, 0.2);
+            --accent: #00d8ff;                /* Blue Neon */
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
         }
 
         /* Reset & Base */
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-mono); }
+        
         body {
-            background-color: var(--bg-base); color: var(--text-main);
-            font-family: var(--font-mono); line-height: 1.5;
-            transition: background-color 0.3s, color 0.3s;
+            background-color: var(--bg-base); 
+            color: var(--text-main);
+            line-height: 1.5;
             min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
         }
+
+        /* --- ORBS & HALO EFFECTS (Background) --- */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: -1;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        body::before {
+            top: -15%; left: -10%;
+            width: 50vw; height: 50vh;
+            background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%);
+        }
+        body::after {
+            bottom: -20%; right: -10%;
+            width: 60vw; height: 60vh;
+            background: radial-gradient(circle, rgba(0, 216, 255, 0.15) 0%, transparent 70%);
+        }
+
         a { color: var(--brand); text-decoration: none; transition: color 0.2s; }
-        a:hover { color: var(--accent); text-decoration: underline; }
+        a:hover { color: var(--accent); text-decoration: underline; text-shadow: 0 0 8px var(--accent); }
 
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
         /* Typography & Utilities */
         .text-sm { font-size: 0.875rem; }
         .text-xs { font-size: 0.75rem; }
-        .text-brand { color: var(--brand); }
-        .text-success { color: var(--success); }
+        .text-brand { color: var(--brand); text-shadow: 0 0 10px var(--brand-glow); }
+        .text-success { color: var(--success); text-shadow: 0 0 10px var(--success-glow); }
+        .text-accent { color: var(--accent); }
         .text-muted { color: var(--text-muted); }
         .font-bold { font-weight: bold; }
         .uppercase { text-transform: uppercase; }
@@ -4672,85 +4687,88 @@ function generate_dashboard() {
         .flex-align { display: flex; align-items: center; gap: 0.75rem; }
         .flex-between { display: flex; justify-content: space-between; align-items: center; }
 
-        /* Layout & Grids */
-        .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
-        .grid { display: grid; gap: 1rem; }
+        /* Layout & Bento Grids */
+        .container { max-width: 1300px; margin: 0 auto; padding: 0 1.5rem; }
+        .grid { display: grid; gap: 1.25rem; }
         .grid-4 { grid-template-columns: repeat(4, 1fr); }
         .grid-3 { grid-template-columns: repeat(3, 1fr); }
         .grid-2 { grid-template-columns: repeat(2, 1fr); }
         .chart-span { grid-column: span 2; }
 
-        @media (max-width: 1024px) {
-            .grid-4, .grid-3 { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) { .grid-4, .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 768px) { 
             .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
             .chart-span { grid-column: span 1; }
         }
 
-        /* Navbar */
-        .navbar { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 1rem 0; }
-        .status-dot {
-            width: 12px; height: 12px; border-radius: 50%; background: var(--brand);
-            box-shadow: 0 0 10px var(--brand-glow); animation: pulse 2s infinite;
+        /* Navbar Glass */
+        .navbar { 
+            background: rgba(5, 5, 7, 0.7); 
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border); 
+            padding: 1.25rem 0; 
+            position: sticky; top: 0; z-index: 100;
         }
-        .theme-controls { display: flex; gap: 0.5rem; background: var(--bg-base); padding: 0.25rem; border-radius: 6px; border: 1px solid var(--border); }
-        .theme-btn {
-            background: transparent; color: var(--text-muted); border: none;
-            padding: 0.25rem 0.75rem; font-family: inherit; font-size: 0.8rem;
-            cursor: pointer; border-radius: 4px; transition: all 0.2s;
-        }
-        .theme-btn:hover { background: var(--bg-panel); color: var(--text-main); }
-
-        /* Panels */
-        .panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
-        .panel-title { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.5rem; }
-        .panel-val { font-size: 1.25rem; font-weight: bold; }
-        .val-huge { font-size: 3.5rem; font-weight: bold; color: var(--brand); line-height: 1; }
         
-        .panel-highlight { border-color: var(--brand); box-shadow: 0 0 20px var(--brand-glow); position: relative; overflow: hidden; }
-        .panel-highlight::after {
-            content: ''; position: absolute; top: 0; right: 0; width: 100px; height: 100px;
-            background: var(--brand); opacity: 0.05; border-bottom-left-radius: 100%; pointer-events: none;
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%; background: var(--brand);
+            box-shadow: 0 0 12px var(--brand); animation: pulse 2s infinite;
+        }
+
+        /* Bento Panels */
+        .panel { 
+            background: var(--bg-panel); 
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border); 
+            border-radius: 16px; 
+            padding: 1.5rem; 
+            transition: all 0.3s ease;
+        }
+        .panel:hover { border-color: var(--border-highlight); background: var(--bg-panel-hover); }
+        
+        .panel-title { 
+            font-size: 0.75rem; font-weight: bold; text-transform: uppercase; 
+            letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.5rem; 
+        }
+        .panel-val { font-size: 1.5rem; font-weight: bold; }
+        .val-huge { font-size: 4rem; font-weight: bold; color: var(--brand); line-height: 1; text-shadow: 0 0 20px var(--brand-glow); }
+        
+        .panel-highlight { 
+            border-color: rgba(255, 0, 60, 0.3); 
+            box-shadow: inset 0 0 40px rgba(255, 0, 60, 0.05); 
+            position: relative; overflow: hidden; 
         }
 
         /* Lists & Data */
         .list-container { display: flex; flex-direction: column; gap: 0.5rem; }
         .list-item {
             display: flex; justify-content: space-between; align-items: center;
-            background: var(--bg-base); padding: 0.5rem 0.75rem;
-            border-radius: 4px; border: 1px solid var(--border); font-size: 0.85rem;
+            background: rgba(0, 0, 0, 0.3); padding: 0.75rem 1rem;
+            border-radius: 12px; border: 1px solid var(--border); font-size: 0.85rem;
+            transition: border-color 0.2s;
         }
-        .list-item-hover:hover { border-color: var(--text-muted); }
-        .rank { color: var(--text-muted); font-weight: bold; width: 1.5rem; display: inline-block; }
+        .list-item-hover:hover { border-color: var(--border-highlight); background: rgba(255, 255, 255, 0.03); }
+        .rank { color: var(--text-muted); font-weight: bold; width: 1.75rem; display: inline-block; }
         
-        .tag-red { background: var(--brand-glow); color: var(--brand); padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; }
-        .tag-green { background: var(--success-glow); color: var(--success); padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; border: 1px solid rgba(50,215,75,0.2); }
+        .tag-red { background: rgba(255, 0, 60, 0.1); color: var(--brand); padding: 2px 10px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; border: 1px solid rgba(255,0,60,0.2); }
+        .tag-green { background: rgba(0, 255, 136, 0.05); color: var(--success); padding: 2px 10px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; border: 1px solid rgba(0,255,136,0.2); box-shadow: 0 0 8px var(--success-glow); }
 
-        .table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        .table th { text-align: left; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: normal; }
-        .table td { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
-        .table tr:last-child td { border-bottom: none; }
-        .table tr:hover td { background: var(--bg-base); }
+        .table { width: 100%; border-collapse: separate; border-spacing: 0 0.5rem; font-size: 0.85rem; }
+        .table th { text-align: left; padding: 0 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-weight: normal; border-bottom: 1px solid var(--border); }
+        .table td { padding: 0.75rem 1rem; background: rgba(0, 0, 0, 0.3); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .table tr td:first-child { border-left: 1px solid var(--border); border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+        .table tr td:last-child { border-right: 1px solid var(--border); border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+        .table tr:hover td { background: rgba(255, 255, 255, 0.03); border-color: var(--border-highlight); }
 
-        .scroll-y { max-height: 250px; overflow-y: auto; padding-right: 0.5rem; }
-        .chart-wrapper { position: relative; height: 250px; width: 100%; }
+        .scroll-y { max-height: 280px; overflow-y: auto; padding-right: 0.5rem; }
+        .chart-wrapper { position: relative; height: 280px; width: 100%; }
 
         @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--brand-glow); }
-            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0,0,0,0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255,0,60,0.7); }
+            70% { transform: scale(1.2); box-shadow: 0 0 0 10px rgba(255,0,60,0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255,0,60,0); }
         }
     </style>
-
-    <script>
-        // Initial Theme Detection
-        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    </script>
 </head>
 <body>
 
@@ -4758,22 +4776,20 @@ function generate_dashboard() {
         <div class="container flex-between">
             <div class="flex-align">
                 <div class="status-dot" id="status-indicator"></div>
-                <h1 style="font-size: 1.25rem; font-weight: bold;">SysWarden <span class="text-brand">v1.65</span></h1>
+                <h1 style="font-size: 1.25rem; font-weight: bold; letter-spacing: -0.05em;">SYSWARDEN <span class="text-brand">v1.66</span></h1>
             </div>
-            <div class="theme-controls">
-                <button onclick="setTheme('light')" class="theme-btn">Light</button>
-                <button onclick="setTheme('dark')" class="theme-btn">Dark</button>
-                <button onclick="setTheme('system')" class="theme-btn">System</button>
+            <div>
+                <span class="text-xs text-muted uppercase tracking-widest font-bold">Secure Telemetry Active</span>
             </div>
         </div>
     </nav>
 
-    <main class="container" style="padding-top: 2rem;">
+    <main class="container" style="padding-top: 2.5rem; padding-bottom: 3rem;">
         
         <div class="grid grid-4 mb-8">
             <div class="panel">
                 <p class="panel-title">Hostname</p>
-                <p class="panel-val" id="sys-hostname">--</p>
+                <p class="panel-val text-accent" id="sys-hostname">--</p>
             </div>
             <div class="panel">
                 <p class="panel-title">Uptime</p>
@@ -4781,7 +4797,7 @@ function generate_dashboard() {
             </div>
             <div class="panel">
                 <p class="panel-title">Load Average</p>
-                <p class="panel-val text-accent" id="sys-load">--</p>
+                <p class="panel-val" id="sys-load">--</p>
             </div>
             <div class="panel">
                 <p class="panel-title">RAM Usage</p>
@@ -4812,23 +4828,23 @@ function generate_dashboard() {
                 <h2 class="panel-title text-brand mb-4">Layer 7 Fail2ban WAF</h2>
                 <p class="text-sm text-muted mb-4">Total Active Bans (Real-time)</p>
                 <p class="val-huge" id="l7-banned">0</p>
-                <p class="text-sm text-muted mt-4"><span id="l7-jails" class="font-bold">0</span> Jails Monitoring</p>
+                <p class="text-sm text-muted mt-4"><span id="l7-jails" class="font-bold text-main">0</span> Jails Monitoring</p>
             </div>
 
             <div class="panel" style="display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
                     <h2 class="panel-title text-success mb-4">Safe Zone (Whitelist)</h2>
                     <p class="val-huge" style="color: var(--success);" id="wl-count">0</p>
-                    <p class="text-sm text-muted">Protected IP Addresses</p>
+                    <p class="text-sm text-muted mt-4">Protected IP Addresses</p>
                 </div>
                 <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem; text-align: right;">
-                    <p class="text-xs text-muted">Last Update: <span id="last-update" class="font-bold">Never</span></p>
+                    <p class="text-xs text-muted uppercase">Last Sync: <span id="last-update" class="font-bold text-main">Never</span></p>
                 </div>
             </div>
         </div>
 
         <div class="panel mb-8">
-            <h2 class="panel-title text-brand mb-4">Top 10 Attacks (Vectors & Repeat Offenders)</h2>
+            <h2 class="panel-title text-brand mb-4">Threat Vectors & Repeat Offenders</h2>
             <div class="grid grid-2">
                 <div>
                     <h3 class="text-xs font-bold text-muted uppercase mb-4">Most Triggered Jails</h3>
@@ -4837,7 +4853,7 @@ function generate_dashboard() {
                     </ul>
                 </div>
                 <div>
-                    <h3 class="text-xs font-bold text-muted uppercase mb-4">Top Attacking IPs</h3>
+                    <h3 class="text-xs font-bold text-muted uppercase mb-4">Top Attacking IPs (OSINT)</h3>
                     <ul id="top-ips-list" class="list-container">
                         <li class="text-xs text-muted italic">Awaiting telemetry...</li>
                     </ul>
@@ -4868,9 +4884,9 @@ function generate_dashboard() {
                 <h2 class="panel-title mb-4">L7 Banned IP Registry</h2>
                 <div class="scroll-y">
                      <table class="table">
-                        <thead style="position: sticky; top: 0; background: var(--bg-panel); z-index: 10;">
+                        <thead style="position: sticky; top: 0; background: var(--bg-base); z-index: 10;">
                             <tr>
-                                <th>IP Address (OSINT)</th>
+                                <th>IP Address</th>
                                 <th style="text-align: right;">Target Jail</th>
                             </tr>
                         </thead>
@@ -4889,59 +4905,60 @@ function generate_dashboard() {
     </main>
 
     <script>
-        // --- 1. THEME ENGINE ---
-        function setTheme(mode) {
-            if (mode === 'dark') {
-                localStorage.theme = 'dark';
-                document.documentElement.classList.add('dark');
-            } else if (mode === 'light') {
-                localStorage.theme = 'light';
-                document.documentElement.classList.remove('dark');
-            } else {
-                localStorage.removeItem('theme');
-                if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    document.documentElement.classList.add('dark');
-                } else {
-                    document.documentElement.classList.remove('dark');
-                }
-            }
-        }
-
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-            if (!('theme' in localStorage)) {
-                if (e.matches) { document.documentElement.classList.add('dark'); } 
-                else { document.documentElement.classList.remove('dark'); }
-            }
-        });
-
-        // --- 2. CHART ENGINE (FAULT-TOLERANT) ---
+        // --- 1. CHART ENGINE (FAULT-TOLERANT & GLASSMORPHISM ADAPTED) ---
         let threatChart = null;
         const chartData = {
             labels: [],
             datasets: [{
                 label: 'L7 Active Bans',
                 data: [],
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                borderColor: '#ff003c',
+                backgroundColor: 'rgba(255, 0, 60, 0.1)',
                 borderWidth: 2,
-                tension: 0.3,
+                tension: 0.4, // Smoother neon curve
                 fill: true,
-                pointRadius: 0
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: '#00d8ff'
             }]
         };
         
         try {
             const ctx = document.getElementById('threatChart').getContext('2d');
+            
+            // Add gradient for the chart fill
+            let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(255, 0, 60, 0.3)');
+            gradient.addColorStop(1, 'rgba(255, 0, 60, 0)');
+            chartData.datasets[0].backgroundColor = gradient;
+
             threatChart = new Chart(ctx, {
                 type: 'line',
                 data: chartData,
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    color: '#8b9bb4',
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(20, 20, 25, 0.8)',
+                            titleFont: { family: 'JetBrains Mono', size: 13 },
+                            bodyFont: { family: 'JetBrains Mono', size: 13 },
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 1
+                        }
+                    },
                     scales: {
-                        x: { display: false },
-                        y: { beginAtZero: true, grid: { color: 'rgba(156, 163, 175, 0.1)' } }
+                        x: { 
+                            display: false,
+                            grid: { color: 'rgba(255, 255, 255, 0.03)' }
+                        },
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { font: { family: 'JetBrains Mono' } }
+                        }
                     },
                     animation: { duration: 0 }
                 }
@@ -4950,7 +4967,7 @@ function generate_dashboard() {
             console.warn("Chart.js failed to load. The dashboard will continue running without the graph.", error);
         }
 
-        // --- 3. DATA FETCH ENGINE ---
+        // --- 2. DATA FETCH ENGINE ---
         const MAX_DATA_POINTS = 30;
 
         async function fetchTelemetry() {
@@ -5097,8 +5114,8 @@ function generate_dashboard() {
                     data.whitelist.ips.forEach(ip => {
                         const li = document.createElement('li');
                         li.className = 'list-item';
-                        li.style.borderColor = 'rgba(16, 185, 129, 0.2)';
-                        li.style.background = 'rgba(16, 185, 129, 0.05)';
+                        li.style.borderColor = 'rgba(0, 255, 136, 0.2)';
+                        li.style.background = 'rgba(0, 255, 136, 0.05)';
                         
                         const spanIp = document.createElement('span');
                         spanIp.className = 'font-bold text-success text-xs';
@@ -5106,7 +5123,7 @@ function generate_dashboard() {
                         
                         const spanBadge = document.createElement('span');
                         spanBadge.className = 'tag-green';
-                        spanBadge.textContent = 'Safe';
+                        spanBadge.textContent = 'SAFE';
                         
                         li.appendChild(spanIp);
                         li.appendChild(spanBadge);
@@ -5134,11 +5151,13 @@ function generate_dashboard() {
                 // Update Status UI
                 document.getElementById('last-update').innerText = timeString;
                 document.getElementById('status-indicator').style.backgroundColor = 'var(--brand)';
+                document.getElementById('status-indicator').style.boxShadow = '0 0 12px var(--brand)';
 
             } catch (error) {
                 console.error("Telemetry Fetch Error:", error);
                 document.getElementById('last-update').innerText = "Offline / Error";
                 document.getElementById('status-indicator').style.backgroundColor = 'var(--text-muted)';
+                document.getElementById('status-indicator').style.boxShadow = 'none';
             }
         }
 
@@ -5797,7 +5816,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v1.65)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v1.66)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -5834,7 +5853,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.65 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.66 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"

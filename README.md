@@ -36,7 +36,7 @@
 
 # SysWarden
 
-SysWarden is an enterprise-grade, open-source firewall orchestrator designed to eliminate 99% of noisy, disruptive, and malicious internet traffic. Built around the [Data-Shield IPv4 Blocklists community](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist), it dynamically integrates GeoIP filtering, [Spamhaus ASN blocking](https://www.spamhaus.org/drop/asndrop.json), and [Fail2ban](https://github.com/fail2ban/fail2ban) intrusion prevention. > Engineered for modern infrastructure, SysWarden provides hermetic Docker protection, automated [AbuseIPDB](https://www.abuseipdb.com/) reporting, and deploys a stealth [WireGuard](https://www.wireguard.com/) management VPN—all operating natively within the Linux kernel to guarantee maximum security with near-zero RAM consumption.
+SysWarden is an enterprise-grade, open-source firewall orchestrator designed to eliminate 98,2% of noisy, disruptive, and malicious internet traffic. Built around the [Data-Shield IPv4 Blocklists community](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist), it dynamically integrates GeoIP filtering, [Spamhaus ASN blocking](https://www.spamhaus.org/drop/asndrop.json), and [Fail2ban](https://github.com/fail2ban/fail2ban) intrusion prevention. > Engineered for modern infrastructure, SysWarden provides hermetic Docker protection, automated [AbuseIPDB](https://www.abuseipdb.com/) reporting, and deploys a stealth [WireGuard](https://www.wireguard.com/) management VPN—all operating natively within the Linux kernel to guarantee maximum security with near-zero RAM consumption.
 
 ## What Does SysWarden Protect?
 
@@ -191,7 +191,7 @@ For Universal OS (Debian / Ubuntu / RHEL ecosystem):
 
 ```bash
 cd /usr/local/bin/
-wget https://github.com/duggytuxy/syswarden/releases/download/v1.65/install-syswarden.sh
+wget https://github.com/duggytuxy/syswarden/releases/download/v1.66/install-syswarden.sh
 chmod +x install-syswarden.sh
 ./install-syswarden.sh
 ```
@@ -200,7 +200,7 @@ For Alpine Linux (OpenRC):
 
 ```bash
 cd /usr/local/bin/
-wget https://github.com/duggytuxy/syswarden/releases/download/v1.65/install-syswarden-alpine.sh
+wget https://github.com/duggytuxy/syswarden/releases/download/v1.66/install-syswarden-alpine.sh
 chmod +x install-syswarden-alpine.sh
 ./install-syswarden-alpine.sh
 ```
@@ -219,7 +219,7 @@ Paste the following configuration into the file (exemple:)
 
 ```
 # ==============================================================================
-# Version=v1.65
+# Version=v1.66
 # SYSWARDEN UNATTENDED INSTALLATION CONFIGURATION
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
