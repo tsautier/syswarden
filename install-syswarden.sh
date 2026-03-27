@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.66"
+VERSION="v1.67"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -156,6 +156,19 @@ install_dependencies() {
 
     # Check if array is not empty
     if [[ ${#missing_common[@]} -gt 0 ]]; then
+
+        # --- DEVSECOPS FIX: GHOST CONFIGURATION PREVENTION ---
+        # Debian/Ubuntu automatically starts Nginx post-installation.
+        # If a previous SysWarden configuration exists but the SSL certs were wiped,
+        # dpkg will crash. We aggressively clean legacy configs before installing.
+        if [[ -f /etc/debian_version ]] && [[ " ${missing_common[*]} " =~ " nginx " ]]; then
+            log "INFO" "Cleaning up potential legacy Nginx configurations before install..."
+            rm -f /etc/nginx/conf.d/syswarden-ui.conf
+            rm -f /etc/nginx/sites-available/syswarden-ui.conf
+            rm -f /etc/nginx/sites-enabled/syswarden-ui.conf
+        fi
+        # -----------------------------------------------------
+
         if [[ -f /etc/debian_version ]]; then
             export DEBIAN_FRONTEND=noninteractive
             apt-get install -y "${missing_common[@]}"
@@ -1224,7 +1237,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v1.66) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v1.67) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -4165,14 +4178,24 @@ EOF
     fi
 
     # 5. Remove Nginx Dashboard (State Aware)
+
+    # --- DEVSECOPS FIX: CLEAN UNINSTALL ---
+    # Remove Nginx virtual host configurations unconditionally
+    log "INFO" "Removing Nginx UI configuration..."
+    rm -f /etc/nginx/conf.d/syswarden-ui.conf
+    rm -f /etc/nginx/sites-available/syswarden-ui.conf
+    rm -f /etc/nginx/sites-enabled/syswarden-ui.conf
+
+    # Reload Nginx gracefully if it is still running
+    if systemctl is-active --quiet nginx; then
+        systemctl reload nginx >/dev/null 2>&1 || true
+    fi
+    # --------------------------------------
+
     if [[ "${NGINX_INSTALLED_BY_SYSWARDEN:-n}" == "y" ]]; then
         log "INFO" "Purging Nginx (installed by SysWarden)..."
         systemctl stop nginx 2>/dev/null || true
         if [[ -f /etc/debian_version ]]; then apt-get purge -y nginx 2>/dev/null || true; else dnf remove -y nginx 2>/dev/null || true; fi
-    else
-        log "INFO" "Removing SysWarden Dashboard UI only..."
-        rm -f /etc/nginx/sites-available/syswarden-ui.conf /etc/nginx/sites-enabled/syswarden-ui.conf /etc/nginx/conf.d/syswarden-ui.conf
-        systemctl reload nginx 2>/dev/null || true
     fi
 
     # 6. Remove Wazuh Agent
@@ -4402,7 +4425,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.66 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.67 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4567,7 +4590,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.66 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS / BENTO-DARK)
+# SYSWARDEN v1.67 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS / BENTO-DARK)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4776,7 +4799,7 @@ function generate_dashboard() {
         <div class="container flex-between">
             <div class="flex-align">
                 <div class="status-dot" id="status-indicator"></div>
-                <h1 style="font-size: 1.25rem; font-weight: bold; letter-spacing: -0.05em;">SYSWARDEN <span class="text-brand">v1.66</span></h1>
+                <h1 style="font-size: 1.25rem; font-weight: bold; letter-spacing: -0.05em;">SYSWARDEN <span class="text-brand">v1.67</span></h1>
             </div>
             <div>
                 <span class="text-xs text-muted uppercase tracking-widest font-bold">Secure Telemetry Active</span>
@@ -5816,7 +5839,7 @@ fi
 if [[ "$MODE" != "update" ]]; then
     clear
     echo -e "${GREEN}#############################################################"
-    echo -e "#     SysWarden Tool Installer (Universal v1.66)     #"
+    echo -e "#     SysWarden Tool Installer (Universal v1.67)     #"
     echo -e "#############################################################${NC}"
 fi
 
@@ -5853,7 +5876,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.66 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.67 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
