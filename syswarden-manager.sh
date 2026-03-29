@@ -2,7 +2,7 @@
 
 # SysWarden Manager - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v1.71
+# Version: v1.72
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v1.71"
+VERSION="v1.72"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
@@ -485,7 +485,7 @@ list_ips() {
 # --- CLI ROUTER & HELP MENU ---
 show_help() {
     echo -e "${GREEN}======================================================${NC}"
-    echo -e "${YELLOW}  SysWarden Manager CLI (v1.71) - Day 2 Operations ${NC}"
+    echo -e "${YELLOW}  SysWarden Manager CLI ($VERSION) - Day 2 Operations ${NC}"
     echo -e "${GREEN}======================================================${NC}"
     echo -e "Usage: syswarden-manager.sh [COMMAND] [IP] [PORT]"
     echo -e ""
