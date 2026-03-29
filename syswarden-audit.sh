@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.72 - DevSecOps Audit & Compliance Tool
+# SysWarden v1.73 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -38,34 +38,38 @@ TOTAL=0
 
 # --- SECURE AUDIT LOGGING ---
 AUDIT_LOG="/var/log/syswarden-audit.log"
-# Secure the log file immediately (Prevent unauthorized reading of the audit results)
 touch "$AUDIT_LOG" && chmod 600 "$AUDIT_LOG"
 echo "=== SYSWARDEN PURPLE TEAM AUDIT STARTED: $(date -u +"%Y-%m-%dT%H:%M:%SZ") ===" >"$AUDIT_LOG"
 
-# --- HELPERS (Dual-Output: Console + Standardized Log) ---
+# --- HELPERS (Dual-Output: Console + Standardized Log + 2s Pacing) ---
 log_header() {
     echo -e "\n${BLUE}${BOLD}=== $1 ===${NC}"
     echo -e "\n--- $1 ---" >>"$AUDIT_LOG"
+    sleep 1
 }
 pass() {
     echo -e "  [${GREEN}PASS${NC}] $1"
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [PASS] $1" >>"$AUDIT_LOG"
     SCORE=$((SCORE + 1))
     TOTAL=$((TOTAL + 1))
+    sleep 2
 }
 fail() {
     echo -e "  [${RED}FAIL${NC}] $1"
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [FAIL] $1" >>"$AUDIT_LOG"
     TOTAL=$((TOTAL + 1))
+    sleep 2
 }
 warn() {
     echo -e "  [${YELLOW}WARN${NC}] $1"
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [WARN] $1" >>"$AUDIT_LOG"
     TOTAL=$((TOTAL + 1))
+    sleep 2
 }
 info() {
     echo -e "  [${BLUE}INFO${NC}] $1"
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [INFO] $1" >>"$AUDIT_LOG"
+    sleep 2
 }
 
 is_service_active() {
@@ -73,7 +77,6 @@ is_service_active() {
     if command -v systemctl >/dev/null 2>&1; then
         systemctl is-active --quiet "$svc"
     elif command -v rc-service >/dev/null 2>&1; then
-        # DEVSECOPS FIX: Prevent SIGPIPE crashing the pipeline
         rc-service "$svc" status 2>/dev/null | grep "started" >/dev/null
     else
         return 1
@@ -90,7 +93,6 @@ check_file_perms() {
         return
     fi
 
-    # Cross-platform stat command (works on Alpine busybox & GNU coreutils)
     local perms
     perms=$(stat -c "%a" "$file" 2>/dev/null || stat -f "%Op" "$file" | cut -c4-6)
     local owner
@@ -113,8 +115,6 @@ OS_TYPE="Universal"
 if [[ -f /etc/alpine-release ]]; then OS_TYPE="Alpine"; fi
 info "Detected OS Environment: $OS_TYPE"
 
-# --- DEVSECOPS FIX: Load Native Configuration Early ---
-# Loaded here to immediately evaluate the user's OS Hardening choice
 if [[ -f "/etc/syswarden.conf" ]]; then
     source "/etc/syswarden.conf" 2>/dev/null || true
 fi
@@ -122,22 +122,18 @@ fi
 # --- 2. OS HARDENING (ANTI-PERSISTENCE) ---
 log_header "Phase 1: OS Hardening & Privilege Separation"
 
-# DEVSECOPS FIX: Evaluate if the user skipped OS Hardening on an existing VPS
 if [[ "${APPLY_OS_HARDENING:-n}" == "y" ]]; then
 
-    # Validate Crontab Lockdown
     if [[ -f "/etc/cron.allow" ]]; then
         check_file_perms "/etc/cron.allow" "600" "root"
     else
         fail "/etc/cron.allow is missing (Crontab not locked down)"
     fi
 
-    # Audit privileged groups for unauthorized standard users (Humans UID >= 1000)
     PRIV_USERS=$(awk -F':' '/^(wheel|sudo|adm):/ {print $4}' /etc/group | tr ',' '\n' | grep -v '^$' | grep -v 'root' || true)
     UNAUTHORIZED_USERS=""
 
     for u in $PRIV_USERS; do
-        # Extract UID of the user. System users (daemon, bin) have UID < 1000.
         uid=$(id -u "$u" 2>/dev/null || echo "0")
         if [[ "$uid" -ge 1000 ]]; then
             UNAUTHORIZED_USERS="$UNAUTHORIZED_USERS $u"
@@ -150,14 +146,12 @@ if [[ "${APPLY_OS_HARDENING:-n}" == "y" ]]; then
         fail "Found standard users in privileged groups:$UNAUTHORIZED_USERS"
     fi
 
-    # Verify Immutable flags on standard user profiles
     if command -v lsattr >/dev/null 2>&1; then
         IMMUTABLE_FAILED=0
         for user_dir in /home/*; do
             if [[ -d "$user_dir" ]]; then
                 for profile_file in "$user_dir/.profile" "$user_dir/.bashrc" "$user_dir/.bash_profile"; do
                     if [[ -f "$profile_file" ]]; then
-                        # DEVSECOPS FIX: Prevent SIGPIPE with grep >/dev/null
                         if ! lsattr "$profile_file" 2>/dev/null | grep '^\----i' >/dev/null; then
                             IMMUTABLE_FAILED=1
                             fail "Immutable flag missing on $profile_file"
@@ -177,28 +171,36 @@ else
     info "OS Hardening was skipped during installation (Existing Server). Strict compliance bypassed."
 fi
 
-# --- DEVSECOPS FIX: CRON ORCHESTRATION & IDEMPOTENCE (v1.72) ---
-# Scan for legacy update loops that cause ghost processes
+# --- DEVSECOPS FIX: CRON ORCHESTRATION & IDEMPOTENCE (ANTI-DUPLICATION) ---
 CRON_SAFE=1
-CRON_FOUND=0
-for cron_file in "/etc/crontabs/root" "/etc/cron.d/syswarden-update"; do
+CRON_COUNT=0
+SEEN_CRON_FILES=""
+
+for cron_file in "/etc/crontabs/root" "/var/spool/cron/crontabs/root" "/etc/cron.d/syswarden-update"; do
     if [[ -f "$cron_file" ]]; then
-        if grep "syswarden" "$cron_file" >/dev/null 2>&1; then
-            CRON_FOUND=1
-            # If the legacy 'update' parameter is found without 'cron-', it's a critical failure
-            if grep "\.sh update >" "$cron_file" >/dev/null 2>&1; then
-                CRON_SAFE=0
-            fi
+        # DEVSECOPS FIX: Resolve symlinks to prevent double-counting on Alpine Linux
+        real_path=$(realpath "$cron_file" 2>/dev/null || readlink -f "$cron_file" 2>/dev/null || echo "$cron_file")
+        if echo "$SEEN_CRON_FILES" | grep -q "$real_path"; then continue; fi
+        SEEN_CRON_FILES="$SEEN_CRON_FILES $real_path"
+
+        # DEVSECOPS FIX: { grep -c || true; } neutralizes pipefail on zero matches
+        file_count=$(grep -v "^[[:space:]]*#" "$cron_file" 2>/dev/null | { grep -c "syswarden.*update" || true; })
+        CRON_COUNT=$((CRON_COUNT + file_count))
+
+        if grep -v "^[[:space:]]*#" "$cron_file" 2>/dev/null | grep "\.sh update >" >/dev/null 2>&1; then
+            CRON_SAFE=0
         fi
     fi
 done
 
-if [[ $CRON_FOUND -eq 1 ]]; then
+if [[ $CRON_COUNT -eq 1 ]]; then
     if [[ $CRON_SAFE -eq 1 ]]; then
-        pass "Cron Orchestration VERIFIED: Background jobs use the secure 'cron-update' mode (Idempotent)."
+        pass "Cron Orchestration VERIFIED: Exactly one secure 'cron-update' background job is active (Absolute cleanliness)."
     else
         fail "Cron Orchestration FAILED: Legacy 'update' parameter detected. High risk of Ghost Processes!"
     fi
+elif [[ $CRON_COUNT -gt 1 ]]; then
+    fail "Cron Duplication FAILED: $CRON_COUNT SysWarden cron jobs detected! Idempotency violated."
 else
     warn "Cron Orchestration: No automated SysWarden background jobs found."
 fi
@@ -207,17 +209,14 @@ fi
 # --- 3. LOG ISOLATION (ANTI-INJECTION) ---
 log_header "Phase 2: Log Routing & Anti-Injection Verification"
 
-# Verify isolated kernel firewall logs
 check_file_perms "/var/log/kern-firewall.log" "600" "root"
 
-# Verify isolated authentication logs based on OS
 if [[ "$OS_TYPE" == "Alpine" ]]; then
     check_file_perms "/var/log/auth.log" "600" "root"
 else
     check_file_perms "/var/log/auth-syswarden.log" "600" "root"
 fi
 
-# Check Rsyslog status
 if is_service_active "rsyslog"; then
     pass "Rsyslog daemon is active and routing logs securely."
 else
@@ -227,7 +226,6 @@ fi
 # --- 4. FIREWALL & THREAT INTEL ---
 log_header "Phase 3: Kernel Shield & Threat Intelligence"
 
-# Check if the global blocklist payload is actively staged
 if [[ -s "/etc/syswarden/active_global_blocklist.txt" ]]; then
     LINES=$(wc -l </etc/syswarden/active_global_blocklist.txt)
     pass "Global Blocklist is populated ($LINES active records)."
@@ -235,28 +233,24 @@ else
     fail "Global Blocklist is missing or empty."
 fi
 
-# --- Verify GeoIP Threat Intelligence ---
 if [[ -n "${GEOBLOCK_COUNTRIES:-}" ]] && [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]]; then
     pass "GeoIP Threat Intelligence is actively deployed and enforced."
 else
     info "GeoIP Threat Intelligence (Skipped by user)."
 fi
 
-# --- Verify ASN Routing Threat Intelligence ---
 if [[ -n "${BLOCK_ASNS:-}" ]] && [[ "${BLOCK_ASNS:-none}" != "none" ]]; then
     pass "Manual ASN Routing Defense is actively deployed."
 else
     info "Manual ASN Routing Defense (Skipped by user)."
 fi
 
-# --- Verify Spamhaus Dynamic Feed ---
 if [[ "${USE_SPAMHAUS_ASN:-n}" == "y" || "${USE_SPAMHAUS_ASN:-n}" == "Y" ]]; then
     pass "Spamhaus Dynamic Feed is actively deployed."
 else
     info "Spamhaus Dynamic Feed (Skipped by user)."
 fi
 
-# Firewall Engine Discovery & Rules Injection Audit
 FW_ENGINE="Unknown"
 if command -v nft >/dev/null && nft list table inet syswarden_table >/dev/null 2>&1; then
     FW_ENGINE="Nftables"
@@ -274,16 +268,21 @@ else
     fail "SysWarden firewall rules not found in kernel space."
 fi
 
-# --- Verify Catch-All Drop Policy (v1.72 Zero Trust Architecture) ---
+# --- Verify Catch-All Drop Policy (v1.73 Zero Trust Architecture) ---
 CATCH_ALL_PASSED=0
 if [[ "$FW_ENGINE" == "Nftables" ]]; then
-    # DEVSECOPS FIX: grep >/dev/null prevents SIGPIPE pipefail crashes
-    if nft list chain inet syswarden_table input 2>/dev/null | grep "Catch-All" >/dev/null; then
+    # 1. Debian Architecture (Explicit Catch-All rule in backend chain)
+    if nft list chain inet syswarden_table input_backend 2>/dev/null | grep "Catch-All" >/dev/null; then
+        CATCH_ALL_PASSED=1
+    # 2. Alpine Architecture (Delegated to native OS default policy drop)
+    elif [[ "$OS_TYPE" == "Alpine" ]] && nft list chain inet filter input 2>/dev/null | grep -E "policy[[:space:]]+drop" >/dev/null; then
+        CATCH_ALL_PASSED=1
+    # 3. Fallback for mixed architectures
+    elif nft list chain inet syswarden_table input 2>/dev/null | grep "Catch-All" >/dev/null; then
         CATCH_ALL_PASSED=1
     fi
 elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
     DEFAULT_ZONE=$(firewall-cmd --get-default-zone 2>/dev/null || echo "public")
-    # DEVSECOPS FIX: RHEL/Alma requires --permanent to read the target policy
     if firewall-cmd --permanent --get-target --zone="$DEFAULT_ZONE" 2>/dev/null | grep -i "drop" >/dev/null; then
         CATCH_ALL_PASSED=1
     elif firewall-cmd --permanent --get-target --zone=public 2>/dev/null | grep -i "drop" >/dev/null; then
@@ -305,34 +304,26 @@ else
     fail "Zero Trust Architecture FAILED: Catch-All Drop policy is missing. Run 'install-syswarden update'."
 fi
 
-# --- DEVSECOPS FIX: STATEFUL DOCKER ROUTING AUDIT (v1.72) ---
 if command -v docker >/dev/null 2>&1 && is_service_active "docker"; then
     if command -v iptables >/dev/null 2>&1 && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
-
-        # 1. Verify SysWarden Blocklist Injection
         if iptables -S DOCKER-USER 2>/dev/null | grep "syswarden_blacklist" >/dev/null; then
             pass "Docker Integration: SysWarden blocklists are actively shielding containers."
         else
             fail "Docker Integration: SysWarden blocklists are missing from the DOCKER-USER chain."
         fi
 
-        # 2. Verify Stateful Bypass is at Absolute Priority 0 (Rule #1)
-        # iptables -S DOCKER-USER 1 outputs the exact first rule of the chain.
         DOCKER_RULE_1=$(iptables -S DOCKER-USER 1 2>/dev/null || true)
-
         if [[ "$DOCKER_RULE_1" == *"-j RETURN"* ]] && [[ "$DOCKER_RULE_1" == *"ESTABLISHED"* ]]; then
-            pass "Docker Stateful Bypass VERIFIED: Return routing is locked at Absolute Priority 0 (Zero Timeout safe)."
+            pass "Docker Stateful Bypass VERIFIED: Return routing is locked at Absolute Priority 0."
         else
-            fail "Docker Stateful Bypass FAILED: Return routing is missing or pushed down by another rule. Run 'install-syswarden update'."
+            fail "Docker Stateful Bypass FAILED: Return routing is missing or pushed down by another rule."
         fi
-
     else
         warn "Docker is running, but the DOCKER-USER chain is inaccessible or missing."
     fi
 else
     info "Docker engine not detected or offline (Skipped container routing audit)."
 fi
-# ------------------------------------------------------------
 
 # --- 5. ZERO TRUST FAIL2BAN ENGINE ---
 log_header "Phase 4: Layer 7 Active Defense (Fail2ban)"
@@ -340,39 +331,29 @@ log_header "Phase 4: Layer 7 Active Defense (Fail2ban)"
 if is_service_active "fail2ban"; then
     pass "Fail2ban service is running."
 
-    # Ping Fail2ban socket to ensure it hasn't crashed silently
     if fail2ban-client ping >/dev/null 2>&1; then
         pass "Fail2ban socket is highly responsive (Pong)."
 
-        # --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.72) ---
-        # Count running instances. Using regex bracket trick [f] to exclude the grep process itself safely.
-        # wc -l ensures exit code 0 even if no process is found, respecting 'set -e'.
         F2B_PROC_COUNT=$(ps aux | grep "[f]ail2ban-server" | wc -l)
         if [[ "$F2B_PROC_COUNT" -gt 1 ]]; then
             fail "Process Duplication FAILED: $F2B_PROC_COUNT Fail2ban instances detected! Severe risk of SQLite locking."
         else
             pass "Process Idempotence VERIFIED: A single, strictly controlled Fail2ban daemon is active."
         fi
-        # --------------------------------------------------
 
-        # Verify Zero Trust Jail environment (No OS overrides)
         if [[ -f "/etc/fail2ban/jail.d/alpine-ssh.conf" ]] || [[ -f "/etc/fail2ban/jail.d/defaults-debian.conf" ]]; then
             fail "Conflicting default OS jails were detected in jail.d/"
         else
             pass "Zero Trust environment: No conflicting default OS jails found."
         fi
 
-        # Audit strict regex anchoring in the core Portscan filter
         if grep "^failregex = \^%(__prefix_line)s" /etc/fail2ban/filter.d/syswarden-portscan.conf >/dev/null 2>&1; then
             pass "Strict Regex Anchoring is applied (Log Spoofing vector neutralized)."
         else
             fail "Strict Regex Anchoring missing in the portscan filter."
         fi
 
-        # Audit IgnoreIP (Anti Self-DoS)
         IGNORE_IPS=$(fail2ban-client get sshd ignoreip 2>/dev/null || true)
-
-        # Count total IPv4 patterns
         IP_COUNT=$(echo "$IGNORE_IPS" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | sort -u | wc -l)
 
         if [[ "$IP_COUNT" -gt 1 ]]; then
@@ -387,17 +368,15 @@ else
     fail "Fail2ban service is completely offline."
 fi
 
-# --- 6. SECURE TELEMETRY & ENTERPRISE DASHBOARD (NGINX) ---
+# --- 6. SECURE TELEMETRY & ENTERPRISE DASHBOARD ---
 log_header "Phase 5: DevSecOps Telemetry & Enterprise Dashboard"
 
-# 1. Nginx Service Status
 if is_service_active "nginx"; then
     pass "Nginx Enterprise Web Server daemon is active."
 else
     fail "Nginx Web Server is offline or not installed."
 fi
 
-# 2. Cryptographic Assets (TLS Certificate Verification)
 if [[ -f "/etc/syswarden/ssl/syswarden.crt" ]] && [[ -f "/etc/syswarden/ssl/syswarden.key" ]]; then
     check_file_perms "/etc/syswarden/ssl/syswarden.key" "600" "root"
     pass "Self-Signed RSA 4096 TLS Certificate is securely deployed."
@@ -405,32 +384,39 @@ else
     fail "Dashboard TLS Certificates are missing."
 fi
 
-# 3. Telemetry Engine Backend
 if [[ -x "/usr/local/bin/syswarden-telemetry.sh" ]]; then
     pass "Telemetry Orchestrator script is deployed and executable."
 else
     fail "Telemetry Orchestrator script is missing."
 fi
 
-# --- DEVSECOPS FIX: PROCESS IDEMPOTENCE (v1.72) ---
-# We force a single numeric value by taking only the first line and removing spaces
-# This prevents the "0 0" or "1 1" error on some distributions
-TELEMETRY_RAW=$(ps aux | grep "[s]yswarden-telemetry.sh" | wc -l || echo 0)
-TELEMETRY_PROC_COUNT=$(echo "$TELEMETRY_RAW" | awk '{print $1}' | head -n1)
+# --- DEEP-SCAN: TELEMETRY IDEMPOTENCE (60s Observation) ---
+info "Initiating Deep-Scan for Telemetry Idempotence (60s cron overlap observation)..."
+TELEMETRY_GHOST_DETECTED=0
 
-if [ "${TELEMETRY_PROC_COUNT:-0}" -gt 1 ]; then
-    fail "Process Duplication FAILED: $TELEMETRY_PROC_COUNT telemetry scripts are running! CPU leak detected."
+for i in {60..1}; do
+    printf "\r  [~] Monitoring process stack... %02ds remaining " "$i"
+    TELEMETRY_RAW=$(ps aux | grep "[s]yswarden-telemetry.sh" | wc -l || echo 0)
+    TELEMETRY_PROC_COUNT=$(echo "$TELEMETRY_RAW" | awk '{print $1}' | head -n1)
+
+    if [ "${TELEMETRY_PROC_COUNT:-0}" -gt 1 ]; then
+        TELEMETRY_GHOST_DETECTED=1
+        break
+    fi
+    sleep 1
+done
+echo "" # Clear line after countdown
+
+if [ "$TELEMETRY_GHOST_DETECTED" -eq 1 ]; then
+    fail "Process Duplication FAILED: $TELEMETRY_PROC_COUNT telemetry instances detected! CPU leak triggered during cron cycle."
 else
-    pass "Process Idempotence VERIFIED: Telemetry daemon state is clean (<=1 active instance)."
+    pass "Process Idempotence VERIFIED: Telemetry daemon state is stable (<=1 active instance) over a full cron cycle."
 fi
-# --------------------------------------------------
 
-# 4. Privilege Separation (Payload Ownership)
 if [[ -f "/etc/syswarden/ui/data.json" ]]; then
     payload_perms=$(stat -c "%a" "/etc/syswarden/ui/data.json" 2>/dev/null || stat -f "%Op" "/etc/syswarden/ui/data.json" | cut -c4-6)
     payload_owner=$(stat -c "%U" "/etc/syswarden/ui/data.json" 2>/dev/null || stat -f "%Su" "/etc/syswarden/ui/data.json")
 
-    # The payload MUST be strictly readable by the web daemon (640) and owned by it
     if [[ "$payload_perms" == *"640" ]] && [[ "$payload_owner" == "nginx" || "$payload_owner" == "www-data" ]]; then
         pass "Telemetry payload ownership & permissions are strictly isolated (640, Owner: $payload_owner)."
     else
@@ -440,7 +426,6 @@ else
     warn "Telemetry payload (data.json) not found yet. Awaiting initial cron execution."
 fi
 
-# AbuseIPDB Async Reporter (Optional Component)
 if [[ -f "/usr/local/bin/syswarden_reporter.py" ]]; then
     if is_service_active "syswarden-reporter"; then
         pass "AbuseIPDB Async Reporter is active."
@@ -457,16 +442,13 @@ fi
 # ==============================================================================
 log_header "Phase 6: Zero Trust Remote Access (VPN & SSH Cloaking)"
 
-# --- Dynamic SSH Port Extraction ---
 SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | awk '{print $4}' | awk -F':' '{print $NF}' | head -n 1 || echo "")
 if [[ -z "$SSH_PORT" ]]; then
     SSH_PORT=$(netstat -tlnp 2>/dev/null | grep sshd | awk '{print $4}' | awk -F':' '{print $NF}' | head -n 1 || echo "")
 fi
 SSH_PORT=${SSH_PORT:-22}
 
-# --- Check 1: Purple Team - SSH Global Cloaking (The Priority Guillotine) ---
 CLOAK_PASSED=0
-# DEVSECOPS FIX: grep >/dev/null prevents SIGPIPE pipefail crashes
 if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
     if firewall-cmd --list-rich-rules 2>/dev/null | grep "priority=\"-900\".*port=\"${SSH_PORT}\".*drop" >/dev/null; then
         CLOAK_PASSED=1
@@ -496,7 +478,6 @@ else
     fi
 fi
 
-# --- Check 2: WireGuard VPN Gateway ---
 if [[ -d "/etc/wireguard" ]] && [[ -f "/etc/wireguard/wg0.conf" ]]; then
     if ip link show wg0 >/dev/null 2>&1; then
         pass "WireGuard interface (wg0) is UP and ready to accept authorized clients."
@@ -505,25 +486,20 @@ if [[ -d "/etc/wireguard" ]] && [[ -f "/etc/wireguard/wg0.conf" ]]; then
     fi
 
     VPN_ALLOW_PASSED=0
-    # DEVSECOPS FIX: Use grep >/dev/null
     if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
-        # Firewalld natively uses the trusted zone for wg0
         if firewall-cmd --permanent --zone=trusted --list-interfaces 2>/dev/null | grep "wg0" >/dev/null; then
             VPN_ALLOW_PASSED=1
         fi
     elif command -v nft >/dev/null 2>&1 && nft list table inet syswarden_table >/dev/null 2>&1; then
         NFT_RULES=$(nft -n list chain inet syswarden_table input 2>/dev/null | tr '\n' ' ' | tr '\t' ' ')
-        # Matches the new Global Trust rule: iifname { "lo", "wg0" } accept
         if echo "$NFT_RULES" | grep -E "iifname.*wg0.*accept" >/dev/null; then
             VPN_ALLOW_PASSED=1
         fi
     elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep "Status: active" >/dev/null; then
-        # UFW now allows generic traffic on wg0 interface
         if ufw status 2>/dev/null | grep -E "wg0.*ALLOW" >/dev/null; then
             VPN_ALLOW_PASSED=1
         fi
     elif command -v iptables >/dev/null 2>&1; then
-        # Iptables now uses a generic accept for wg0
         if iptables -S INPUT 2>/dev/null | grep -E "\-A INPUT -i wg0 -j ACCEPT" >/dev/null; then
             VPN_ALLOW_PASSED=1
         fi
@@ -538,7 +514,6 @@ else
     info "WireGuard VPN is not installed or configured (Skipped by user)."
 fi
 
-# --- Check 3: Day-2 Operations (Dynamic SSH Bypass) ---
 if [[ -s "/etc/syswarden/ssh_whitelist.txt" ]]; then
     BYPASS_COUNT=$(grep -v '^$' "/etc/syswarden/ssh_whitelist.txt" | wc -l)
     if [[ "$BYPASS_COUNT" -gt 0 ]]; then
@@ -555,8 +530,6 @@ fi
 # ==============================================================================
 log_header "Phase 7: Exposed Services & Firewall Persistence (CSPM)"
 
-# --- 7.1 Firewall Persistence Check (Cold Boot Survivability) ---
-# DEVSECOPS FIX: Use grep >/dev/null instead of grep -q to avoid SIGPIPE
 if [[ "$FW_ENGINE" == "Nftables" ]]; then
     if grep 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.nft >/dev/null 2>&1 || grep 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.conf >/dev/null 2>&1; then
         pass "Firewall Persistence VERIFIED: SysWarden Nftables rules are firmly anchored in main OS config."
@@ -596,10 +569,7 @@ else
     fail "Firewall Persistence FAILED: No recognized firewall engine active."
 fi
 
-# --- 7.2 Exposed Listening Services (Attack Surface Mapping) ---
 info "Scanning for globally exposed listening ports (0.0.0.0 / ::)..."
-
-# Extract live sockets directly from the kernel
 if command -v ss >/dev/null 2>&1; then
     LISTEN_PORTS=$(ss -tlnp 2>/dev/null | grep -E '0\.0\.0\.0|::' | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu || true)
 else
@@ -630,7 +600,58 @@ else
 fi
 
 # ==============================================================================
-# --- 8. AUDIT SUMMARY ---
+# --- Phase 8: Ghost Rules & Firewall Idempotency (Anti-Duplication) ---
+# ==============================================================================
+log_header "Phase 8: Ghost Rules & Firewall Idempotency (Anti-Duplication)"
+
+GHOST_DETECTED=0
+
+if [[ "$FW_ENGINE" == "Nftables" ]]; then
+    # Audit native OS filter chain
+    if nft list chain inet filter input >/dev/null 2>&1; then
+        # DEVSECOPS FIX: { grep || true; } completely neutralizes pipefail crashes
+        DUP_WG=$(nft list chain inet filter input 2>/dev/null | { grep -E "udp dport ${WG_PORT:-51820} accept" || true; } | wc -l)
+        if [[ "$DUP_WG" -gt 1 ]]; then
+            GHOST_DETECTED=1
+            fail "Ghost Rules FAILED: $DUP_WG duplicate WireGuard rules detected in OS filter chain."
+        fi
+    fi
+    # Audit SysWarden backend chain (Debian) OR unified input chain (Alpine)
+    if nft list chain inet syswarden_table input_backend >/dev/null 2>&1; then
+        DUP_9999=$(nft list chain inet syswarden_table input_backend 2>/dev/null | { grep -E "tcp dport 9999 accept" || true; } | wc -l)
+        if [[ "$DUP_9999" -gt 1 ]]; then
+            GHOST_DETECTED=1
+            fail "Ghost Rules FAILED: $DUP_9999 duplicate Dashboard (9999) rules detected in SysWarden backend."
+        fi
+    elif nft list chain inet syswarden_table input >/dev/null 2>&1; then
+        DUP_9999=$(nft list chain inet syswarden_table input 2>/dev/null | { grep -E "tcp dport 9999 accept" || true; } | wc -l)
+        if [[ "$DUP_9999" -gt 1 ]]; then
+            GHOST_DETECTED=1
+            fail "Ghost Rules FAILED: $DUP_9999 duplicate Dashboard (9999) rules detected in SysWarden input chain."
+        fi
+    fi
+elif [[ "$FW_ENGINE" == "Iptables" || "$FW_ENGINE" == "UFW" || "$FW_ENGINE" == "Firewalld" ]]; then
+    if command -v iptables >/dev/null 2>&1; then
+        DUP_9999=$(iptables -S INPUT 2>/dev/null | { grep "\--dport 9999 -j ACCEPT" || true; } | wc -l)
+        DUP_SSH=$(iptables -S INPUT 2>/dev/null | { grep "\--dport ${SSH_PORT:-22} -j ACCEPT" || true; } | grep -v "\-s" | wc -l)
+
+        if [[ "$DUP_9999" -gt 1 ]]; then
+            GHOST_DETECTED=1
+            fail "Ghost Rules FAILED: $DUP_9999 duplicate Dashboard (9999) rules detected in Iptables."
+        fi
+        if [[ "$DUP_SSH" -gt 1 ]]; then
+            GHOST_DETECTED=1
+            fail "Ghost Rules FAILED: $DUP_SSH duplicate SSH allow rules detected in Iptables."
+        fi
+    fi
+fi
+
+if [[ $GHOST_DETECTED -eq 0 ]]; then
+    pass "Firewall Stack Idempotency VERIFIED: No ghost rules or uncontrolled duplicates detected."
+fi
+
+# ==============================================================================
+# --- 9. AUDIT SUMMARY ---
 # ==============================================================================
 echo -e "\n${BOLD}==============================================================================${NC}"
 if [[ $SCORE -eq $TOTAL ]]; then
@@ -643,6 +664,5 @@ else
 fi
 echo -e "${BOLD}==============================================================================${NC}"
 
-# Display the location of the standardized log file
 echo -e "📄 ${BOLD}Full Standardized Audit Log securely saved to:${NC} ${YELLOW}$AUDIT_LOG${NC}\n"
 echo "=== AUDIT COMPLETED: $(date -u +"%Y-%m-%dT%H:%M:%SZ") ===" >>"$AUDIT_LOG"
