@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.75 - DevSecOps Audit & Compliance Tool
+# SysWarden v1.76 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -268,7 +268,7 @@ else
     fail "SysWarden firewall rules not found in kernel space."
 fi
 
-# --- Verify Catch-All Drop Policy (v1.75 Zero Trust Architecture) ---
+# --- Verify Catch-All Drop Policy (v1.76 Zero Trust Architecture) ---
 CATCH_ALL_PASSED=0
 if [[ "$FW_ENGINE" == "Nftables" ]]; then
     # 1. Debian Architecture (Explicit Catch-All rule in backend chain)
@@ -468,8 +468,16 @@ if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewa
         CLOAK_PASSED=1
     fi
 elif command -v nft >/dev/null 2>&1 && nft list table inet syswarden_table >/dev/null 2>&1; then
-    NFT_RULES=$(nft -n list chain inet syswarden_table input 2>/dev/null | tr '\n' ' ' | tr '\t' ' ')
-    if echo "$NFT_RULES" | grep -E "tcp dport ${SSH_PORT}.*drop" >/dev/null; then
+    # DEVSECOPS FIX: Cross-OS Architecture Support (Alpine 'input' vs Debian 'input_frontline')
+    # We suppress stderr and use '|| echo ""' to gracefully bypass strict pipefail if a chain doesn't exist
+    NFT_RULES=""
+    if nft list chain inet syswarden_table input_frontline >/dev/null 2>&1; then
+        NFT_RULES=$(nft -n list chain inet syswarden_table input_frontline 2>/dev/null | tr '\n' ' ' | tr '\t' ' ' || echo "")
+    elif nft list chain inet syswarden_table input >/dev/null 2>&1; then
+        NFT_RULES=$(nft -n list chain inet syswarden_table input 2>/dev/null | tr '\n' ' ' | tr '\t' ' ' || echo "")
+    fi
+
+    if [[ -n "$NFT_RULES" ]] && echo "$NFT_RULES" | grep -E "tcp dport ${SSH_PORT}.*drop" >/dev/null; then
         CLOAK_PASSED=1
     fi
 elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep "Status: active" >/dev/null; then
@@ -505,8 +513,14 @@ if [[ -d "/etc/wireguard" ]] && [[ -f "/etc/wireguard/wg0.conf" ]]; then
             VPN_ALLOW_PASSED=1
         fi
     elif command -v nft >/dev/null 2>&1 && nft list table inet syswarden_table >/dev/null 2>&1; then
-        NFT_RULES=$(nft -n list chain inet syswarden_table input 2>/dev/null | tr '\n' ' ' | tr '\t' ' ')
-        if echo "$NFT_RULES" | grep -E "iifname.*wg0.*accept" >/dev/null; then
+        NFT_RULES=""
+        if nft list chain inet syswarden_table input_frontline >/dev/null 2>&1; then
+            NFT_RULES=$(nft -n list chain inet syswarden_table input_frontline 2>/dev/null | tr '\n' ' ' | tr '\t' ' ' || echo "")
+        elif nft list chain inet syswarden_table input >/dev/null 2>&1; then
+            NFT_RULES=$(nft -n list chain inet syswarden_table input 2>/dev/null | tr '\n' ' ' | tr '\t' ' ' || echo "")
+        fi
+
+        if [[ -n "$NFT_RULES" ]] && echo "$NFT_RULES" | grep -E "iifname.*wg0.*accept" >/dev/null; then
             VPN_ALLOW_PASSED=1
         fi
     elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep "Status: active" >/dev/null; then
@@ -623,6 +637,8 @@ if [[ -n "$LISTEN_PORTS" ]]; then
             fi
         elif [[ "$PORT" -eq 80 || "$PORT" -eq 443 ]]; then
             info "Exposed Port: $PORT/TCP (Web) - Guarded by SysWarden Layer 7 LFI/SQLi/Bot Jails."
+        elif [[ "$PORT" -eq 3306 || "$PORT" -eq 5432 || "$PORT" -eq 27017 || "$PORT" -eq 6379 ]]; then
+            info "Exposed Port: $PORT/TCP (Database) - Guarded by Fail2ban Layer 7 Jails & Custom Firewall Rules."
         elif [[ "$PORT" -eq 21 ]]; then
             info "Exposed Port: $PORT/TCP (FTP Honeypot) - Guarded by Fail2ban vsftpd jail."
         elif [[ "$PORT" -eq 23 ]]; then
