@@ -87,6 +87,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+escape_sed_replacement() {
+    local value="$1"
+    value=${value//\\/\\\\}
+    value=${value//&/\\&}
+    value=${value//|/\\|}
+    printf '%s' "$value"
+}
+
 detect_os_backend() {
     log "INFO" "Detecting Operating System and Firewall Backend..."
 
@@ -3808,8 +3816,10 @@ EOF
         if [[ "$REPORT_F2B" =~ ^[Yy]$ ]]; then PY_F2B="True"; fi
         local PY_FW="False"
         if [[ "$REPORT_FW" =~ ^[Yy]$ ]]; then PY_FW="True"; fi
+        local ESCAPED_API_KEY
+        ESCAPED_API_KEY=$(escape_sed_replacement "$USER_API_KEY")
 
-        sed -i "s/PLACEHOLDER_KEY/$USER_API_KEY/" /usr/local/bin/syswarden_reporter.py
+        sed -i "s|PLACEHOLDER_KEY|$ESCAPED_API_KEY|" /usr/local/bin/syswarden_reporter.py
         sed -i "s/PLACEHOLDER_F2B/$PY_F2B/" /usr/local/bin/syswarden_reporter.py
         sed -i "s/PLACEHOLDER_FW/$PY_FW/" /usr/local/bin/syswarden_reporter.py
 
