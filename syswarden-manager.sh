@@ -94,7 +94,7 @@ check_ip() {
     if grep -q "^${target_ip}$" "$WHITELIST_FILE" 2>/dev/null; then echo -e "${GREEN}PRESENT${NC}"; else echo -e "${YELLOW}Not Found${NC}"; fi
 
     echo -n "[Storage] SSH-Only Bypass  : "
-    if grep -q "^${target_ip}" "$SSH_WHITELIST_FILE" 2>/dev/null; then echo -e "${GREEN}PRESENT${NC}"; else echo -e "${YELLOW}Not Found${NC}"; fi
+    if awk -F':' -v ip="$target_ip" '$1 == ip { found=1; exit } END { exit !found }' "$SSH_WHITELIST_FILE" 2>/dev/null; then echo -e "${GREEN}PRESENT${NC}"; else echo -e "${YELLOW}Not Found${NC}"; fi
 
     echo -n "[Storage] Global Blocklist : "
     if grep -q "^${target_ip}$" "$BLOCKLIST_FILE" 2>/dev/null; then echo -e "${RED}PRESENT${NC}"; else echo -e "${YELLOW}Not Found${NC}"; fi
