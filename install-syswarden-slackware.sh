@@ -34,7 +34,7 @@ CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
 # shellcheck disable=SC2034
-VERSION="v1.81"
+VERSION="v1.82"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -374,6 +374,46 @@ auto_whitelist_admin() {
             fi
         fi
     fi
+}
+
+process_auto_whitelist() {
+    # Only execute in auto mode and if the variable is populated
+    if [[ "${1:-}" != "auto" ]] || [[ -z "${SYSWARDEN_WHITELIST_IPS:-}" ]]; then
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Step: Processing Automated Whitelist ===${NC}"
+    log "INFO" "Processing custom Whitelist from auto-configuration..."
+
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$WHITELIST_FILE"
+
+    # --- DEVSECOPS FIX: TEMPORARY IFS RESTORE ---
+    # We must allow space separation just for this loop, bypassing the global strict IFS=$'\n\t'
+    local OLD_IFS="$IFS"
+    IFS=$' \n\t'
+    # ----------------------------------
+
+    for ip in $SYSWARDEN_WHITELIST_IPS; do
+        # Ignore empty strings
+        if [[ -z "$ip" ]]; then continue; fi
+
+        # --- SECURITY FIX: STRICT IPV4 VALIDATION ---
+        # Prevents malicious or malformed strings from crashing the firewall daemon
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "$ip" != "127.0.0.1" ]]; then
+            if ! grep -q "^${ip}$" "$WHITELIST_FILE" 2>/dev/null; then
+                log "INFO" "Auto-configuration: Whitelisting IP $ip"
+                echo "$ip" >>"$WHITELIST_FILE"
+            else
+                log "INFO" "Auto-configuration: IP $ip is already whitelisted."
+            fi
+        else
+            log "WARN" "Auto-configuration: Invalid IP format skipped -> '$ip'"
+        fi
+    done
+
+    # Restore strict security IFS
+    IFS="$OLD_IFS"
 }
 
 select_list_type() {
@@ -2013,11 +2053,29 @@ setup_abuse_reporting() {
     fi
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
+
+        # --- DEVSECOPS FIX: Strict Validation with CI/CD Auto-Mode support ---
         if [[ "${1:-}" == "auto" ]]; then
             USER_API_KEY=${SYSWARDEN_ABUSE_API_KEY:-""}
+            if [[ -n "$USER_API_KEY" && ! "$USER_API_KEY" =~ ^[a-z0-9]{80}$ ]]; then
+                echo "ERROR: Auto Mode: Invalid SYSWARDEN_ABUSE_API_KEY format."
+                echo "Must be exactly 80 lowercase letters/numbers. Skipping setup."
+                return
+            fi
         else
-            read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+            while true; do
+                read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+                if [[ -z "$USER_API_KEY" ]]; then
+                    break
+                elif [[ ! "$USER_API_KEY" =~ ^[a-z0-9]{80}$ ]]; then
+                    echo "ERROR: Invalid API Key format. It must contain exactly 80 lowercase letters and numbers."
+                else
+                    echo "[✔] API Key syntax validated."
+                    break
+                fi
+            done
         fi
+        # ---------------------------------------------------------------------
 
         if [[ -z "$USER_API_KEY" ]]; then return; fi
 
@@ -2311,6 +2369,8 @@ generate_dashboard() {
     
     <style>
         /* --- HYPER MODERN DEVSECOPS THEME (Bento Box + Glassmorphism) --- */
+        
+        /* Font Integration */
         @font-face {
             font-family: 'JetBrains Mono';
             src: url('JetBrainsMono-Regular.woff2') format('woff2');
@@ -2321,25 +2381,33 @@ generate_dashboard() {
             src: url('JetBrainsMono-Bold.woff2') format('woff2');
             font-weight: bold; font-style: normal; font-display: swap;
         }
+
+        /* Color Variables - Deep Dark Cyberpunk */
         :root {
-            --bg-base: #030305;
-            --bg-panel: rgba(18, 18, 22, 0.65);
+            --bg-base: #030305;               /* Ultra deep dark background */
+            --bg-panel: rgba(18, 18, 22, 0.65); /* Glassmorphism base */
             --bg-panel-hover: rgba(25, 25, 30, 0.85);
             --text-main: #f8fafc;
             --text-muted: #8b9bb4;
             --border: rgba(255, 255, 255, 0.06);
             --border-highlight: rgba(255, 255, 255, 0.15);
-            --brand: #ff003c;
+            --brand: #ff003c;                 /* Red Neon */
             --brand-glow: rgba(255, 0, 60, 0.2);
-            --success: #00ff88;
+            --success: #00ff88;               /* Matrix Green */
             --success-glow: rgba(0, 255, 136, 0.2);
-            --accent: #00d8ff;
+            --accent: #00d8ff;                /* Blue Neon */
             --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
         }
+
+        /* Reset & Base */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-mono); }
+        
         body {
             background-color: var(--bg-base); 
-            background-image: linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            /* Subtle Cyberpunk Grid Background */
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
             background-size: 30px 30px;
             color: var(--text-main);
             line-height: 1.5;
@@ -2347,18 +2415,31 @@ generate_dashboard() {
             position: relative;
             overflow-x: hidden;
         }
+
+        /* --- ORBS & HALO EFFECTS (Background) --- */
         body::before, body::after {
             content: ''; position: fixed; border-radius: 50%; filter: blur(120px);
             z-index: -1; opacity: 0.35; pointer-events: none;
         }
-        body::before { top: -15%; left: -10%; width: 50vw; height: 50vh; background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%); }
-        body::after { bottom: -20%; right: -10%; width: 60vw; height: 60vh; background: radial-gradient(circle, rgba(0, 216, 255, 0.15) 0%, transparent 70%); }
+        body::before {
+            top: -15%; left: -10%; width: 50vw; height: 50vh;
+            background: radial-gradient(circle, var(--brand-glow) 0%, transparent 70%);
+        }
+        body::after {
+            bottom: -20%; right: -10%; width: 60vw; height: 60vh;
+            background: radial-gradient(circle, rgba(0, 216, 255, 0.15) 0%, transparent 70%);
+        }
+
         a { color: var(--brand); text-decoration: none; transition: all 0.2s; }
         a:hover { color: var(--accent); text-shadow: 0 0 8px var(--accent); }
+
+        /* Modern Fine Scrollbar */
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+        /* Typography & Utilities */
         .text-sm { font-size: 0.875rem; }
         .text-xs { font-size: 0.75rem; }
         .text-brand { color: var(--brand); text-shadow: 0 0 10px var(--brand-glow); }
@@ -2373,61 +2454,196 @@ generate_dashboard() {
         .mb-8 { margin-bottom: 2rem; }
         .flex-align { display: flex; align-items: center; gap: 0.75rem; }
         .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+        /* Layout & Bento Grids */
         .container { max-width: 1350px; margin: 0 auto; padding: 0 1.5rem; }
         .grid { display: grid; gap: 1.25rem; }
         .grid-4 { grid-template-columns: repeat(4, 1fr); }
         .grid-3 { grid-template-columns: repeat(3, 1fr); }
         .grid-2 { grid-template-columns: repeat(2, 1fr); }
         .chart-span { grid-column: span 2; }
+
         @media (max-width: 1024px) { .grid-4, .grid-3 { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 768px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } .chart-span { grid-column: span 1; } }
-        .navbar { background: rgba(3, 3, 5, 0.75); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 0; z-index: 100; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); }
-        .panel { position: relative; background: linear-gradient(145deg, var(--bg-panel) 0%, rgba(10, 10, 12, 0.8) 100%); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 16px; padding: 2.2rem 1.5rem 1.5rem 1.5rem; transition: all 0.3s ease; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
+        @media (max-width: 768px) { 
+            .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+            .chart-span { grid-column: span 1; }
+        }
+
+        /* Navbar Glass */
+        .navbar { 
+            background: rgba(3, 3, 5, 0.75); 
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border-bottom: 1px solid var(--border); 
+            padding: 1.25rem 0; 
+            position: sticky; top: 0; z-index: 100;
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+
+        /* Bento Panels */
+        .panel { 
+            position: relative;
+            background: linear-gradient(145deg, var(--bg-panel) 0%, rgba(10, 10, 12, 0.8) 100%);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border); 
+            border-radius: 16px; 
+            padding: 2.2rem 1.5rem 1.5rem 1.5rem; /* Extra top padding for Mac dots */
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
         .panel:hover { border-color: var(--border-highlight); background: var(--bg-panel-hover); transform: translateY(-2px); box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4); }
-        .panel::before { content: ''; position: absolute; top: 14px; left: 16px; width: 9px; height: 9px; border-radius: 50%; background: #ff5f56; box-shadow: 16px 0 0 #ffbd2e, 32px 0 0 #27c93f; opacity: 0.3; transition: opacity 0.3s ease; }
+        
+        /* --- MAC TERMINAL DOTS --- */
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 14px;
+            left: 16px;
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: #ff5f56; /* Red */
+            box-shadow: 16px 0 0 #ffbd2e, 32px 0 0 #27c93f; /* Yellow & Green */
+            opacity: 0.3;
+            transition: opacity 0.3s ease;
+        }
         .panel:hover::before { opacity: 0.9; }
-        .panel-title { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.5rem; }
+
+        .panel-title { 
+            font-size: 0.75rem; font-weight: bold; text-transform: uppercase; 
+            letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.5rem; 
+        }
         .panel-val { font-size: 1.6rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
         .val-huge { font-size: 4.5rem; font-weight: bold; color: var(--brand); line-height: 1; text-shadow: 0 0 24px var(--brand-glow); }
-        .panel-highlight { border-color: rgba(255, 0, 60, 0.3); box-shadow: inset 0 0 60px rgba(255, 0, 60, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.3); }
+        
+        .panel-highlight { 
+            border-color: rgba(255, 0, 60, 0.3); 
+            box-shadow: inset 0 0 60px rgba(255, 0, 60, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.3); 
+        }
+
+        /* Lists & Data */
         .list-container { display: flex; flex-direction: column; gap: 0.6rem; }
-        .list-item { display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.4); padding: 0.85rem 1rem; border-radius: 12px; border: 1px solid var(--border); font-size: 0.85rem; transition: all 0.2s; }
+        .list-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0, 0, 0, 0.4); padding: 0.85rem 1rem;
+            border-radius: 12px; border: 1px solid var(--border); font-size: 0.85rem;
+            transition: all 0.2s;
+        }
         .list-item-hover:hover { border-color: var(--accent); background: rgba(0, 216, 255, 0.03); transform: translateX(4px); box-shadow: -4px 0 10px rgba(0, 216, 255, 0.05); }
         .rank { color: var(--text-muted); font-weight: bold; width: 1.75rem; display: inline-block; }
+        
         .tag-red { background: rgba(255, 0, 60, 0.1); color: var(--brand); padding: 3px 10px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; border: 1px solid rgba(255,0,60,0.2); }
         .tag-green { background: rgba(0, 255, 136, 0.05); color: var(--success); padding: 3px 10px; border-radius: 12px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; border: 1px solid rgba(0,255,136,0.3); box-shadow: 0 0 10px var(--success-glow); }
+
         .table { width: 100%; border-collapse: separate; border-spacing: 0 0.5rem; font-size: 0.85rem; }
         .table th { text-align: left; padding: 0 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-weight: normal; border-bottom: 1px solid var(--border); }
         .table td { padding: 0.85rem 1rem; background: rgba(0, 0, 0, 0.4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
         .table tr td:first-child { border-left: 1px solid var(--border); border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
         .table tr td:last-child { border-right: 1px solid var(--border); border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
         .table tr:hover td { background: rgba(255, 255, 255, 0.03); border-color: var(--border-highlight); color: var(--accent); }
+
         .scroll-y { max-height: 290px; overflow-y: auto; padding-right: 0.5rem; }
         .chart-wrapper { position: relative; height: 280px; width: 100%; margin-top: 10px; }
-        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(0, 255, 136, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); } }
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 60, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 0, 60, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 60, 0); } }
+
+        /* --- ANIMATIONS --- */
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 136, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(255, 0, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 0, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 0, 60, 0); }
+        }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; }
         .status-up { background-color: var(--success); animation: pulse-green 2s infinite; }
         .status-down { background-color: var(--brand); animation: pulse-red 2s infinite; }
-        .syswarden-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); animation: pulse-red 2s infinite; margin-left: 2px; margin-top: 4px; }
+        
+        .syswarden-pulse {
+            width: 6px; height: 6px; border-radius: 50%; background: var(--brand);
+            animation: pulse-red 2s infinite; margin-left: 2px; margin-top: 4px;
+        }
+		
+		/* --- 3. LIGHT THEME & SWITCHER OVERRIDES --- */
+        /* Theme Switcher UI */
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border);
+            border-radius: 20px; display: flex; align-items: center;
+            padding: 4px; cursor: pointer; transition: all 0.3s; margin-right: 15px;
+        }
+        .theme-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            width: 30px; height: 30px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.3s; padding: 6px;
+        }
+        .theme-btn:hover { color: var(--text-main); }
+        .theme-btn.active {
+            background: var(--bg-panel-hover); color: var(--accent);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+        /* Light Theme Variables */
+        html[data-theme="light"] {
+            --bg-base: #f1f5f9;
+            --bg-panel: rgba(255, 255, 255, 0.75);
+            --bg-panel-hover: rgba(255, 255, 255, 0.95);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: rgba(0, 0, 0, 0.1);
+            --border-highlight: rgba(0, 0, 0, 0.2);
+            --brand: #e11d48;
+            --brand-glow: rgba(225, 29, 72, 0.15);
+            --success: #059669;
+            --success-glow: rgba(5, 150, 105, 0.15);
+            --accent: #0284c7;
+        }
+
+        /* Light Theme Specific Fixes (Glassmorphism Adaptation) */
+        html[data-theme="light"] body {
+            background-image: 
+                linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+        }
+        html[data-theme="light"] .theme-toggle { background: rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] .theme-btn.active { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        html[data-theme="light"] .list-item, html[data-theme="light"] .table td { background: rgba(255, 255, 255, 0.5); }
+        html[data-theme="light"] .navbar { background: rgba(241, 245, 249, 0.85); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1); }
+        html[data-theme="light"] .panel { background: linear-gradient(145deg, var(--bg-panel) 0%, rgba(255, 255, 255, 0.9) 100%); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] .panel-highlight { box-shadow: inset 0 0 60px rgba(225, 29, 72, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] thead { background: rgba(248, 250, 252, 0.95) !important; }
     </style>
 </head>
 <body>
+
     <nav class="navbar">
         <div class="container flex-between">
             <div class="flex-align">
                 <h1 style="font-size: 1.3rem; font-weight: bold; letter-spacing: -0.05em; display: flex; align-items: flex-start;">
-                    SYSWARDEN&nbsp;<span class="text-brand">v1.81 Slackware</span>
+                    SYSWARDEN&nbsp;<span class="text-brand">v1.82</span>
                     <div class="syswarden-pulse"></div>
                 </h1>
             </div>
             <div class="flex-align">
+			    <div class="theme-toggle" id="theme-switcher">
+                    <button class="theme-btn" data-theme-val="light" title="Light Theme">
+                        <svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06z"/></svg>
+                    </button>
+                    <button class="theme-btn active" data-theme-val="system" title="System Theme">
+                        <svg viewBox="0 0 24 24"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+                    </button>
+                    <button class="theme-btn" data-theme-val="dark" title="Dark Theme">
+                        <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    </button>
+                </div>
                 <span class="text-xs uppercase tracking-widest font-bold" id="status-text" style="color: var(--text-muted);">Initializing...</span>
                 <div class="status-dot status-down" id="status-indicator"></div>
             </div>
         </div>
     </nav>
+
     <main class="container" style="padding-top: 2.5rem; padding-bottom: 3rem;">
+        
         <div class="grid grid-4 mb-8">
             <div class="panel">
                 <p class="panel-title">Hostname</p>
@@ -2446,6 +2662,7 @@ generate_dashboard() {
                 <p class="panel-val" id="sys-ram">--</p>
             </div>
         </div>
+
         <div class="grid grid-3 mb-8">
             <div class="panel">
                 <h2 class="panel-title mb-4">Layer 3 Kernel Shield</h2>
@@ -2464,12 +2681,14 @@ generate_dashboard() {
                     </div>
                 </div>
             </div>
+
             <div class="panel panel-highlight">
                 <h2 class="panel-title text-brand mb-4">Layer 7 Fail2ban WAF</h2>
                 <p class="text-sm text-muted mb-4">Total Active Bans (Real-time)</p>
                 <p class="val-huge" id="l7-banned">0</p>
                 <p class="text-sm text-muted mt-4"><span id="l7-jails" class="font-bold text-main">0</span> Jails Monitoring</p>
             </div>
+
             <div class="panel" style="display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
                     <h2 class="panel-title text-success mb-4">Safe Zone (Whitelist)</h2>
@@ -2481,6 +2700,7 @@ generate_dashboard() {
                 </div>
             </div>
         </div>
+
         <div class="panel mb-8">
             <h2 class="panel-title text-brand mb-4">Threat Vectors & Repeat Offenders</h2>
             <div class="grid grid-2">
@@ -2498,6 +2718,7 @@ generate_dashboard() {
                 </div>
             </div>
         </div>
+
         <div class="grid grid-3 mb-8">
             <div class="panel chart-span">
                 <h2 class="panel-title mb-4">L7 Threat Telemetry (Live)</h2>
@@ -2505,6 +2726,7 @@ generate_dashboard() {
                     <canvas id="threatChart"></canvas>
                 </div>
             </div>
+
             <div class="panel">
                 <h2 class="panel-title mb-4">Active Jail Triggers</h2>
                 <div class="scroll-y">
@@ -2514,6 +2736,7 @@ generate_dashboard() {
                 </div>
             </div>
         </div>
+        
         <div class="grid grid-2 mb-8">
             <div class="panel">
                 <h2 class="panel-title mb-4">L7 Banned IP Registry</h2>
@@ -2529,6 +2752,7 @@ generate_dashboard() {
                      </table>
                 </div>
             </div>
+
             <div class="panel">
                 <h2 class="panel-title text-success mb-4">Global Whitelist Registry</h2>
                 <div class="scroll-y">
@@ -2539,7 +2763,72 @@ generate_dashboard() {
     </main>
 
     <script>
+        // --- GLOBAL VARIABLES (Evite l'erreur Temporal Dead Zone) ---
         let threatChart = null;
+
+        // --- 0. THEME MANAGER ---
+        const themeBtns = document.querySelectorAll('.theme-btn');
+        const rootHtml = document.documentElement;
+
+        // --- DEVSECOPS FIX: Failsafe pour le localStorage en exécution locale (file://) ---
+        function getSavedTheme() {
+            try { return localStorage.getItem('syswarden-theme') || 'system'; } 
+            catch (e) { return 'system'; }
+        }
+        function saveTheme(theme) {
+            try { localStorage.setItem('syswarden-theme', theme); } 
+            catch (e) {}
+        }
+        // ---------------------------------------------------------------------------------
+
+        function applyTheme(theme) {
+            let actualTheme = theme;
+            if (theme === 'system') {
+                actualTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            }
+            rootHtml.setAttribute('data-theme', actualTheme);
+
+            // Update button states
+            themeBtns.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('data-theme-val') === theme) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Dynamically update Chart.js colors (Grids and Tooltips)
+            if (typeof threatChart !== 'undefined' && threatChart !== null) {
+                const isLight = actualTheme === 'light';
+                threatChart.options.scales.x.grid.color = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.03)';
+                threatChart.options.scales.y.grid.color = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
+                threatChart.options.plugins.tooltip.backgroundColor = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 10, 15, 0.9)';
+                threatChart.options.plugins.tooltip.titleColor = isLight ? '#0f172a' : '#fff';
+                threatChart.options.plugins.tooltip.bodyColor = isLight ? '#0f172a' : '#fff';
+                threatChart.options.plugins.tooltip.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.15)';
+                threatChart.update();
+            }
+        }
+
+        // Initialize theme safely
+        applyTheme(getSavedTheme());
+
+        // Click listeners for the buttons
+        themeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const selectedTheme = btn.getAttribute('data-theme-val');
+                saveTheme(selectedTheme);
+                applyTheme(selectedTheme);
+            });
+        });
+
+        // Listen for OS/System theme changes in real-time
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+            if (getSavedTheme() === 'system') {
+                applyTheme('system');
+            }
+        });
+        
+        // --- 1. CHART ENGINE (FAULT-TOLERANT & GLASSMORPHISM ADAPTED) ---
         const chartData = {
             labels: [],
             datasets: [{
@@ -2560,6 +2849,8 @@ generate_dashboard() {
         
         try {
             const ctx = document.getElementById('threatChart').getContext('2d');
+            
+            // Subtle glowing gradient
             let gradient = ctx.createLinearGradient(0, 0, 0, 300);
             gradient.addColorStop(0, 'rgba(255, 0, 60, 0.35)');
             gradient.addColorStop(1, 'rgba(255, 0, 60, 0.02)');
@@ -2585,8 +2876,16 @@ generate_dashboard() {
                         }
                     },
                     scales: {
-                        x: { display: false, grid: { color: 'rgba(255, 255, 255, 0.03)' } },
-                        y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [5, 5] }, border: { display: false }, ticks: { font: { family: 'JetBrains Mono' }, padding: 10 } }
+                        x: { 
+                            display: false,
+                            grid: { color: 'rgba(255, 255, 255, 0.03)' }
+                        },
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [5, 5] },
+                            border: { display: false },
+                            ticks: { font: { family: 'JetBrains Mono' }, padding: 10 }
+                        }
                     },
                     animation: { duration: 0 },
                     interaction: { mode: 'nearest', axis: 'x', intersect: false }
@@ -2596,6 +2895,10 @@ generate_dashboard() {
             console.warn("Chart.js failed to load. The dashboard will continue running without the graph.", error);
         }
 
+        // Force chart theme sync on load
+        applyTheme(getSavedTheme());
+
+        // --- 2. DATA FETCH ENGINE ---
         const MAX_DATA_POINTS = 30;
 
         async function fetchTelemetry() {
@@ -2617,6 +2920,7 @@ generate_dashboard() {
                 document.getElementById('l7-jails').innerText = data.layer7.active_jails;
                 document.getElementById('wl-count').innerText = data.whitelist.active_ips;
 
+                // --- DOM UPDATE: Top 10 Jails ---
                 const topJailsEl = document.getElementById('top-jails-list');
                 topJailsEl.innerHTML = '';
                 if (data.layer7.jails_data && data.layer7.jails_data.length > 0) {
@@ -2647,6 +2951,7 @@ generate_dashboard() {
                     topJailsEl.innerHTML = '<li class="text-xs text-muted italic">No active vectors.</li>';
                 }
 
+                // --- DOM UPDATE: Top 10 Attacking IPs ---
                 const topIpsEl = document.getElementById('top-ips-list');
                 topIpsEl.innerHTML = '';
                 if (data.layer7.top_attackers && data.layer7.top_attackers.length > 0) {
@@ -2681,6 +2986,7 @@ generate_dashboard() {
                     topIpsEl.innerHTML = '<li class="text-xs text-muted italic">No attackers recorded yet.</li>';
                 }
 
+                // --- DOM UPDATE: Active Jails List ---
                 const jailListEl = document.getElementById('jail-list');
                 jailListEl.innerHTML = '';
                 if (data.layer7.jails_data && data.layer7.jails_data.length > 0) {
@@ -2703,6 +3009,7 @@ generate_dashboard() {
                     jailListEl.innerHTML = '<li class="text-sm text-muted italic">No active bans found. Server is quiet.</li>';
                 }
 
+                // --- DOM UPDATE: Banned IPs Registry Table ---
                 const bannedIpsEl = document.getElementById('banned-ips-list');
                 bannedIpsEl.innerHTML = '';
                 if (data.layer7.banned_ips && data.layer7.banned_ips.length > 0) {
@@ -2731,6 +3038,7 @@ generate_dashboard() {
                     bannedIpsEl.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 1.5rem 0;" class="text-xs text-muted italic">Registry is empty.</td></tr>';
                 }
 
+                // --- DOM UPDATE: Whitelist IPs Registry Grid ---
                 const wlIpsEl = document.getElementById('whitelist-ips-list');
                 wlIpsEl.innerHTML = '';
                 if (data.whitelist.ips && data.whitelist.ips.length > 0) {
@@ -2756,6 +3064,7 @@ generate_dashboard() {
                     wlIpsEl.innerHTML = '<li class="text-xs text-muted italic" style="grid-column: span 2;">Registry is empty.</li>';
                 }
 
+                // Update Chart
                 const now = new Date();
                 const timeString = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
                 
@@ -2770,6 +3079,7 @@ generate_dashboard() {
                     threatChart.update();
                 }
 
+                // Update Status UI (GREEN = UP)
                 document.getElementById('last-update').innerText = timeString;
                 const statusInd = document.getElementById('status-indicator');
                 const statusTxt = document.getElementById('status-text');
@@ -2780,6 +3090,7 @@ generate_dashboard() {
             } catch (error) {
                 console.error("Telemetry Fetch Error:", error);
                 document.getElementById('last-update').innerText = "Offline / Error";
+                // Update Status UI (RED = DOWN)
                 const statusInd = document.getElementById('status-indicator');
                 const statusTxt = document.getElementById('status-text');
                 statusInd.className = 'status-dot status-down';
@@ -2943,6 +3254,52 @@ if [[ "$MODE" != "update" ]]; then
     : >"$CONF_FILE"
     install_dependencies
     auto_whitelist_admin
+    process_auto_whitelist "$MODE"
+
+    # --- DEVSECOPS: PRE-FLIGHT CHECKLIST (Interactive Mode Only) ---
+    if [[ "$MODE" != "auto" ]]; then
+        BOLD='\033[1m'
+        CYAN='\033[0;36m'
+        clear
+        echo -e "${BLUE}${BOLD}==============================================================================${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.82 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${BLUE}${BOLD}==============================================================================${NC}"
+        echo -e "Before proceeding with the deployment, please ensure you have the following"
+        echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
+        echo -e "gather the info, and restart the script.\n"
+
+        echo -e "${BOLD}1. SSH CONFIGURATION${NC}"
+        echo -e "   You will need to confirm the custom SSH port used to connect to this server."
+
+        echo -e "\n${BOLD}2. WIREGUARD VPN${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   Decide if you need a stealth admin VPN. If unsure, consult your SysAdmin."
+
+        echo -e "\n${BOLD}3. OS HARDENING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   Strict restrictions for privileged groups (Wheel/Adm). Recommended for NEW servers only."
+
+        echo -e "\n${BOLD}4. GEOIP BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   ISO country codes to drop instantly (e.g., RU,CN,KP)."
+        echo -e "   Reference: ${CYAN}https://www.ipdeny.com/ipblocks/${NC}"
+
+        echo -e "\n${BOLD}5. ASN BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   Target Autonomous System Numbers to drop (e.g., AS1234, AS5678)."
+        echo -e "   Reference: ${CYAN}https://www.spamhaus.org/drop/asndrop.json${NC}"
+
+        echo -e "\n${BOLD}6. THREAT INTEL BLOCKLISTS${NC}"
+        echo -e "   [1] Standard (Web Servers)      [2] Critical (High Security)"
+        echo -e "   [3] Custom (Plaintext URL .txt) [4] None (Geo/ASN Only)"
+
+        echo -e "\n${BOLD}7. ABUSEIPDB INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   Requires a valid API Key to automatically report Layer 7 attackers."
+        echo -e "   Get one at: ${CYAN}https://www.abuseipdb.com/account/api${NC}"
+
+        echo -e "${BLUE}${BOLD}==============================================================================${NC}"
+        read -p "$(echo -e "${YELLOW}Press [ENTER] to begin the configuration, or [Ctrl+C] to abort... ${NC}")"
+        echo ""
+        log "INFO" "Pre-Flight Checklist acknowledged. Starting interactive configuration..."
+    fi
+    # ---------------------------------------------------------------
+
     define_ssh_port "$MODE"
     define_wireguard "$MODE"
     define_os_hardening "$MODE"

@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.81"
+VERSION="v1.82"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -566,6 +566,46 @@ auto_whitelist_admin() {
     else
         log "WARN" "CRITICAL: Could not auto-detect admin SSH IP. You risk being locked out!"
     fi
+}
+
+process_auto_whitelist() {
+    # Only execute in auto mode and if the variable is populated
+    if [[ "${1:-}" != "auto" ]] || [[ -z "${SYSWARDEN_WHITELIST_IPS:-}" ]]; then
+        return
+    fi
+
+    echo -e "\n${BLUE}=== Step: Processing Automated Whitelist ===${NC}"
+    log "INFO" "Processing custom Whitelist from auto-configuration..."
+
+    mkdir -p "$SYSWARDEN_DIR"
+    touch "$WHITELIST_FILE"
+
+    # --- DEVSECOPS FIX: TEMPORARY IFS RESTORE ---
+    # We must allow space separation just for this loop, bypassing the global strict IFS=$'\n\t'
+    local OLD_IFS="$IFS"
+    IFS=$' \n\t'
+    # ----------------------------------
+
+    for ip in $SYSWARDEN_WHITELIST_IPS; do
+        # Ignore empty strings
+        if [[ -z "$ip" ]]; then continue; fi
+
+        # --- SECURITY FIX: STRICT IPV4 VALIDATION ---
+        # Prevents malicious or malformed strings from crashing the firewall daemon
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "$ip" != "127.0.0.1" ]]; then
+            if ! grep -q "^${ip}$" "$WHITELIST_FILE" 2>/dev/null; then
+                log "INFO" "Auto-configuration: Whitelisting IP $ip"
+                echo "$ip" >>"$WHITELIST_FILE"
+            else
+                log "INFO" "Auto-configuration: IP $ip is already whitelisted."
+            fi
+        else
+            log "WARN" "Auto-configuration: Invalid IP format skipped -> '$ip'"
+        fi
+    done
+
+    # Restore strict security IFS
+    IFS="$OLD_IFS"
 }
 
 # ==============================================================================
@@ -2700,14 +2740,28 @@ setup_abuse_reporting() {
     # -----------------------------
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
+
+        # --- DEVSECOPS FIX: Strict Validation with CI/CD Auto-Mode support ---
         if [[ "${1:-}" == "auto" ]]; then
             USER_API_KEY=${SYSWARDEN_ABUSE_API_KEY:-""}
+            if [[ -n "$USER_API_KEY" && ! "$USER_API_KEY" =~ ^[a-z0-9]{80}$ ]]; then
+                log "ERROR" "Auto Mode: Invalid SYSWARDEN_ABUSE_API_KEY format. Must be exactly 80 lowercase letters/numbers. Skipping reporting setup."
+                return
+            fi
         else
-            read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+            while true; do
+                read -p "Enter your AbuseIPDB API Key: " USER_API_KEY
+                if [[ -z "$USER_API_KEY" ]]; then
+                    break
+                elif [[ ! "$USER_API_KEY" =~ ^[a-z0-9]{80}$ ]]; then
+                    echo -e "${RED}ERROR: Invalid API Key format. It must contain exactly 80 lowercase letters and numbers.${NC}"
+                else
+                    echo -e "${GREEN}[✔] API Key syntax validated.${NC}"
+                    break
+                fi
+            done
         fi
-
-        # Sanitize API Key
-        USER_API_KEY=$(echo "$USER_API_KEY" | tr -cd 'a-zA-Z0-9_-')
+        # ---------------------------------------------------------------------
 
         if [[ -z "$USER_API_KEY" ]]; then
             log "ERROR" "No API Key provided. Skipping reporting setup."
@@ -3659,7 +3713,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v1.81 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.82 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -3836,7 +3890,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.81 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS / BENTO-DARK)
+# SYSWARDEN v1.82 - NGINX SECURE DASHBOARD (HTTPS / CSP / LOCAL FONTS / BENTO-DARK)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4061,6 +4115,56 @@ function generate_dashboard() {
             width: 6px; height: 6px; border-radius: 50%; background: var(--brand);
             animation: pulse-red 2s infinite; margin-left: 2px; margin-top: 4px;
         }
+		
+		/* --- 3. LIGHT THEME & SWITCHER OVERRIDES --- */
+        /* Theme Switcher UI */
+        .theme-toggle {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border);
+            border-radius: 20px; display: flex; align-items: center;
+            padding: 4px; cursor: pointer; transition: all 0.3s; margin-right: 15px;
+        }
+        .theme-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            width: 30px; height: 30px; border-radius: 50%; display: flex;
+            align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.3s; padding: 6px;
+        }
+        .theme-btn:hover { color: var(--text-main); }
+        .theme-btn.active {
+            background: var(--bg-panel-hover); color: var(--accent);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+        /* Light Theme Variables */
+        html[data-theme="light"] {
+            --bg-base: #f1f5f9;
+            --bg-panel: rgba(255, 255, 255, 0.75);
+            --bg-panel-hover: rgba(255, 255, 255, 0.95);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: rgba(0, 0, 0, 0.1);
+            --border-highlight: rgba(0, 0, 0, 0.2);
+            --brand: #e11d48;
+            --brand-glow: rgba(225, 29, 72, 0.15);
+            --success: #059669;
+            --success-glow: rgba(5, 150, 105, 0.15);
+            --accent: #0284c7;
+        }
+
+        /* Light Theme Specific Fixes (Glassmorphism Adaptation) */
+        html[data-theme="light"] body {
+            background-image: 
+                linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+        }
+        html[data-theme="light"] .theme-toggle { background: rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] .theme-btn.active { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        html[data-theme="light"] .list-item, html[data-theme="light"] .table td { background: rgba(255, 255, 255, 0.5); }
+        html[data-theme="light"] .navbar { background: rgba(241, 245, 249, 0.85); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1); }
+        html[data-theme="light"] .panel { background: linear-gradient(145deg, var(--bg-panel) 0%, rgba(255, 255, 255, 0.9) 100%); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] .panel-highlight { box-shadow: inset 0 0 60px rgba(225, 29, 72, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.05); }
+        html[data-theme="light"] thead { background: rgba(248, 250, 252, 0.95) !important; }
     </style>
 </head>
 <body>
@@ -4069,11 +4173,22 @@ function generate_dashboard() {
         <div class="container flex-between">
             <div class="flex-align">
                 <h1 style="font-size: 1.3rem; font-weight: bold; letter-spacing: -0.05em; display: flex; align-items: flex-start;">
-                    SYSWARDEN&nbsp;<span class="text-brand">v1.81</span>
+                    SYSWARDEN&nbsp;<span class="text-brand">v1.82</span>
                     <div class="syswarden-pulse"></div>
                 </h1>
             </div>
             <div class="flex-align">
+			    <div class="theme-toggle" id="theme-switcher">
+                    <button class="theme-btn" data-theme-val="light" title="Light Theme">
+                        <svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06z"/></svg>
+                    </button>
+                    <button class="theme-btn active" data-theme-val="system" title="System Theme">
+                        <svg viewBox="0 0 24 24"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/></svg>
+                    </button>
+                    <button class="theme-btn" data-theme-val="dark" title="Dark Theme">
+                        <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    </button>
+                </div>
                 <span class="text-xs uppercase tracking-widest font-bold" id="status-text" style="color: var(--text-muted);">Initializing...</span>
                 <div class="status-dot status-down" id="status-indicator"></div>
             </div>
@@ -4201,8 +4316,72 @@ function generate_dashboard() {
     </main>
 
     <script>
-        // --- 1. CHART ENGINE (FAULT-TOLERANT & GLASSMORPHISM ADAPTED) ---
+        // --- GLOBAL VARIABLES (Evite l'erreur Temporal Dead Zone) ---
         let threatChart = null;
+
+        // --- 0. THEME MANAGER ---
+        const themeBtns = document.querySelectorAll('.theme-btn');
+        const rootHtml = document.documentElement;
+
+        // --- DEVSECOPS FIX: Failsafe pour le localStorage en exécution locale (file://) ---
+        function getSavedTheme() {
+            try { return localStorage.getItem('syswarden-theme') || 'system'; } 
+            catch (e) { return 'system'; }
+        }
+        function saveTheme(theme) {
+            try { localStorage.setItem('syswarden-theme', theme); } 
+            catch (e) {}
+        }
+        // ---------------------------------------------------------------------------------
+
+        function applyTheme(theme) {
+            let actualTheme = theme;
+            if (theme === 'system') {
+                actualTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            }
+            rootHtml.setAttribute('data-theme', actualTheme);
+
+            // Update button states
+            themeBtns.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('data-theme-val') === theme) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Dynamically update Chart.js colors (Grids and Tooltips)
+            if (typeof threatChart !== 'undefined' && threatChart !== null) {
+                const isLight = actualTheme === 'light';
+                threatChart.options.scales.x.grid.color = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.03)';
+                threatChart.options.scales.y.grid.color = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)';
+                threatChart.options.plugins.tooltip.backgroundColor = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(10, 10, 15, 0.9)';
+                threatChart.options.plugins.tooltip.titleColor = isLight ? '#0f172a' : '#fff';
+                threatChart.options.plugins.tooltip.bodyColor = isLight ? '#0f172a' : '#fff';
+                threatChart.options.plugins.tooltip.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.15)';
+                threatChart.update();
+            }
+        }
+
+        // Initialize theme safely
+        applyTheme(getSavedTheme());
+
+        // Click listeners for the buttons
+        themeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const selectedTheme = btn.getAttribute('data-theme-val');
+                saveTheme(selectedTheme);
+                applyTheme(selectedTheme);
+            });
+        });
+
+        // Listen for OS/System theme changes in real-time
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+            if (getSavedTheme() === 'system') {
+                applyTheme('system');
+            }
+        });
+        
+        // --- 1. CHART ENGINE (FAULT-TOLERANT & GLASSMORPHISM ADAPTED) ---
         const chartData = {
             labels: [],
             datasets: [{
@@ -4268,6 +4447,9 @@ function generate_dashboard() {
         } catch (error) {
             console.warn("Chart.js failed to load. The dashboard will continue running without the graph.", error);
         }
+
+        // Force chart theme sync on load
+        applyTheme(getSavedTheme());
 
         // --- 2. DATA FETCH ENGINE ---
         const MAX_DATA_POINTS = 30;
@@ -5033,6 +5215,7 @@ detect_os_backend
 
 # --- PREVENT ADMIN LOCK-OUT (EXECUTE BEFORE FAIL2BAN/FIREWALL) ---
 auto_whitelist_admin
+process_auto_whitelist "$MODE"
 # -----------------------------------------------------------------
 
 if [[ "$MODE" != "update" ]]; then
@@ -5044,7 +5227,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.81 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.82 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"

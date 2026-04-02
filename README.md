@@ -191,7 +191,7 @@ For Universal OS (Debian / Ubuntu / RHEL ecosystem):
 
 ```bash
 cd /usr/local/bin/
-wget https://github.com/duggytuxy/syswarden/releases/download/v1.81/install-syswarden.sh
+wget https://github.com/duggytuxy/syswarden/releases/download/v1.82/install-syswarden.sh
 chmod +x install-syswarden.sh
 ./install-syswarden.sh
 ```
@@ -200,7 +200,7 @@ For Alpine Linux (OpenRC):
 
 ```bash
 cd /usr/local/bin/
-wget https://github.com/duggytuxy/syswarden/releases/download/v1.81/install-syswarden-alpine.sh
+wget https://github.com/duggytuxy/syswarden/releases/download/v1.82/install-syswarden-alpine.sh
 chmod +x install-syswarden-alpine.sh
 ./install-syswarden-alpine.sh
 ```
@@ -219,7 +219,7 @@ Paste the following configuration into the file (exemple:)
 
 ```
 # ==============================================================================
-# Version=v1.81
+# Version=v1.82
 # SYSWARDEN UNATTENDED INSTALLATION CONFIGURATION
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -244,6 +244,11 @@ SYSWARDEN_ENTERPRISE_MODE="n"
 # --- SSH Configuration ---
 # Leave empty to auto-detect current active port
 SYSWARDEN_SSH_PORT=""
+
+# --- Whitelist Configuration ---
+# Space-separated list of IPv4 addresses to automatically whitelist (e.g., "192.168.1.50 203.0.113.10")
+# Extremely useful for CI/CD, Ansible, or Cloud-init deployments to prevent admin lock-out.
+SYSWARDEN_WHITELIST_IPS=""
 
 # --- WireGuard Management VPN ---
 # y = Enable, n = Disable
