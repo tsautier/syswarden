@@ -2,7 +2,7 @@
 
 # SysWarden Manager - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v1.88
+# Version: v1.89
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,13 +27,18 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v1.88"
+VERSION="v1.89"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}ERROR: SysWarden Manager requires root privileges.${NC}"
     exit 1
 fi
+
+# --- DEVSECOPS FIX: OS DETECTION ---
+OS_TYPE="Universal"
+if [[ -f /etc/alpine-release ]]; then OS_TYPE="Alpine"; fi
+if [[ -f /etc/slackware-version ]]; then OS_TYPE="Slackware"; fi
 
 # --- FIREWALL BACKEND DETECTION ---
 detect_backend() {
@@ -47,6 +52,18 @@ detect_backend() {
         FW_BACKEND="ipset"
     else
         FW_BACKEND="unknown"
+    fi
+}
+
+# --- DEVSECOPS FIX: DYNAMIC NFTABLES CHAIN RESOLUTION ---
+# Slackware & Debian use 'input_frontline', Alpine uses 'input'
+get_nft_chain() {
+    if nft list chain inet syswarden_table input_frontline >/dev/null 2>&1; then
+        NFT_CHAIN="input_frontline"
+    elif nft list chain inet syswarden_table input >/dev/null 2>&1; then
+        NFT_CHAIN="input"
+    else
+        NFT_CHAIN="input" # Fallback failsafe
     fi
 }
 
@@ -212,11 +229,11 @@ whitelist_ip() {
 
     case "$FW_BACKEND" in
         nftables)
-            nft insert rule inet syswarden_table input ip saddr "$target_ip" accept 2>/dev/null || true
+            get_nft_chain
+            nft insert rule inet syswarden_table "$NFT_CHAIN" ip saddr "$target_ip" accept 2>/dev/null || true
             nft list table inet syswarden_table >/etc/syswarden/syswarden.nft 2>/dev/null || true
             ;;
         firewalld)
-            # DEVSECOPS FIX: Dynamic Zone & Absolute Top Priority (-32000) for Whitelist
             local ACTIVE_ZONE
             ACTIVE_ZONE=$(firewall-cmd --get-default-zone 2>/dev/null || echo "public")
             firewall-cmd --permanent --zone="$ACTIVE_ZONE" --add-rich-rule="rule priority='-32000' family='ipv4' source address='$target_ip' accept" >/dev/null 2>&1 || true
@@ -225,9 +242,14 @@ whitelist_ip() {
         ufw)
             ufw insert 1 allow from "$target_ip" >/dev/null 2>&1 || true
             ;;
-        ipset)
+        ipset | unknown)
             iptables -I INPUT 1 -s "$target_ip" -j ACCEPT 2>/dev/null || true
-            if command -v netfilter-persistent >/dev/null; then
+
+            # DEVSECOPS FIX: Persistence for Slackware vs Systemd environments
+            if [[ "$OS_TYPE" == "Slackware" ]]; then
+                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
+                ipset save >/etc/syswarden/ipsets.save 2>/dev/null || true
+            elif command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -238,15 +260,11 @@ whitelist_ip() {
 
     # ==============================================================================
     # --- DEVSECOPS FIX: DYNAMIC NGINX ACL INJECTION ---
-    # Automatically authorize the IP in the Dashboard UI without requiring a full
-    # system update. Uses atomic AWK injection and safe Nginx config validation.
     # ==============================================================================
     local nginx_conf="/etc/nginx/conf.d/syswarden-ui.conf"
 
-    # Fallback for Debian/Ubuntu environments
     if [[ -f "/etc/nginx/sites-available/syswarden-ui.conf" ]]; then
         nginx_conf="/etc/nginx/sites-available/syswarden-ui.conf"
-    # Fallback for Alpine Linux environments (BusyBox/OpenRC)
     elif [[ -f "/etc/nginx/http.d/syswarden-ui.conf" ]]; then
         nginx_conf="/etc/nginx/http.d/syswarden-ui.conf"
     fi
@@ -254,26 +272,20 @@ whitelist_ip() {
     if [[ -f "$nginx_conf" ]]; then
         echo -e "${BLUE}>> Injecting $target_ip into Nginx UI Access Control List (ACL)...${NC}"
 
-        # 1. Idempotency: Verify if the IP is already allowed in the Nginx config
         if ! grep -q "allow $target_ip;" "$nginx_conf"; then
-
-            # 2. Surgical Injection: Insert 'allow <IP>;' strictly before the 'deny all;' directive
-            # DEVSECOPS FIX: Ultimate POSIX compatibility (GNU/BusyBox) using AWK.
-            # We use 'cat' to overwrite the file and preserve original Nginx permissions.
             awk -v ip="$target_ip" '/^[[:space:]]*deny all;/ { print "    allow " ip ";" } { print }' "$nginx_conf" >"${nginx_conf}.tmp" && cat "${nginx_conf}.tmp" >"$nginx_conf" && rm -f "${nginx_conf}.tmp"
 
-            # 3. Safety Check: Validate Nginx syntax before reloading to prevent web server crash
             if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
-
-                # 4. Zero-Downtime Hot Reload
-                if command -v systemctl >/dev/null; then
+                # DEVSECOPS FIX: Slackware Nginx Reload Support
+                if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.nginx ]]; then
+                    /etc/rc.d/rc.nginx restart >/dev/null 2>&1 || true
+                elif command -v systemctl >/dev/null; then
                     systemctl reload nginx >/dev/null 2>&1 || true
                 elif command -v rc-service >/dev/null; then
                     rc-service nginx reload >/dev/null 2>&1 || true
                 fi
                 echo -e "${GREEN}[✔] Dashboard UI access instantly granted to $target_ip via Nginx.${NC}"
             else
-                # Rollback mechanism if injection corrupted the file
                 echo -e "${RED}[!] Nginx configuration test failed. Reverting ACL injection.${NC}"
                 sed -i "/allow $target_ip;/d" "$nginx_conf"
             fi
@@ -312,7 +324,6 @@ allow_ssh_ip() {
     touch "$SSH_WHITELIST_FILE"
     chmod 600 "$SSH_WHITELIST_FILE"
 
-    # Remove old entries for this IP to update the port cleanly
     sed -i "\|^${target_ip}:|d" "$SSH_WHITELIST_FILE" 2>/dev/null || true
     sed -i "\|^${target_ip}$|d" "$SSH_WHITELIST_FILE" 2>/dev/null || true
 
@@ -322,11 +333,11 @@ allow_ssh_ip() {
     # 2. Kernel Injection
     case "$FW_BACKEND" in
         nftables)
-            nft insert rule inet syswarden_table input ip saddr "$target_ip" tcp dport "$SSH_PORT" accept 2>/dev/null || true
+            get_nft_chain
+            nft insert rule inet syswarden_table "$NFT_CHAIN" ip saddr "$target_ip" tcp dport "$SSH_PORT" accept 2>/dev/null || true
             nft list table inet syswarden_table >/etc/syswarden/syswarden.nft 2>/dev/null || true
             ;;
         firewalld)
-            # DEVSECOPS FIX: Dynamic Zone detection for SSH Hot-Bypass
             local ACTIVE_ZONE
             ACTIVE_ZONE=$(firewall-cmd --get-default-zone 2>/dev/null || echo "public")
             firewall-cmd --permanent --zone="$ACTIVE_ZONE" --add-rich-rule="rule priority='-1000' family='ipv4' source address='$target_ip' port port='$SSH_PORT' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -337,7 +348,11 @@ allow_ssh_ip() {
             ;;
         ipset | unknown)
             iptables -I INPUT 1 -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
-            if command -v netfilter-persistent >/dev/null; then
+
+            if [[ "$OS_TYPE" == "Slackware" ]]; then
+                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
+                ipset save >/etc/syswarden/ipsets.save 2>/dev/null || true
+            elif command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -359,7 +374,6 @@ revoke_ssh_ip() {
 
     echo -e "\n${BLUE}>> Revoking direct SSH access for IP $target_ip...${NC}"
 
-    # Retrieve associated port from persistence
     local saved_port=""
     if [[ -f "$SSH_WHITELIST_FILE" ]]; then
         saved_port=$(grep "^${target_ip}:" "$SSH_WHITELIST_FILE" | cut -d':' -f2 | head -n 1 || true)
@@ -382,16 +396,15 @@ revoke_ssh_ip() {
     # 2. Kernel Extraction
     case "$FW_BACKEND" in
         nftables)
+            get_nft_chain
             local handle
-            # DEVSECOPS FIX: Bulletproof regex compatible with both Debian and Alpine Nftables output format
-            handle=$(nft -a list chain inet syswarden_table input 2>/dev/null | grep -E "ip saddr $target_ip tcp dport $SSH_PORT accept" | grep -oP 'handle \K[0-9]+' | head -n 1 || true)
+            handle=$(nft -a list chain inet syswarden_table "$NFT_CHAIN" 2>/dev/null | grep -E "ip saddr $target_ip tcp dport $SSH_PORT accept" | grep -oP 'handle \K[0-9]+' | head -n 1 || true)
             if [[ -n "$handle" ]]; then
-                nft delete rule inet syswarden_table input handle "$handle" 2>/dev/null || true
+                nft delete rule inet syswarden_table "$NFT_CHAIN" handle "$handle" 2>/dev/null || true
             fi
             nft list table inet syswarden_table >/etc/syswarden/syswarden.nft 2>/dev/null || true
             ;;
         firewalld)
-            # DEVSECOPS FIX: Dynamic Zone detection for SSH Revocation
             local ACTIVE_ZONE
             ACTIVE_ZONE=$(firewall-cmd --get-default-zone 2>/dev/null || echo "public")
             firewall-cmd --permanent --zone="$ACTIVE_ZONE" --remove-rich-rule="rule priority='-1000' family='ipv4' source address='$target_ip' port port='$SSH_PORT' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -402,7 +415,10 @@ revoke_ssh_ip() {
             ;;
         ipset | unknown)
             while iptables -D INPUT -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null; do :; done
-            if command -v netfilter-persistent >/dev/null; then
+
+            if [[ "$OS_TYPE" == "Slackware" ]]; then
+                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
+            elif command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -565,22 +581,24 @@ case "$COMMAND" in
         ;;
     reload)
         echo -e "${YELLOW}Triggering full orchestrator synchronization...${NC}"
-        # We safely call the main installer to rebuild everything globally
-        # Checking standard bin directories first, fallback to /root/
+
         if [[ -f "/usr/local/bin/install-syswarden.sh" ]]; then
             bash /usr/local/bin/install-syswarden.sh update
         elif [[ -f "/usr/local/bin/install-syswarden-alpine.sh" ]]; then
             bash /usr/local/bin/install-syswarden-alpine.sh update
+        elif [[ -f "/usr/local/bin/install-syswarden-slackware.sh" ]]; then
+            bash /usr/local/bin/install-syswarden-slackware.sh update
         elif [[ -f "/root/install-syswarden.sh" ]]; then
             bash /root/install-syswarden.sh update
         elif [[ -f "/root/install-syswarden-alpine.sh" ]]; then
             bash /root/install-syswarden-alpine.sh update
+        elif [[ -f "/root/install-syswarden-slackware.sh" ]]; then
+            bash /root/install-syswarden-slackware.sh update
         else
             echo -e "${RED}Main orchestrator script not found in /usr/local/bin/ or /root/. Please run it manually.${NC}"
         fi
 
         # --- DEVSECOPS FIX: PERSISTENCE DURING RELOAD ---
-        # Re-inject the SSH bypass rules after the main script flushes the firewall
         if [[ -s "$SSH_WHITELIST_FILE" ]]; then
             echo -e "\n${BLUE}>> Re-applying SSH Bypass rules from persistence...${NC}"
             while IFS= read -r line; do
