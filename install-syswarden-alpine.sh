@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.93"
+VERSION="v1.94"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -3785,7 +3785,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v1.93 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.94 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -3962,7 +3962,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.93 - ALPINE NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP)
+# SYSWARDEN v1.94 - ALPINE NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4018,13 +4018,15 @@ function generate_dashboard() {
             font-weight: bold; font-style: normal; font-display: swap;
         }
 
-        /* --- THEME DEFINITIONS (Pure B/W) --- */
+        /* --- THEME DEFINITIONS (Pure B/W & Dynamic Brand Colors) --- */
         :root[data-bs-theme="light"] {
             --sw-bg: #ffffff;
             --sw-card-bg: #f8f9fa;
             --sw-border: rgba(0, 0, 0, 0.08);
             --sw-text: #212529;
             --sw-text-muted: #6c757d;
+            --sw-brand-text: #000000;
+            --sw-brand-icon: #0d6efd; /* Blue Shield */
         }
         :root[data-bs-theme="dark"] {
             --sw-bg: #000000;
@@ -4032,6 +4034,8 @@ function generate_dashboard() {
             --sw-border: rgba(255, 255, 255, 0.1);
             --sw-text: #f8f9fa;
             --sw-text-muted: #adb5bd;
+            --sw-brand-text: #ffffff;
+            --sw-brand-icon: #ffc107; /* Yellow Shield */
         }
 
         /* --- GLOBAL STYLES --- */
@@ -4085,6 +4089,8 @@ function generate_dashboard() {
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--sw-border);
         }
+        .nav-brand-text { color: var(--sw-brand-text) !important; transition: color 0.3s ease; }
+        .nav-brand-icon { color: var(--sw-brand-icon) !important; transition: color 0.3s ease; }
 
         /* --- OVERRIDES --- */
         /* Table background fix */
@@ -4099,9 +4105,9 @@ function generate_dashboard() {
 
     <nav class="navbar navbar-expand-lg sticky-top mb-4 py-3">
         <div class="container-fluid px-xxl-5 px-4">
-            <a class="navbar-brand fw-bold text-danger d-flex align-items-center gap-2" href="#">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                SYSWARDEN <span class="text-muted small font-mono" style="font-size: 0.75rem; margin-top: 4px;">v1.93</span>
+            <a class="navbar-brand fw-bold nav-brand-text d-flex align-items-center gap-2" href="#">
+                <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                SYSWARDEN <span class="text-muted small font-mono" style="font-size: 0.75rem; margin-top: 4px;">v1.94</span>
             </a>
             <div class="d-flex align-items-center gap-3 ms-auto">
                 <span class="d-none d-md-inline text-muted small font-mono">Sys: <strong id="sys-hostname" class="text-body">--</strong></span>
@@ -4152,13 +4158,13 @@ function generate_dashboard() {
             </div>
 
             <div class="col-xxl-3 col-lg-6 col-md-6">
-                <div class="card h-100 border-danger" style="border-width: 1px; box-shadow: 0 0 20px rgba(220,53,69,0.05);">
+                <div class="card h-100">
                     <div class="card-body p-4">
-                        <div class="stat-label text-danger mb-3">L7 Active Bans (Fail2ban)</div>
+                        <div class="stat-label mb-3">L7 Active Bans (Fail2ban)</div>
                         <div class="stat-value text-danger font-mono mb-3" id="l7-banned">0</div>
-                        <div class="d-flex justify-content-between border-top pt-3 border-opacity-10 border-danger font-mono small">
-                            <span class="text-danger opacity-75">Active Jails:</span>
-                            <strong class="text-danger" id="l7-jails">0</strong>
+                        <div class="d-flex justify-content-between border-top pt-3 border-opacity-10 font-mono small text-muted">
+                            <span>Active Jails:</span>
+                            <strong class="text-body" id="l7-jails">0</strong>
                         </div>
                     </div>
                 </div>
@@ -5096,7 +5102,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.93 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.94 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
