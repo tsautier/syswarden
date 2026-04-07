@@ -2,7 +2,7 @@
 
 # SysWarden Manager - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v1.92
+# Version: v1.93
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v1.92"
+VERSION="v1.93"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
@@ -35,7 +35,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# --- DEVSECOPS FIX: OS DETECTION ---
+# --- HOTFIX: OS DETECTION ---
 OS_TYPE="Universal"
 if [[ -f /etc/alpine-release ]]; then OS_TYPE="Alpine"; fi
 if [[ -f /etc/slackware-version ]]; then OS_TYPE="Slackware"; fi
@@ -55,7 +55,7 @@ detect_backend() {
     fi
 }
 
-# --- DEVSECOPS FIX: DYNAMIC NFTABLES CHAIN RESOLUTION ---
+# --- HOTFIX: DYNAMIC NFTABLES CHAIN RESOLUTION ---
 # Slackware & Debian use 'input_frontline', Alpine uses 'input'
 get_nft_chain() {
     if nft list chain inet syswarden_table input_frontline >/dev/null 2>&1; then
@@ -245,7 +245,7 @@ whitelist_ip() {
         ipset | unknown)
             iptables -I INPUT 1 -s "$target_ip" -j ACCEPT 2>/dev/null || true
 
-            # DEVSECOPS FIX: Persistence for Slackware vs Systemd environments
+            # HOTFIX: Persistence for Slackware vs Systemd environments
             if [[ "$OS_TYPE" == "Slackware" ]]; then
                 iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
                 ipset save >/etc/syswarden/ipsets.save 2>/dev/null || true
@@ -259,7 +259,7 @@ whitelist_ip() {
     echo -e "${GREEN}[✔] Hot-injected VIP Accept Rule into Kernel ($FW_BACKEND)${NC}"
 
     # ==============================================================================
-    # --- DEVSECOPS FIX: DYNAMIC NGINX ACL INJECTION ---
+    # --- HOTFIX: DYNAMIC NGINX ACL INJECTION ---
     # ==============================================================================
     local nginx_conf="/etc/nginx/conf.d/syswarden-ui.conf"
 
@@ -276,7 +276,7 @@ whitelist_ip() {
             awk -v ip="$target_ip" '/^[[:space:]]*deny all;/ { print "    allow " ip ";" } { print }' "$nginx_conf" >"${nginx_conf}.tmp" && cat "${nginx_conf}.tmp" >"$nginx_conf" && rm -f "${nginx_conf}.tmp"
 
             if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
-                # DEVSECOPS FIX: Slackware Nginx Reload Support
+                # HOTFIX: Slackware Nginx Reload Support
                 if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.nginx ]]; then
                     /etc/rc.d/rc.nginx restart >/dev/null 2>&1 || true
                 elif command -v systemctl >/dev/null; then
@@ -598,7 +598,7 @@ case "$COMMAND" in
             echo -e "${RED}Main orchestrator script not found in /usr/local/bin/ or /root/. Please run it manually.${NC}"
         fi
 
-        # --- DEVSECOPS FIX: PERSISTENCE DURING RELOAD ---
+        # --- HOTFIX: PERSISTENCE DURING RELOAD ---
         if [[ -s "$SSH_WHITELIST_FILE" ]]; then
             echo -e "\n${BLUE}>> Re-applying SSH Bypass rules from persistence...${NC}"
             while IFS= read -r line; do

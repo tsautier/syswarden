@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v1.92"
+VERSION="v1.93"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -118,7 +118,7 @@ install_dependencies() {
     log "INFO" "Installing required dependencies..."
 
     # ==============================================================================
-    # --- DEVSECOPS FIX: STATE TRACKER (Avoid God Mode Uninstall) ---
+    # --- HOTFIX: STATE TRACKER (Avoid God Mode Uninstall) ---
     # Record pre-existing critical services so we don't purge them on uninstall.
     # MUST BE EXECUTED BEFORE ANY APK COMMANDS!
     # ==============================================================================
@@ -157,7 +157,7 @@ install_dependencies() {
     IFS="$OLD_IFS" # Restore strict IFS for the rest of the script
     # ----------------------------------
 
-    # --- DEVSECOPS FIX: PREEMPTIVE NGINX LOG CREATION ---
+    # --- HOTFIX: PREEMPTIVE NGINX LOG CREATION ---
     mkdir -p /var/log/nginx
     touch /var/log/nginx/access.log /var/log/nginx/error.log
     chmod 640 /var/log/nginx/*.log 2>/dev/null || true
@@ -580,7 +580,7 @@ process_auto_whitelist() {
     mkdir -p "$SYSWARDEN_DIR"
     touch "$WHITELIST_FILE"
 
-    # --- DEVSECOPS FIX: TEMPORARY IFS RESTORE ---
+    # --- HOTFIX: TEMPORARY IFS RESTORE ---
     # We must allow space separation just for this loop, bypassing the global strict IFS=$'\n\t'
     local OLD_IFS="$IFS"
     IFS=$' \n\t'
@@ -1002,7 +1002,7 @@ EOF
             echo "add rule inet syswarden_table input ip saddr @$ASN_SET_NAME log prefix \"[SysWarden-ASN] \" drop" >>"$TMP_DIR/syswarden.nft"
         fi
 
-        # --- DEVSECOPS FIX: NO CATCH-ALL HERE ---
+        # --- HOTFIX: NO CATCH-ALL HERE ---
         # The Catch-All Drop and Active Ports allow are delegated to the native OS table (priority 0)
         # This guarantees Fail2ban (priority -1) can inspect and reject traffic.
         cat <<EOF >>"$TMP_DIR/syswarden.nft"
@@ -1010,7 +1010,7 @@ add rule inet syswarden_table input ip saddr @$SET_NAME log prefix "[SysWarden-B
 EOF
 
         log "INFO" "Populating Nftables sets atomically in chunks (Bypassing memory limits)..."
-        # --- DEVSECOPS FIX: AWK BATCH INJECTION (Anti-ARG_MAX & Anti-OOM) ---
+        # --- HOTFIX: AWK BATCH INJECTION (Anti-ARG_MAX & Anti-OOM) ---
 
         if [[ -s "$FINAL_LIST" ]]; then
             awk -v set_name="$SET_NAME" '
@@ -1071,13 +1071,13 @@ EOF
             fi
         fi
 
-        # --- NEW DEVSECOPS FIX: IDEMPOTENT ALPINE NATIVE FIREWALL AUTO-BYPASS ---
+        # --- NEW HOTFIX: IDEMPOTENT ALPINE NATIVE FIREWALL AUTO-BYPASS ---
         log "INFO" "Configuring Native OS Firewall Bypass for active services & VPN..."
         mkdir -p /etc/nftables.d
 
         local OS_BYPASS_FILE="/etc/nftables.d/syswarden-os-bypass.nft"
 
-        # DEVSECOPS FIX: Atomic structure to safely reload directly via 'nft -f'
+        # HOTFIX: Atomic structure to safely reload directly via 'nft -f'
         cat <<EOF >"$OS_BYPASS_FILE"
 add table inet filter
 add chain inet filter input { type filter hook input priority filter; policy drop; }
@@ -1110,7 +1110,7 @@ EOF
             echo "        tcp dport { $ACTIVE_PORTS } accept comment \"SysWarden: Auto-allow Discovered Services\"" >>"$OS_BYPASS_FILE"
         fi
 
-        # DEVSECOPS FIX: Log packets before they hit the Guillotine so Fail2ban can catch portscans
+        # HOTFIX: Log packets before they hit the Guillotine so Fail2ban can catch portscans
         echo "        log prefix \"[SysWarden-BLOCK] [Catch-All] \"" >>"$OS_BYPASS_FILE"
 
         echo "    }" >>"$OS_BYPASS_FILE"
@@ -1126,7 +1126,7 @@ EOF
         fi
         echo "}" >>"$OS_BYPASS_FILE"
 
-        # DEVSECOPS FIX: Force injection into RAM immediately
+        # HOTFIX: Force injection into RAM immediately
         nft -f "$OS_BYPASS_FILE"
 
         # --- MODULAR PERSISTENCE (ZERO-TOUCH) ---
@@ -1136,7 +1136,7 @@ EOF
 
         local MAIN_NFT_CONF="/etc/nftables.nft"
 
-        # DEVSECOPS FIX: Robust fallback if the OS file is completely missing
+        # HOTFIX: Robust fallback if the OS file is completely missing
         if [[ ! -f "$MAIN_NFT_CONF" ]]; then
             log "WARN" "$MAIN_NFT_CONF not found. Creating basic layout."
             echo '#!/usr/sbin/nft -f' >"$MAIN_NFT_CONF"
@@ -1311,7 +1311,7 @@ EOF
                 iptables -I DOCKER-USER 1 -m set --match-set "$GEOIP_SET_NAME" src -j LOG --log-prefix "[SysWarden-GEO] "
             fi
 
-            # --- DEVSECOPS FIX: STATEFUL DOCKER BYPASS (Priority 0 - Absolute Top) ---
+            # --- HOTFIX: STATEFUL DOCKER BYPASS (Priority 0 - Absolute Top) ---
             # Ensures outbound traffic (like S3 uploads) never times out on the way back.
             while iptables -D DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null; do :; done
             iptables -I DOCKER-USER 1 -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
@@ -1339,7 +1339,7 @@ discover_active_services() {
         detected_ports=$(netstat -tln 2>/dev/null | grep '^tcp' | grep -v '127.0.0.1' | grep -v '::1' | awk '{print $4}' | awk -F':' '{print $NF}' | sort -nu)
     fi
 
-    # --- DEVSECOPS FIX: TELNET HONEYPOT FAIL-SAFE ---
+    # --- HOTFIX: TELNET HONEYPOT FAIL-SAFE ---
     # telnetd is often managed by inetd/systemd.socket and might not show up as a standard listening daemon.
     # If the binary exists, we forcefully open port 23 so the Fail2ban honeypot can trap payloads.
     if command -v telnetd >/dev/null 2>&1 || command -v in.telnetd >/dev/null 2>&1; then
@@ -1416,7 +1416,7 @@ EOF
         log "INFO" "Fail2ban infrastructure whitelist enforced: $f2b_ignoreip"
         # ----------------------------------------------------------------------
 
-        # --- DEVSECOPS FIX: LONG-TERM RECIDIVE FILTER ---
+        # --- HOTFIX: LONG-TERM RECIDIVE FILTER ---
         if [[ ! -f "/etc/fail2ban/filter.d/syswarden-recidive.conf" ]]; then
             cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-recidive.conf
 [Definition]
@@ -2739,7 +2739,7 @@ EOF
                 if [[ -z "$TELNET_LOG" ]]; then
                     TELNET_LOG="$log_file"
                 else
-                    # DEVSECOPS FIX: Strict ConfigParser multiline format (newline + 10 spaces)
+                    # HOTFIX: Strict ConfigParser multiline format (newline + 10 spaces)
                     TELNET_LOG+=$'\n          '"$log_file"
                 fi
             fi
@@ -2813,7 +2813,7 @@ setup_abuse_reporting() {
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
 
-        # --- DEVSECOPS FIX: Strict Validation with CI/CD Auto-Mode support ---
+        # --- HOTFIX: Strict Validation with CI/CD Auto-Mode support ---
         if [[ "${1:-}" == "auto" ]]; then
             USER_API_KEY=${SYSWARDEN_ABUSE_API_KEY:-""}
             if [[ -n "$USER_API_KEY" && ! "$USER_API_KEY" =~ ^[a-z0-9]{80}$ ]]; then
@@ -3244,7 +3244,7 @@ setup_wireguard() {
     local POSTDOWN=""
 
     if [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
-        # DEVSECOPS FIX: Use single quotes for nft commands to avoid wg-quick shell escaping crashes.
+        # HOTFIX: Use single quotes for nft commands to avoid wg-quick shell escaping crashes.
         # Note: Forwarding rules for wg0 are already handled globally by syswarden-os-bypass.nft on Alpine.
         POSTUP="nft 'add table inet syswarden_wg'; nft 'add chain inet syswarden_wg prerouting { type nat hook prerouting priority dstnat; }'; nft 'add chain inet syswarden_wg postrouting { type nat hook postrouting priority srcnat; }'; nft 'add rule inet syswarden_wg postrouting oifname \"$ACTIVE_IF\" masquerade'"
         POSTDOWN="nft delete table inet syswarden_wg 2>/dev/null || true"
@@ -3424,7 +3424,7 @@ uninstall_syswarden() {
         source "$CONF_FILE"
     fi
 
-    # --- DEVSECOPS FIX: SURGICAL WIREGUARD CLEANUP (OPENRC) ---
+    # --- HOTFIX: SURGICAL WIREGUARD CLEANUP (OPENRC) ---
     if [[ "${USE_WIREGUARD:-n}" == "y" ]]; then
         log "INFO" "Stopping and removing SysWarden WireGuard VPN..."
         rc-service wg-quick.wg0 stop 2>/dev/null || true
@@ -3462,7 +3462,7 @@ uninstall_syswarden() {
     rm -rf /etc/syswarden/ui
     rm -f /var/log/syswarden-audit.log
 
-    # --- DEVSECOPS FIX: SCORCHED EARTH TELEMETRY PURGE ---
+    # --- HOTFIX: SCORCHED EARTH TELEMETRY PURGE ---
     # Destroys any hidden databases or dashboard memory files specific to Alpine paths
     rm -rf /var/log/syswarden 2>/dev/null || true
     rm -rf /opt/syswarden 2>/dev/null || true
@@ -3480,14 +3480,14 @@ uninstall_syswarden() {
     # Nftables
     if command -v nft >/dev/null; then
         nft delete table inet syswarden_table 2>/dev/null || true
-        # DEVSECOPS FIX: Purge WG NAT table
+        # HOTFIX: Purge WG NAT table
         nft delete table inet syswarden_wg 2>/dev/null || true
 
         # 1. Clean physical files
         rm -f /etc/syswarden/syswarden.nft
         rm -f /etc/nftables.d/syswarden-os-bypass.nft 2>/dev/null || true
 
-        # 2. DEVSECOPS FIX: Purge rules from RAM matching the SysWarden comments
+        # 2. HOTFIX: Purge rules from RAM matching the SysWarden comments
         for chain in input forward; do
             while nft -a list chain inet filter "$chain" 2>/dev/null | grep -q "SysWarden:"; do
                 local handle
@@ -3500,7 +3500,7 @@ uninstall_syswarden() {
             done
         done
 
-        # 3. DEVSECOPS FIX: Alpine uses .nft, Debian uses .conf
+        # 3. HOTFIX: Alpine uses .nft, Debian uses .conf
         local MAIN_NFT_CONF="/etc/nftables.nft"
         if [[ -f "$MAIN_NFT_CONF" ]]; then
             sed -i '\|include "/etc/syswarden/syswarden.nft"|d' "$MAIN_NFT_CONF"
@@ -3541,7 +3541,7 @@ uninstall_syswarden() {
         /etc/init.d/iptables save 2>/dev/null || true
     fi
 
-    # --- DEVSECOPS FIX: DOCKER NETWORK RESURRECTION ---
+    # --- HOTFIX: DOCKER NETWORK RESURRECTION ---
     if command -v docker >/dev/null 2>&1 && rc-service docker status 2>/dev/null | grep -q "started"; then
         log "INFO" "Restarting Docker daemon to rebuild NAT & Masquerade routing..."
         rc-service docker restart 2>/dev/null || true
@@ -3551,7 +3551,7 @@ uninstall_syswarden() {
 
     # 4. Revert Fail2ban Configuration (State Aware)
 
-    # --- DEVSECOPS FIX: SCORCHED EARTH FAIL2BAN & TELEMETRY PURGE (ALPINE) ---
+    # --- HOTFIX: SCORCHED EARTH FAIL2BAN & TELEMETRY PURGE (ALPINE) ---
     log "INFO" "Executing Scorched Earth purge on Alpine telemetry..."
 
     # 1. Brutal kill of OpenRC services and background loops
@@ -3625,7 +3625,7 @@ EOF
 
     # 5. Remove Nginx Dashboard (State Aware)
 
-    # --- DEVSECOPS FIX: CLEAN UNINSTALL ---
+    # --- HOTFIX: CLEAN UNINSTALL ---
     # Remove Nginx virtual host configuration unconditionally
     log "INFO" "Removing Nginx UI configuration..."
     rm -f /etc/nginx/http.d/syswarden-ui.conf
@@ -3663,7 +3663,7 @@ EOF
         rc-service rsyslog restart 2>/dev/null || true
     fi
 
-    # --- DEVSECOPS FIX: PURGE DES LOGS PHYSIQUES ---
+    # --- HOTFIX: PURGE DES LOGS PHYSIQUES ---
     rm -f /var/log/kern-firewall.log 2>/dev/null || true
     rm -f /var/log/auth-syswarden.log 2>/dev/null || true
     rm -f /var/log/syswarden* 2>/dev/null || true
@@ -3686,7 +3686,7 @@ EOF
 
     if [[ -f /etc/cron.allow ]] && [[ "$(cat /etc/cron.allow)" == "root" ]]; then rm -f /etc/cron.allow; fi
 
-    # DEVSECOPS FIX: RESTORE GROUPS (ALPINE ADDGROUP)
+    # HOTFIX: RESTORE GROUPS (ALPINE ADDGROUP)
     if [[ -f "$SYSWARDEN_DIR/group_backup.txt" ]]; then
         while IFS=':' read -r grp members; do
             for user in $(echo "$members" | tr ',' ' '); do
@@ -3785,7 +3785,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v1.92 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v1.93 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -3803,7 +3803,7 @@ IFS=$'\n\t'
 # Ensures all background processes spawned by Fail2ban checks are cleanly reaped.
 trap 'wait' EXIT
 
-# --- DEVSECOPS FIX: ABSOLUTE MUTEX LOCK (ANTI-OVERLAP) ---
+# --- HOTFIX: ABSOLUTE MUTEX LOCK (ANTI-OVERLAP) ---
 # Prevents CPU leaks by ensuring only ONE instance can ever run mathematically
 exec 9>"/tmp/syswarden-telemetry.lock"
 if ! flock -n 9; then
@@ -3848,7 +3848,7 @@ L7_TOTAL_BANNED=0; L7_ACTIVE_JAILS=0
 JAILS_JSON="[]"
 BANNED_IPS_JSON="[]"
 
-# DEVSECOPS FIX: Strict timeouts to prevent Fail2ban socket deadlocks freezing the cron
+# HOTFIX: Strict timeouts to prevent Fail2ban socket deadlocks freezing the cron
 if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev/null 2>&1; then
     JAIL_LIST=$(timeout 2 fail2ban-client status 2>/dev/null | awk -F'Jail list:[ \t]*' '/Jail list:/ {print $2}' | tr -d ' ' | tr ',' '\n' || true)
     
@@ -3856,7 +3856,7 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
         [[ -z "$JAIL" ]] && continue
         L7_ACTIVE_JAILS=$((L7_ACTIVE_JAILS + 1))
         
-        # DEVSECOPS FIX: Abort jail query if it hangs for more than 3 seconds
+        # HOTFIX: Abort jail query if it hangs for more than 3 seconds
         STATUS_OUT=$(timeout 3 fail2ban-client status "$JAIL" 2>/dev/null || echo "")
         
         if [[ -n "$STATUS_OUT" ]]; then
@@ -3962,7 +3962,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v1.92 - ALPINE NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP)
+# SYSWARDEN v1.93 - ALPINE NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -3970,11 +3970,11 @@ function generate_dashboard() {
     local UI_DIR="/etc/syswarden/ui"
     mkdir -p "$UI_DIR"
 
-    # DEVSECOPS FIX: Directory Traversal for Nginx worker (Fixes 403 Forbidden)
+    # HOTFIX: Directory Traversal for Nginx worker (Fixes 403 Forbidden)
     chmod 755 /etc/syswarden
     chmod 755 "$UI_DIR"
 
-    # --- DEVSECOPS FIX: DOWNLOAD LOCAL FONTS ---
+    # --- HOTFIX: DOWNLOAD LOCAL FONTS ---
     log "INFO" "Downloading local JetBrains Mono fonts..."
     wget -qO "$UI_DIR/JetBrainsMono-Regular.woff2" "https://raw.githubusercontent.com/duggytuxy/syswarden/main/fonts/JetBrainsMono-Regular.woff2" || true
     wget -qO "$UI_DIR/JetBrainsMono-Bold.woff2" "https://raw.githubusercontent.com/duggytuxy/syswarden/main/fonts/JetBrainsMono-Bold.woff2" || true
@@ -3999,14 +3999,14 @@ function generate_dashboard() {
 <html lang="en" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SysWarden | Fortress Dashboard</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     
     <style>
-        /* Local Font Integration */
+        /* --- LOCAL FONTS --- */
         @font-face {
             font-family: 'JetBrains Mono';
             src: url('JetBrainsMono-Regular.woff2') format('woff2');
@@ -4018,41 +4018,97 @@ function generate_dashboard() {
             font-weight: bold; font-style: normal; font-display: swap;
         }
 
-        /* --- DEVSECOPS FIX: OVERRIDE BOOTSTRAP MONOSPACE --- */
-        :root {
-            --bs-font-monospace: 'JetBrains Mono', monospace !important;
+        /* --- THEME DEFINITIONS (Pure B/W) --- */
+        :root[data-bs-theme="light"] {
+            --sw-bg: #ffffff;
+            --sw-card-bg: #f8f9fa;
+            --sw-border: rgba(0, 0, 0, 0.08);
+            --sw-text: #212529;
+            --sw-text-muted: #6c757d;
+        }
+        :root[data-bs-theme="dark"] {
+            --sw-bg: #000000;
+            --sw-card-bg: #0a0a0a;
+            --sw-border: rgba(255, 255, 255, 0.1);
+            --sw-text: #f8f9fa;
+            --sw-text-muted: #adb5bd;
         }
 
-        body { font-family: 'JetBrains Mono', system-ui, sans-serif; }
+        /* --- GLOBAL STYLES --- */
+        body { 
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background-color: var(--sw-bg);
+            color: var(--sw-text);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            -webkit-font-smoothing: antialiased;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace !important; }
+
+        /* --- CARDS & UI COMPONENTS --- */
+        .card {
+            background-color: var(--sw-card-bg);
+            border: 1px solid var(--sw-border);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+        }
+        .card-header {
+            border-bottom: 1px solid var(--sw-border);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            color: var(--sw-text-muted);
+        }
         
-        /* Modern SaaS Tweaks */
-        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s; }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
-        .stat-value { font-size: 2rem; font-weight: 700; line-height: 1.2; }
-        .stat-label { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 1px; color: #6c757d; }
+        /* KPI Typography (Size reduced by ~1/3) */
+        .stat-value { font-size: clamp(1.2rem, 1.6vw, 1.6rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }
+        .stat-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--sw-text-muted); font-weight: 600; }
+        
+        /* Containers & Charts */
         .table-container { max-height: 350px; overflow-y: auto; }
-        .chart-wrapper { position: relative; height: 280px; width: 100%; }
-        
-        /* Custom Scrollbar for tables */
+        .chart-wrapper { position: relative; height: 320px; width: 100%; }
+
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.2); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 100, 0.5); }
+        ::-webkit-scrollbar-thumb { background: var(--sw-border); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.5); }
+
+        /* Navbar tweaks */
+        .navbar {
+            background-color: rgba(var(--sw-bg), 0.9) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--sw-border);
+        }
+
+        /* --- OVERRIDES --- */
+        /* Table background fix */
+        .table { --bs-table-bg: transparent !important; }
+        .table > :not(caption) > * > * { background-color: transparent !important; }
+        
+        /* IP Address font size fix (-20%) */
+        .ip-font { font-size: 80% !important; }
     </style>
 </head>
-<body class="bg-body-tertiary">
+<body>
 
-    <nav class="navbar navbar-expand-lg bg-body shadow-sm mb-4 sticky-top">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand fw-bold text-danger d-flex align-items-baseline" href="#">
-                🛡️ SYSWARDEN <span class="text-muted small ms-2" style="font-size: 0.7rem;">v1.92</span>
+    <nav class="navbar navbar-expand-lg sticky-top mb-4 py-3">
+        <div class="container-fluid px-xxl-5 px-4">
+            <a class="navbar-brand fw-bold text-danger d-flex align-items-center gap-2" href="#">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                SYSWARDEN <span class="text-muted small font-mono" style="font-size: 0.75rem; margin-top: 4px;">v1.93</span>
             </a>
-            <div class="d-flex align-items-center gap-3">
-                <span class="text-muted small">Sys: <strong id="sys-hostname">--</strong></span>
-                <span class="text-muted small" id="last-update">Syncing...</span>
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                <span class="d-none d-md-inline text-muted small font-mono">Sys: <strong id="sys-hostname" class="text-body">--</strong></span>
+                <span class="text-muted small font-mono d-flex align-items-center gap-1" id="last-update">Syncing...</span>
                 
-                <select class="form-select form-select-sm w-auto" id="theme-switcher">
-                    <option value="auto">💻 Auto</option>
+                <select class="form-select form-select-sm w-auto rounded-pill border-secondary-subtle font-mono" id="theme-switcher">
+                    <option value="auto">🖥️ Auto</option>
                     <option value="dark">🌙 Dark</option>
                     <option value="light">☀️ Light</option>
                 </select>
@@ -4060,54 +4116,62 @@ function generate_dashboard() {
         </div>
     </nav>
 
-    <div class="container-fluid px-4 pb-4">
+    <div class="container-fluid px-xxl-5 px-4 pb-5">
         
-        <div class="row g-3 mb-4">
-            <div class="col-xl-3 col-md-6">
-                <div class="card bg-body h-100">
-                    <div class="card-body">
-                        <div class="stat-label mb-2">System Health</div>
-                        <div class="stat-value" id="sys-load">--</div>
-                        <div class="text-muted small mt-1">Uptime: <span id="sys-uptime">--</span></div>
-                        <div class="mt-3">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span>RAM</span><span id="sys-ram">-- MB</span>
-                            </div>
+        <div class="row g-4 mb-4">
+            <div class="col-xxl-3 col-lg-6 col-md-6">
+                <div class="card h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="stat-label">System Health</div>
+                            <span class="badge bg-secondary rounded-pill font-mono" id="sys-uptime">--</span>
+                        </div>
+                        <div class="stat-value font-mono mb-2" id="sys-load">--</div>
+                        <div class="progress mt-3" style="height: 6px;" id="ram-progress-container">
+                            <div class="progress-bar bg-primary" role="progressbar" id="ram-progress" style="width: 0%;"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted mt-2 font-mono">
+                            <span>RAM Usage</span>
+                            <span id="sys-ram">-- MB</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-xl-3 col-md-6">
-                <div class="card bg-body h-100">
-                    <div class="card-body">
-                        <div class="stat-label mb-2">Layer 3 Kernel Drop (Blocklists)</div>
-                        <div class="stat-value text-success" id="l3-global">0</div>
-                        <div class="mt-2 text-muted small">
-                            GeoIP: <strong id="l3-geoip">0</strong> | ASN: <strong id="l3-asn">0</strong>
+            <div class="col-xxl-3 col-lg-6 col-md-6">
+                <div class="card h-100">
+                    <div class="card-body p-4">
+                        <div class="stat-label mb-3">L3 Kernel Blocks (Global)</div>
+                        <div class="stat-value text-success font-mono mb-3" id="l3-global">0</div>
+                        <div class="d-flex justify-content-between border-top pt-3 border-opacity-10 font-mono small text-muted">
+                            <span>GeoIP: <strong class="text-body" id="l3-geoip">0</strong></span>
+                            <span>ASN: <strong class="text-body" id="l3-asn">0</strong></span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-xl-3 col-md-6">
-                <div class="card bg-body border-danger h-100" style="border-width: 1px; box-shadow: 0 0 15px rgba(220,53,69,0.1);">
-                    <div class="card-body">
-                        <div class="stat-label text-danger mb-2">Layer 7 Fail2ban</div>
-                        <div class="stat-value text-danger" id="l7-banned">0</div>
-                        <div class="mt-2 text-muted small">
-                            Active Jails: <strong id="l7-jails">0</strong>
+            <div class="col-xxl-3 col-lg-6 col-md-6">
+                <div class="card h-100 border-danger" style="border-width: 1px; box-shadow: 0 0 20px rgba(220,53,69,0.05);">
+                    <div class="card-body p-4">
+                        <div class="stat-label text-danger mb-3">L7 Active Bans (Fail2ban)</div>
+                        <div class="stat-value text-danger font-mono mb-3" id="l7-banned">0</div>
+                        <div class="d-flex justify-content-between border-top pt-3 border-opacity-10 border-danger font-mono small">
+                            <span class="text-danger opacity-75">Active Jails:</span>
+                            <strong class="text-danger" id="l7-jails">0</strong>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-xl-3 col-md-6">
-                <div class="card bg-body h-100">
-                    <div class="card-body">
-                        <div class="stat-label mb-2">Trusted Hosts (Whitelist)</div>
-                        <div class="stat-value text-success" id="wl-count">0</div>
-                        <div class="mt-2 text-muted small table-container" style="max-height: 50px;">
+            <div class="col-xxl-3 col-lg-6 col-md-6">
+                <div class="card h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="stat-label">Trusted Hosts (WL)</div>
+                            <span class="badge bg-success rounded-pill font-mono" id="wl-count">0</span>
+                        </div>
+                        <div class="table-container pe-2 font-mono small text-success" style="max-height: 80px;">
                             <ul class="list-unstyled mb-0" id="whitelist-ips-list"></ul>
                         </div>
                     </div>
@@ -4115,13 +4179,13 @@ function generate_dashboard() {
             </div>
         </div>
 
-        <div class="row g-3 mb-4">
-            <div class="col-lg-8">
-                <div class="card bg-body h-100">
-                    <div class="card-header bg-transparent fw-bold pt-3 border-0">
-                        📈 L7 Threat Telemetry (Live)
+        <div class="row g-4 mb-4">
+            <div class="col-xxl-8 col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header bg-transparent border-0 pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                        <span class="text-danger">📈</span> L7 Threat Telemetry (Live Timeline)
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-4">
                         <div class="chart-wrapper">
                             <canvas id="threatChart"></canvas>
                         </div>
@@ -4129,18 +4193,18 @@ function generate_dashboard() {
                 </div>
             </div>
             
-            <div class="col-lg-4">
-                <div class="card bg-body h-100">
-                    <div class="card-header bg-transparent fw-bold pt-3 border-0">
-                        🎯 Top Attackers (OSINT)
+            <div class="col-xxl-4 col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header bg-transparent border-0 pt-4 pb-3 px-4 d-flex align-items-center gap-2">
+                        <span>🎯</span> Top Attackers (OSINT History)
                     </div>
                     <div class="card-body p-0">
-                        <div class="table-container">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="sticky-top bg-body-secondary" style="z-index: 1;">
+                        <div class="table-responsive table-container px-3 pb-3">
+                            <table class="table table-sm table-borderless table-hover align-middle mb-0">
+                                <thead class="border-bottom" style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2;">
                                     <tr>
-                                        <th class="ps-3">IP Address</th>
-                                        <th class="text-end pe-3">Hits</th>
+                                        <th class="text-muted small fw-normal pb-2">IP ADDRESS</th>
+                                        <th class="text-end text-muted small fw-normal pb-2">HITS</th>
                                     </tr>
                                 </thead>
                                 <tbody id="top-ips-list"></tbody>
@@ -4151,19 +4215,19 @@ function generate_dashboard() {
             </div>
         </div>
 
-        <div class="row g-3">
-            <div class="col-lg-8">
-                <div class="card bg-body h-100">
-                    <div class="card-header bg-transparent fw-bold pt-3 border-0 text-danger">
-                        🔴 L7 Banned IP Registry
+        <div class="row g-4">
+            <div class="col-xxl-8 col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header bg-transparent border-0 pt-4 pb-3 px-4 d-flex align-items-center gap-2 text-danger">
+                        <span>🔴</span> L7 Banned IP Registry (Live Jail Allocations)
                     </div>
                     <div class="card-body p-0">
-                        <div class="table-container" style="max-height: 400px;">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="sticky-top bg-body-secondary" style="z-index: 1;">
+                        <div class="table-responsive table-container px-3 pb-3" style="max-height: 450px;">
+                            <table class="table table-sm table-borderless table-hover align-middle mb-0">
+                                <thead class="border-bottom" style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2;">
                                     <tr>
-                                        <th class="ps-3">IP Address</th>
-                                        <th class="text-end pe-3">Target Jail</th>
+                                        <th class="text-muted small fw-normal pb-2">IP ADDRESS</th>
+                                        <th class="text-end text-muted small fw-normal pb-2">TARGET JAIL</th>
                                     </tr>
                                 </thead>
                                 <tbody id="banned-ips-list"></tbody>
@@ -4173,13 +4237,13 @@ function generate_dashboard() {
                 </div>
             </div>
 
-            <div class="col-lg-4">
-                <div class="card bg-body h-100">
-                    <div class="card-header bg-transparent fw-bold pt-3 border-0">
-                        🏢 Jails Distribution
+            <div class="col-xxl-4 col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header bg-transparent border-0 pt-4 pb-3 px-4 d-flex align-items-center gap-2">
+                        <span>🏢</span> Jails Load Distribution
                     </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush" id="top-jails-list"></ul>
+                    <div class="card-body px-4 pt-0">
+                        <ul class="list-group list-group-flush font-mono small" id="top-jails-list"></ul>
                     </div>
                 </div>
             </div>
@@ -4192,24 +4256,24 @@ function generate_dashboard() {
 </html>
 EOF
 
-    # 2. Generating the JS Logic (SPA Engine)
+    # 2. Generating the JS Logic (SPA Engine - Optimized for Performance)
     cat <<'EOF' >"$UI_DIR/app.js"
-// --- GLOBAL VARIABLES (Avoid the Temporal Dead Zone error) ---
+// --- GLOBAL VARIABLES & STATE ---
 let threatChart = null;
+const MAX_DATA_POINTS = 40; // Extended for wider 4k screens
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- THEME MANAGEMENT ---
+    
+    // --- ADVANCED THEME ENGINE (Pure B/W Adaptation) ---
     const themeSwitcher = document.getElementById('theme-switcher');
     
     const setTheme = (theme) => {
-        if (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.setAttribute('data-bs-theme', 'dark');
-        } else if (theme === 'auto') {
-            document.documentElement.setAttribute('data-bs-theme', 'light');
-        } else {
-            document.documentElement.setAttribute('data-bs-theme', theme);
+        let activeTheme = theme;
+        if (theme === 'auto') {
+            activeTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
-        updateChartTheme();
+        document.documentElement.setAttribute('data-bs-theme', activeTheme);
+        updateChartTheme(activeTheme);
     };
 
     const currentTheme = localStorage.getItem('syswarden-theme') || 'auto';
@@ -4221,7 +4285,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setTheme(e.target.value);
     });
 
-    // Listen for OS/System theme changes in real-time
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (localStorage.getItem('syswarden-theme') === 'auto' || !localStorage.getItem('syswarden-theme')) {
             setTheme('auto');
@@ -4229,19 +4292,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- CHART.JS INITIALIZATION ---
-    const MAX_DATA_POINTS = 30;
     const chartData = {
         labels: [],
         datasets: [{
-            label: 'L7 Active Bans',
+            label: 'L7 Blocked Threats',
             data: [],
             borderColor: '#dc3545',
             backgroundColor: 'rgba(220, 53, 69, 0.1)',
             borderWidth: 2,
             fill: true,
             tension: 0.4,
+            pointBackgroundColor: '#dc3545',
+            pointBorderColor: '#fff',
             pointRadius: 0,
-            pointHoverRadius: 5
+            pointHoverRadius: 6,
+            pointHitRadius: 10
         }]
     };
 
@@ -4257,135 +4322,132 @@ document.addEventListener('DOMContentLoaded', () => {
                 plugins: { 
                     legend: { display: false },
                     tooltip: {
-                        animation: false, // <-- FIX
-                        backgroundColor: 'rgba(10, 10, 15, 0.95)',
-                        titleFont: { family: 'JetBrains Mono', size: 12 },
+                        animation: false,
+                        titleFont: { family: 'JetBrains Mono', size: 13, weight: 'bold' },
                         bodyFont: { family: 'JetBrains Mono', size: 12 },
-                        displayColors: false,
-                        padding: 10,
-                        cornerRadius: 8
+                        padding: 12,
+                        cornerRadius: 8,
+                        displayColors: false
                     }
                 },
                 scales: {
-                    x: { display: false },
-                    y: { beginAtZero: true }
+                    x: { display: false }, // Cleaner look without X grid
+                    y: { 
+                        beginAtZero: true,
+                        ticks: { font: { family: 'JetBrains Mono', size: 11 } },
+                        border: { display: false }
+                    }
                 },
-                animation: { duration: 0 }
+                animation: { duration: 0 } // Disable for performance on polling
             }
         });
-    } catch (e) { console.warn("Chart.js failed to init:", e); }
+    } catch (e) { console.warn("Chart.js init failed:", e); }
 
-    function updateChartTheme() {
+    function updateChartTheme(theme) {
         if (!threatChart) return;
-        const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+        const isDark = theme === 'dark';
         const gridColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
-        threatChart.options.scales.x.grid = { color: gridColor };
-        threatChart.options.scales.y.grid = { color: gridColor };
+        const textColor = isDark ? '#adb5bd' : '#6c757d';
         
-        // Toggle the tooltip between light and dark
-        threatChart.options.plugins.tooltip.backgroundColor = isDark ? 'rgba(10, 10, 15, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-        threatChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#0f172a';
-        threatChart.options.plugins.tooltip.bodyColor = isDark ? '#fff' : '#0f172a';
+        threatChart.options.scales.y.grid = { color: gridColor };
+        threatChart.options.scales.y.ticks.color = textColor;
+        
+        // Tooltip specific theming
+        threatChart.options.plugins.tooltip.backgroundColor = isDark ? 'rgba(20, 20, 20, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+        threatChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#000';
+        threatChart.options.plugins.tooltip.bodyColor = isDark ? '#adb5bd' : '#495057';
         threatChart.options.plugins.tooltip.borderColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
         threatChart.options.plugins.tooltip.borderWidth = 1;
 
         threatChart.update();
     }
-    
-    // Forces the chart theme to update after initialization
-    updateChartTheme();
 
-    // --- DATA INGESTION ENGINE ---
+    // --- DATA INGESTION ENGINE (JSON Parser) ---
     async function fetchTelemetry() {
         try {
             const response = await fetch(`data.json?t=${new Date().getTime()}`);
-            if (!response.ok) throw new Error('HTTP error');
+            if (!response.ok) throw new Error('HTTP request failed');
             const data = await response.json();
 
-            // System
+            // 1. System Metrics
             document.getElementById('sys-hostname').innerText = data.system.hostname;
             document.getElementById('sys-uptime').innerText = data.system.uptime;
-            document.getElementById('sys-ram').innerText = `${data.system.ram_used_mb} / ${data.system.ram_total_mb} MB`;
             
-            // System Load Dynamic Coloring
+            // RAM calculation & Progress Bar
+            const ramUsed = parseInt(data.system.ram_used_mb) || 0;
+            const ramTotal = parseInt(data.system.ram_total_mb) || 1;
+            const ramPercent = Math.round((ramUsed / ramTotal) * 100);
+            
+            document.getElementById('sys-ram').innerText = `${ramUsed.toLocaleString()} / ${ramTotal.toLocaleString()} MB`;
+            const ramBar = document.getElementById('ram-progress');
+            ramBar.style.width = `${ramPercent}%`;
+            ramBar.className = `progress-bar ${ramPercent > 85 ? 'bg-danger' : ramPercent > 60 ? 'bg-warning' : 'bg-primary'}`;
+
+            // System Load dynamically colored
             const sysLoadEl = document.getElementById('sys-load');
             sysLoadEl.innerText = data.system.load_average;
             const load1m = parseFloat(data.system.load_average.split(',')[0]);
             sysLoadEl.classList.remove('text-success', 'text-warning', 'text-danger');
-            
-            if (load1m <= 0.35) {
-                sysLoadEl.classList.add('text-success');
-            } else if (load1m <= 0.70) {
-                sysLoadEl.classList.add('text-warning');
-            } else {
-                sysLoadEl.classList.add('text-danger');
-            }
+            sysLoadEl.classList.add(load1m <= 0.35 ? 'text-success' : load1m <= 0.70 ? 'text-warning' : 'text-danger');
 
-            // Layer 3
-            document.getElementById('l3-global').innerText = data.layer3.global_blocked.toLocaleString();
-            document.getElementById('l3-geoip').innerText = data.layer3.geoip_blocked.toLocaleString();
-            document.getElementById('l3-asn').innerText = data.layer3.asn_blocked.toLocaleString();
+            // 2. Layer 3 Metrics
+            document.getElementById('l3-global').innerText = parseInt(data.layer3.global_blocked).toLocaleString();
+            document.getElementById('l3-geoip').innerText = parseInt(data.layer3.geoip_blocked).toLocaleString();
+            document.getElementById('l3-asn').innerText = parseInt(data.layer3.asn_blocked).toLocaleString();
 
-            // Layer 7
-            document.getElementById('l7-banned').innerText = data.layer7.total_banned.toLocaleString();
+            // 3. Layer 7 & Whitelist Metrics
+            document.getElementById('l7-banned').innerText = parseInt(data.layer7.total_banned).toLocaleString();
             document.getElementById('l7-jails').innerText = data.layer7.active_jails;
             document.getElementById('wl-count').innerText = data.whitelist.active_ips;
 
-            // Whitelist
+            // Whitelist Renderer
             const wlEl = document.getElementById('whitelist-ips-list');
-            wlEl.innerHTML = '';
-            data.whitelist.ips.forEach(ip => {
-                wlEl.innerHTML += `<li>✓ ${ip}</li>`;
-            });
+            wlEl.innerHTML = data.whitelist.ips.map(ip => `<li class="mb-1"><span class="opacity-50 me-2">✓</span>${ip}</li>`).join('');
 
-            // Top Attackers
+            // Top Attackers Renderer (Applied IP font size fix)
             const topIpsEl = document.getElementById('top-ips-list');
-            topIpsEl.innerHTML = '';
             if(data.layer7.top_attackers.length > 0) {
-                data.layer7.top_attackers.forEach(attacker => {
-                    topIpsEl.innerHTML += `
-                        <tr>
-                            <td class="ps-3 font-monospace"><a href="https://www.abuseipdb.com/check/${attacker.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger small">${attacker.ip}</a></td>
-                            <td class="text-end pe-3 fw-bold text-danger">${attacker.count}</td>
-                        </tr>`;
-                });
+                topIpsEl.innerHTML = data.layer7.top_attackers.map(attacker => `
+                    <tr>
+                        <td class="font-mono"><a href="https://www.abuseipdb.com/check/${attacker.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger fw-bold opacity-75 ip-font">${attacker.ip}</a></td>
+                        <td class="text-end font-mono fw-bold text-body-secondary">${attacker.count.toLocaleString()}</td>
+                    </tr>`).join('');
             } else {
-                topIpsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-3">No attackers recorded yet.</td></tr>`;
+                topIpsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4">No attackers recorded.</td></tr>`;
             }
 
-            // Jails Distribution
+            // Jails Distribution Renderer
             const jailsEl = document.getElementById('top-jails-list');
-            jailsEl.innerHTML = '';
             if(data.layer7.jails_data.length > 0) {
-                [...data.layer7.jails_data].sort((a, b) => b.count - a.count).forEach(jail => {
-                    jailsEl.innerHTML += `
-                        <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0">
-                            ${jail.name}
-                            <span class="badge bg-danger rounded-pill">${jail.count}</span>
-                        </li>`;
-                });
-            }
-
-            // Banned IPs Table
-            const bannedEl = document.getElementById('banned-ips-list');
-            bannedEl.innerHTML = '';
-            if(data.layer7.banned_ips.length > 0) {
-                [...data.layer7.banned_ips].reverse().forEach(entry => {
-                    const badgeColor = entry.jail.includes('recidive') ? 'bg-danger' : 'bg-secondary';
-                    bannedEl.innerHTML += `
-                        <tr>
-                            <td class="ps-3 font-monospace"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger small">${entry.ip}</a></td>
-                            <td class="text-end pe-3"><span class="badge ${badgeColor}">${entry.jail}</span></td>
-                        </tr>`;
-                });
+                jailsEl.innerHTML = [...data.layer7.jails_data].sort((a, b) => b.count - a.count).map(jail => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-secondary-subtle">
+                        <span class="text-body-secondary">${jail.name}</span>
+                        <span class="badge bg-danger bg-opacity-75 rounded-pill">${jail.count}</span>
+                    </li>`).join('');
             } else {
-                bannedEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4">Registry is empty. Server is secure.</td></tr>`;
+                jailsEl.innerHTML = `<li class="list-group-item bg-transparent text-muted small border-0 px-0">No active jails loaded.</li>`;
             }
 
-            // Update Live Chart
+            // Banned IPs Table Renderer (Applied IP font size fix)
+            const bannedEl = document.getElementById('banned-ips-list');
+            if(data.layer7.banned_ips.length > 0) {
+                bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => {
+                    const isRecidive = entry.jail.includes('recidive');
+                    return `
+                    <tr>
+                        <td class="font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger fw-bold opacity-75 ip-font">${entry.ip}</a></td>
+                        <td class="text-end font-mono"><span class="badge ${isRecidive ? 'bg-danger' : 'bg-secondary bg-opacity-75'} fw-normal">${entry.jail}</span></td>
+                    </tr>`;
+                }).join('');
+            } else {
+                bannedEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-5">Registry is empty. Architecture is secure.</td></tr>`;
+            }
+
+            // 4. Live Chart Updater
             const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            document.getElementById('last-update').innerHTML = `<span class="text-success">●</span> Live: ${timeString}`;
+            const timeString = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+            
+            document.getElementById('last-update').innerHTML = `<span class="text-success opacity-75">●</span> ${timeString}`;
 
             if (threatChart) {
                 chartData.labels.push(timeString);
@@ -4398,13 +4460,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } catch (error) {
-            console.error("Telemetry Fetch Error:", error);
-            document.getElementById('last-update').innerHTML = `<span class="text-danger">●</span> Connection Lost`;
+            console.error("Telemetry Sync Error:", error);
+            document.getElementById('last-update').innerHTML = `<span class="text-danger opacity-75">●</span> Offline`;
         }
     }
 
+    // Initialize and loop
     fetchTelemetry();
-    setInterval(fetchTelemetry, 5000); // Poll every 5 seconds
+    setInterval(fetchTelemetry, 5000);
 });
 EOF
 
@@ -4444,7 +4507,7 @@ EOF
     log "INFO" "Configuring Nginx reverse proxy for port 9999..."
     cat <<EOF >/etc/nginx/http.d/syswarden-ui.conf
 server {
-    # --- DEVSECOPS FIX: CROSS-OS NGINX COMPATIBILITY ---
+    # --- HOTFIX: CROSS-OS NGINX COMPATIBILITY ---
     # Using 'listen ... http2' instead of 'http2 on;' ensures compatibility
     # with older Nginx versions (<1.25.1) while remaining functional (with a warning) on modern versions.
     listen 9999 ssl http2;
@@ -4460,7 +4523,7 @@ server {
     root $UI_DIR;
     index index.html;
     
-    # --- DEVSECOPS FIX: EXPLICIT MIME TYPES ---
+    # --- HOTFIX: EXPLICIT MIME TYPES ---
     # Older OS/Nginx combinations lack .woff2 in their mime.types.
     # Combined with 'nosniff', browsers strictly reject the font.
     include mime.types;
@@ -4508,7 +4571,7 @@ EOF
         rc-service nginx start >/dev/null 2>&1 || true
     fi
 
-    # --- DEVSECOPS FIX: DYNAMIC IP RESOLUTION ---
+    # --- HOTFIX: DYNAMIC IP RESOLUTION ---
     # 1. Tries to get the Public IPv4 via curl or wget
     # 2. Fallbacks to the primary active local IP via routing table if offline
     # 3. Failsafe to '<YOUR_IP>' if everything else fails
@@ -4595,7 +4658,7 @@ blocklist_ip() {
 protect_docker_jail() {
     echo -e "\n${BLUE}=== SysWarden Docker Jail Protector ===${NC}"
 
-    # --- DEVSECOPS FIX: DEPENDENCY & STATE VERIFICATION ---
+    # --- HOTFIX: DEPENDENCY & STATE VERIFICATION ---
     if [[ -f "$CONF_FILE" ]]; then
         # shellcheck source=/dev/null
         source "$CONF_FILE"
@@ -4670,7 +4733,7 @@ protect_docker_jail() {
     rc-service fail2ban restart >/dev/null 2>&1 || true
     log "INFO" "Fail2ban service restarted."
 
-    # --- DEVSECOPS FIX: STATEFUL DOCKER BYPASS RE-ENFORCEMENT ---
+    # --- HOTFIX: STATEFUL DOCKER BYPASS RE-ENFORCEMENT ---
     # Fail2ban restarts will inject new chains at the top of DOCKER-USER.
     # We MUST ensure the ESTABLISHED, RELATED rule remains at Absolute Priority 0.
     if command -v iptables >/dev/null && iptables -n -L DOCKER-USER >/dev/null 2>&1; then
@@ -4801,7 +4864,7 @@ show_alerts_dashboard() {
             ksec = substr($0, RSTART, RLENGTH)
             event_sec = boot_sec + ksec
             
-            # --- DEVSECOPS FIX: Drop old dmesg history to only show LIVE events ---
+            # --- HOTFIX: Drop old dmesg history to only show LIVE events ---
             if (event_sec < script_start - 5) next;
             # ----------------------------------------------------------------------
             
@@ -5033,7 +5096,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.92 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v1.93 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -5123,7 +5186,7 @@ if command -v rc-service >/dev/null && rc-service syswarden-reporter status 2>/d
     rc-service syswarden-reporter restart >/dev/null 2>&1 || true
 fi
 
-# --- DEVSECOPS FIX: DASHBOARD & FAIL2BAN ORCHESTRATION ---
+# --- HOTFIX: DASHBOARD & FAIL2BAN ORCHESTRATION ---
 # Telemetry & Dashboard ALWAYS run (Install & Update) to deploy/update Nginx and the UI.
 setup_telemetry_backend
 generate_dashboard
@@ -5153,7 +5216,7 @@ if [[ "$MODE" != "update" ]]; then
 
     display_wireguard_qr
 else
-    # --- DEVSECOPS FIX: FORCE CRON SYNTAX UPGRADE DURING UPDATE ---
+    # --- HOTFIX: FORCE CRON SYNTAX UPGRADE DURING UPDATE ---
     if [[ -f /etc/crontabs/root ]]; then
         sed -i 's/\.sh update >/\.sh cron-update >/g' /etc/crontabs/root 2>/dev/null || true
         rc-service crond restart 2>/dev/null || true

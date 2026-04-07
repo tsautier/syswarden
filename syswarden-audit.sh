@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v1.92 - DevSecOps Audit & Compliance Tool
+# SysWarden v1.93 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -72,7 +72,7 @@ info() {
     sleep 2
 }
 
-# --- DEVSECOPS FIX: SLACKWARE NATIVE PROCESS DETECTION ---
+# --- HOTFIX: SLACKWARE NATIVE PROCESS DETECTION ---
 is_service_active() {
     local svc="$1"
     if [[ "$OS_TYPE" == "Slackware" ]]; then
@@ -220,7 +220,7 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 1 "* ]]; then
 
     if [[ "${APPLY_OS_HARDENING:-n}" == "y" ]]; then
 
-        # DEVSECOPS FIX: OS-Specific Cron Allow Path
+        # HOTFIX: OS-Specific Cron Allow Path
         if [[ "$OS_TYPE" == "Slackware" ]]; then
             if [[ -f "/var/spool/cron/cron.allow" ]]; then
                 check_file_perms "/var/spool/cron/cron.allow" "600" "root"
@@ -322,7 +322,7 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 2 "* ]]; then
         check_file_perms "/var/log/auth-syswarden.log" "600" "root"
     fi
 
-    # DEVSECOPS FIX: Support for native syslogd on Slackware
+    # HOTFIX: Support for native syslogd on Slackware
     if [[ "$OS_TYPE" == "Slackware" ]]; then
         if is_service_active "syslog"; then
             pass "Syslogd daemon (Native Slackware) is active and routing logs securely."
@@ -660,7 +660,7 @@ fi
 if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 7 "* ]]; then
     log_header "Phase 7: Exposed Services & Firewall Persistence (CSPM)"
 
-    # DEVSECOPS FIX: Persistence check specifically for Slackware RC Hooks
+    # HOTFIX: Persistence check specifically for Slackware RC Hooks
     if [[ "$OS_TYPE" == "Slackware" ]]; then
         if [[ -x "/etc/rc.d/rc.syswarden-firewall" ]] && grep -q "/etc/rc.d/rc.syswarden-firewall" /etc/rc.d/rc.local 2>/dev/null; then
             pass "Firewall Persistence VERIFIED: Slackware rc.local securely triggers SysWarden ($FW_ENGINE) on boot."
@@ -880,7 +880,7 @@ fi
 # ==============================================================================
 echo -e "\n${BOLD}==============================================================================${NC}"
 
-# DEVSECOPS FIX: Prevent Division by Zero
+# HOTFIX: Prevent Division by Zero
 if [[ $TOTAL -eq 0 ]]; then
     echo -e "${YELLOW}>>> AUDIT SKIPPED: No checks were performed or Phase was empty. <<<${NC}"
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [RESULT] SKIPPED - No checks performed." >>"$AUDIT_LOG"
