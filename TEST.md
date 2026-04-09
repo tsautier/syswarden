@@ -49,7 +49,7 @@ Deploying enterprise-grade security takes less than 10 minutes.
 
 **1. Clone the repository:**
 ```bash
-git clone [https://github.com/duggytuxy/syswarden.git](https://github.com/duggytuxy/syswarden.git)
+git clone https://github.com/duggytuxy/syswarden.git
 cd syswarden
 chmod +x *.sh
 ```
