@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v2.00"
+VERSION="v2.01"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1352,7 +1352,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v2.00) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v2.01) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -3862,8 +3862,20 @@ def monitor_logs():
     print("🚀 Monitoring logs (Unified SysWarden Reporter)...", flush=True)
     load_cache() # Load JSON cache on startup
     
-    # Secure journalctl to force raw output
-    f = subprocess.Popen(['journalctl', '-f', '-n', '0', '-o', 'cat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # --- BUG FIX: MULTIPLEXING FLAT FILES VS JOURNALCTL ---
+    # Fail2ban logs to /var/log/fail2ban.log, which journalctl misses.
+    # We dynamically construct a tail command for all existing physical logs.
+    logs_to_tail = []
+    for log_path in ['/var/log/kern-firewall.log', '/var/log/kern.log', '/var/log/syslog', '/var/log/messages', '/var/log/fail2ban.log']:
+        if os.path.exists(log_path):
+            logs_to_tail.append(log_path)
+            
+    if logs_to_tail:
+        f = subprocess.Popen(['tail', '-F', '-n', '0', '-q'] + logs_to_tail, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    else:
+        # Fallback if no physical logs exist
+        f = subprocess.Popen(['journalctl', '-f', '-n', '0', '-o', 'cat'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
     p = select.poll()
     p.register(f.stdout)
 
@@ -3940,8 +3952,8 @@ def monitor_logs():
                     elif any(x in jail for x in ["mariadb", "mongodb", "redis", "rabbitmq"]): cats.extend(["15", "18"])
                     # 11. Privilege Escalation & Auditd
                     elif any(x in jail for x in ["privesc", "auditd", "proxmox"]): cats.extend(["15", "18"])
-                    # 12. Web App Logins (Auth/CMS/SSO)
-                    elif any(x in jail for x in ["auth", "wordpress", "drupal", "nextcloud", "phpmyadmin", "laravel", "grafana", "zabbix", "gitea", "cockpit", "vaultwarden", "sso"]): cats.extend(["18", "21"])
+                    # 12. Web App Logins (Auth/CMS/SSO/Generic)
+                    elif any(x in jail for x in ["auth", "generic-auth", "wordpress", "drupal", "nextcloud", "phpmyadmin", "laravel", "grafana", "zabbix", "gitea", "cockpit", "vaultwarden", "sso"]): cats.extend(["18", "21"])
                     # 13. VPN 
                     elif "wireguard" in jail or "openvpn" in jail: cats.extend(["15", "18"])
                     # 14. VoIP
@@ -4309,7 +4321,7 @@ uninstall_syswarden() {
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
-        syswarden-lfi-advanced syswarden-vaultwarden syswarden-sso syswarden-silent-scanner syswarden-recidive \
+        syswarden-lfi-advanced syswarden-vaultwarden syswarden-sso syswarden-silent-scanner syswarden-recidive syswarden-generic-auth \
         syswarden-proxy-abuse syswarden-jenkins syswarden-gitlab syswarden-redis syswarden-rabbitmq \
         wordpress-auth drupal-auth nextcloud openvpn-custom gitea-custom cockpit-custom proxmox-custom \
         haproxy-guard phpmyadmin-custom squid-custom dovecot-custom laravel-auth grafana-auth zabbix-auth wireguard; do
@@ -4591,7 +4603,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.00 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v2.01 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4761,7 +4773,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.00 - NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP / LOCAL FONTS)
+# SYSWARDEN v2.01 - NGINX SECURE DASHBOARD (BOOTSTRAP 5 / HTTPS / CSP / LOCAL FONTS)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Nginx-secured Dashboard UI (HTTPS/CSP/Local-Fonts)..."
@@ -4904,7 +4916,7 @@ function generate_dashboard() {
         <div class="container-fluid px-xxl-5 px-4">
             <a class="navbar-brand fw-bold nav-brand-text d-flex align-items-center gap-2" href="#">
                 <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                SYSWARDEN <span class="text-muted small font-mono" style="font-size: 0.75rem; margin-top: 4px;">v2.00</span>
+                SYSWARDEN <span class="text-muted small font-mono" style="font-size: 0.75rem; margin-top: 4px;">v2.01</span>
             </a>
             <div class="d-flex align-items-center gap-3 ms-auto">
                 <span class="d-none d-md-inline text-muted small font-mono">Sys: <strong id="sys-hostname" class="text-body">--</strong></span>
@@ -5968,7 +5980,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.00                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.01                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6006,7 +6018,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.00 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.01 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
