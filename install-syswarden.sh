@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v2.21"
+VERSION="v2.22"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1522,7 +1522,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v2.21) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v2.22) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -4719,7 +4719,7 @@ uninstall_syswarden() {
     rm -rf /var/log/syswarden/* 2>/dev/null || true
     # ----------------------------------------------------------------
 
-    # --- Clean up all SysWarden Fail2ban filters (Including v2.21 additions) ---
+    # --- Clean up all SysWarden Fail2ban filters (Including v2.22 additions) ---
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
@@ -5011,7 +5011,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.21 - TELEMETRY BACKEND
+# SYSWARDEN v2.22 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -5272,7 +5272,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.21 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.22 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -5412,7 +5412,7 @@ function generate_dashboard() {
         <div class="d-flex align-items-center gap-2 px-2 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.21</span>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.22</span>
         </div>
 
         <nav class="flex-grow-1">
@@ -6285,6 +6285,13 @@ protect_docker_jail() {
 
 check_upgrade() {
     echo -e "\n${BLUE}=== SysWarden Upgrade Checker (Universal) ===${NC}"
+
+    # --- DEVSECOPS FIX: CAPTURE ABSOLUTE PATH EARLY ---
+    # We must resolve $0 before any 'cd' commands alter the current working directory,
+    # otherwise realpath resolves relative to the temp folder, causing a cp self-collision.
+    local current_script
+    current_script=$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "${PWD}/${0#./}")
+
     log "INFO" "Checking for updates on GitHub API..."
 
     local api_url="https://api.github.com/repos/duggytuxy/syswarden/releases/latest"
@@ -6362,10 +6369,6 @@ check_upgrade() {
         fi
 
         # --- IN-PLACE SCRIPT REPLACEMENT ---
-        local current_script
-        # realpath ensures we target the exact executing script path
-        current_script=$(realpath "$0" 2>/dev/null || echo "$0")
-
         log "INFO" "Replacing current orchestrator at $current_script..."
 
         # We explicitly copy instead of move in case the OS locks the executing file
@@ -6688,7 +6691,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.21                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.22                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6726,7 +6729,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.21 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.22 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -6840,8 +6843,15 @@ configure_fail2ban
 
 detect_protected_services
 
-if command -v systemctl >/dev/null && systemctl is-active --quiet syswarden-reporter; then
+# --- HOTFIX: STATEFUL REPORTER RESTART LOGIC ---
+# We check if the service is ENABLED (configured to run by the user),
+# not ACTIVE, because the pre-upgrade hook explicitly killed it earlier.
+if command -v systemctl >/dev/null && systemctl is-enabled --quiet syswarden-reporter 2>/dev/null; then
+    log "INFO" "Restarting SysWarden Unified Reporter..."
     systemctl restart syswarden-reporter >/dev/null 2>&1 || true
+elif command -v rc-service >/dev/null && rc-update show default 2>/dev/null | grep -q "syswarden-reporter"; then
+    log "INFO" "Restarting SysWarden Unified Reporter (OpenRC)..."
+    rc-service syswarden-reporter restart >/dev/null 2>&1 || true
 fi
 
 # --- HOTFIX: DASHBOARD & TELEMETRY ORCHESTRATION ---
