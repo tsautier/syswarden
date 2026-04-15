@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v2.16"
+VERSION="v2.17"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1439,14 +1439,20 @@ configure_fail2ban() {
     if command -v fail2ban-client >/dev/null; then
         log "INFO" "Generating Fail2ban configuration (Alpine Zero Trust Mode)..."
 
-        # --- SECURITY FIX: ALPINE SSH CONFLICT (ANTI-LOCKOUT) ---
-        # Alpine's default jail.d/alpine-ssh.conf overrides our jail.local maxretry (10 vs 3)
-        # and port settings. We must delete it to enforce SysWarden's strict rules.
-        if [[ -f /etc/fail2ban/jail.d/alpine-ssh.conf ]]; then
-            rm -f /etc/fail2ban/jail.d/alpine-ssh.conf
-            log "INFO" "Removed conflicting default Alpine SSH jail configuration."
+        # --- SECURITY FIX: PURGE CONFLICTING DEFAULT JAILS (SCORCHED EARTH) ---
+        # Alpine's default jail.d/ (e.g., alpine-ssh.conf) overrides our strict
+        # jail.local settings (like maxretry 10 vs 3) and port definitions.
+        # We destroy and recreate the directory to guarantee absolute Zero Trust.
+        if [[ -d /etc/fail2ban/jail.d ]]; then
+            rm -rf /etc/fail2ban/jail.d
         fi
-        # --------------------------------------------------------
+
+        # Recreate a strictly pristine directory
+        mkdir -p /etc/fail2ban/jail.d
+        chmod 755 /etc/fail2ban/jail.d
+
+        log "INFO" "Purged fail2ban/jail.d/ directory entirely to enforce absolute Zero Trust."
+        # ----------------------------------------------------------------------
 
         if [[ -f /etc/fail2ban/jail.local ]] && [[ ! -f /etc/fail2ban/jail.local.bak ]]; then
             log "INFO" "Creating backup of existing jail.local"
@@ -3236,7 +3242,7 @@ def monitor_logs():
         proc_f2b.stdout.fileno(): 'f2b'
     }
 
-    # v2.16 Logic: STRICT filter on [SysWarden-BLOCK] only.
+    # v2.17 Logic: STRICT filter on [SysWarden-BLOCK] only.
     regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+).*?DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
@@ -3898,7 +3904,7 @@ uninstall_syswarden() {
     rm -rf /var/lib/syswarden/* 2>/dev/null || true
     # -------------------------------------------------------------------------
 
-    # --- Clean up all SysWarden Fail2ban filters (Including v2.16 additions) ---
+    # --- Clean up all SysWarden Fail2ban filters (Including v2.17 additions) ---
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
@@ -4099,7 +4105,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v2.16 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
+# SYSWARDEN v2.17 - TELEMETRY BACKEND (SERVERLESS - IP REGISTRY UPDATE)
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4276,7 +4282,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.16 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.17 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -4414,7 +4420,7 @@ function generate_dashboard() {
         <div class="d-flex align-items-center gap-2 px-2 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.16</span>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.17</span>
         </div>
 
         <nav class="flex-grow-1">
@@ -5499,7 +5505,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.16                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.17                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -5520,7 +5526,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.16 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.17 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"

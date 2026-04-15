@@ -34,7 +34,7 @@ CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
 # shellcheck disable=SC2034
-VERSION="v2.16"
+VERSION="v2.17"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1076,6 +1076,27 @@ EOF
 configure_fail2ban() {
     if command -v fail2ban-client >/dev/null; then
         log "INFO" "Generating Fail2ban configuration (Slackware Native)..."
+
+        # --- SECURITY FIX: PURGE CONFLICTING DEFAULT JAILS (SCORCHED EARTH) ---
+        # Even on Slackware, we must prevent third-party SlackBuilds or admin
+        # legacy configurations in jail.d/ from overriding our strict Zero Trust rules.
+        if [[ -d /etc/fail2ban/jail.d ]]; then
+            rm -rf /etc/fail2ban/jail.d
+        fi
+
+        # Recreate a strictly pristine directory
+        mkdir -p /etc/fail2ban/jail.d
+        chmod 755 /etc/fail2ban/jail.d
+
+        log "INFO" "Purged fail2ban/jail.d/ directory entirely to enforce absolute Zero Trust."
+        # ----------------------------------------------------------------------
+
+        # --- PRE-FLIGHT BACKUP ---
+        if [[ -f /etc/fail2ban/jail.local ]] && [[ ! -f /etc/fail2ban/jail.local.bak ]]; then
+            log "INFO" "Creating backup of existing jail.local"
+            cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.bak
+        fi
+        # -------------------------
 
         # 1. Enterprise WAF Core Configuration
         cat <<EOF >/etc/fail2ban/fail2ban.local
@@ -2865,7 +2886,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.16 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.17 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -3002,7 +3023,7 @@ function generate_dashboard() {
         <div class="d-flex align-items-center gap-2 px-2 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.16</span>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.17</span>
         </div>
 
         <nav class="flex-grow-1">
@@ -3718,7 +3739,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.16                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.17                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -3737,7 +3758,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.16 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.17 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
