@@ -4249,9 +4249,20 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                                 L7_PAYLOAD=$(echo "$RAW_LOG" | grep -oE '(SysWarden-BLOCK|SysWarden-GEO).*' || true)
                             fi
                         elif [[ "$JAIL" =~ (sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi|scan|bot|mapper|enum|hunter|flood|proxy|prestashop|atlassian|wordpress|drupal|nginx|apache) ]]; then
+                            # Web Jails: Check Nginx and Apache access/error logs
                             RAW_LOG=$(timeout 1 grep -h -F "$IP" /var/log/nginx/access.log /var/log/nginx/error.log /var/log/apache2/access.log /var/log/apache2/error.log /var/log/httpd/access_log /var/log/httpd/error_log 2>/dev/null | tail -n 1 || true)
                             if [[ "$RAW_LOG" == *"\""* ]]; then
-                                L7_PAYLOAD=$(echo "$RAW_LOG" | awk -F'"' '{print $2}')
+                                # DEVSECOPS FIX: Smart Routing between URI Payload vs User-Agent Payload
+                                if [[ "$JAIL" =~ (bot|scan|mapper|enum|hunter|proxy) ]]; then
+                                    UA=$(echo "$RAW_LOG" | awk -F'"' '{print $6}')
+                                    if [[ -n "$UA" && "$UA" != "-" ]]; then
+                                        L7_PAYLOAD="Bot/UA -> $UA"
+                                    else
+                                        L7_PAYLOAD=$(echo "$RAW_LOG" | awk -F'"' '{print $2}')
+                                    fi
+                                else
+                                    L7_PAYLOAD=$(echo "$RAW_LOG" | awk -F'"' '{print $2}')
+                                fi
                             else
                                 L7_PAYLOAD=$(echo "$RAW_LOG" | sed -E 's/^.*\[error\][0-9 #:]*//')
                             fi
@@ -4384,20 +4395,6 @@ function generate_dashboard() {
     chmod 755 /etc/syswarden
     chmod 755 "$UI_DIR"
 
-    # --- HOTFIX: DOWNLOAD LOCAL FONTS ---
-    log "INFO" "Downloading local JetBrains Mono fonts..."
-    wget -qO "$UI_DIR/JetBrainsMono-Regular.woff2" "https://raw.githubusercontent.com/duggytuxy/syswarden/main/fonts/JetBrainsMono-Regular.woff2" || true
-    wget -qO "$UI_DIR/JetBrainsMono-Bold.woff2" "https://raw.githubusercontent.com/duggytuxy/syswarden/main/fonts/JetBrainsMono-Bold.woff2" || true
-
-    for font in "$UI_DIR"/*.woff2; do
-        if [[ -f "$font" ]]; then
-            size=$(stat -c%s "$font" 2>/dev/null || stat -f%z "$font" 2>/dev/null || echo "0")
-            if [[ "$size" -lt 10000 ]]; then rm -f "$font"; fi
-        fi
-    done
-    chmod 644 "$UI_DIR"/*.woff2 2>/dev/null || true
-    # -------------------------------------------
-
     # 1. Generating the HTML file (Enterprise Sidebar Structure)
     cat <<'EOF' >"$UI_DIR/index.html"
 <!DOCTYPE html>
@@ -4407,18 +4404,16 @@ function generate_dashboard() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SysWarden | Enterprise Console</title>
     
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     
     <style>
-        /* --- LOCAL FONTS --- */
-        @font-face { font-family: 'JetBrains Mono'; src: url('JetBrainsMono-Regular.woff2') format('woff2'); font-weight: normal; font-style: normal; font-display: swap; }
-        @font-face { font-family: 'JetBrains Mono'; src: url('JetBrainsMono-Bold.woff2') format('woff2'); font-weight: bold; font-style: normal; font-display: swap; }
-
         /* --- SAAS THEME DEFINITIONS --- */
         :root[data-bs-theme="light"] {
             --sw-bg: #f3f4f6;
             --sw-sidebar-bg: #ffffff;
+            --sw-nav-bg: #ffffff;
             --sw-card-bg: #ffffff;
             --sw-border: #e5e7eb;
             --sw-text: #1f2937;
@@ -4428,30 +4423,34 @@ function generate_dashboard() {
             --sw-sidebar-hover: #f3f4f6;
             --sw-sidebar-active: #eff6ff;
             --sw-sidebar-active-text: #1d4ed8;
+            --sw-chart-ddos: #27272a; /* Dark Grey/Black */
         }
         :root[data-bs-theme="dark"] {
             --sw-bg: #000000;
-            --sw-sidebar-bg: #000000;
+            --sw-sidebar-bg: #09090b;
+            --sw-nav-bg: #09090b;
             --sw-card-bg: #09090b;
             --sw-border: rgba(255, 255, 255, 0.12);
             --sw-text: #ffffff;
-            --sw-text-muted: #d4d4d8;
+            --sw-text-muted: #a1a1aa;
             --sw-brand-text: #ffffff;
             --sw-brand-icon: #3b82f6;
             --sw-sidebar-hover: #18181b;
             --sw-sidebar-active: #18181b;
             --sw-sidebar-active-text: #ffffff;
+            --sw-chart-ddos: #fafafa; /* White/Light grey for contrast */
         }
 
         /* --- APP LAYOUT (APP-LIKE FEEL) --- */
         body { 
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            font-family: 'Roboto', sans-serif;
             background-color: var(--sw-bg); color: var(--sw-text);
             transition: background-color 0.3s ease, color 0.3s ease;
             -webkit-font-smoothing: antialiased;
-            overflow: hidden; /* Lock body scrolling, scroll only main view */
+            overflow: hidden; 
         }
-        .font-mono { font-family: 'JetBrains Mono', monospace !important; }
+        /* 100% Roboto */
+        .font-mono { font-weight: 500; }
 
         /* --- SIDEBAR COMPONENT --- */
         .sidebar {
@@ -4459,6 +4458,11 @@ function generate_dashboard() {
             background-color: var(--sw-sidebar-bg); border-right: 1px solid var(--sw-border);
             display: flex; flex-direction: column; transition: all 0.3s ease; z-index: 1040;
         }
+        .sidebar.collapsed { width: 80px; }
+        .sidebar.collapsed .hide-collapsed { display: none !important; }
+        .sidebar.collapsed .nav-item-sw { justify-content: center; padding: 12px 0; }
+        .sidebar.collapsed .nav-item-sw svg { margin: 0; }
+
         .nav-item-sw {
             display: flex; align-items: center; gap: 12px; padding: 10px 16px;
             color: var(--sw-text-muted); text-decoration: none; border-radius: 8px;
@@ -4470,15 +4474,30 @@ function generate_dashboard() {
         .nav-item-sw.active svg { opacity: 1; }
 
         /* --- MAIN VIEWPORT & SPA ROUTING --- */
-        .main-wrapper { flex-grow: 1; height: 100vh; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; }
+        .main-content { display: flex; flex-direction: column; flex-grow: 1; height: 100vh; overflow: hidden; }
+        .main-wrapper { flex-grow: 1; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; }
         .view-section { display: none; opacity: 0; transition: opacity 0.3s ease-in-out; }
         .view-section.active { display: block; opacity: 1; }
+
+        /* --- NAVBAR --- */
+        .top-navbar {
+            height: 65px; background-color: var(--sw-nav-bg); border-bottom: 1px solid var(--sw-border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 1.5rem;
+        }
+        .theme-toggle-btn { background: transparent; border: none; color: var(--sw-text); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; transition: background 0.2s; }
+        .theme-toggle-btn:hover { background: var(--sw-sidebar-hover); }
 
         /* --- CARDS & UI COMPONENTS --- */
         .card { background-color: var(--sw-card-bg); border: 1px solid var(--sw-border); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .card-header { border-bottom: 1px solid var(--sw-border); font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 0.80rem; color: var(--sw-text-muted); }
+        
+        /* Colored Left Borders for KPIs */
+        .card-l3 { border-left: 4px solid var(--sw-brand-icon) !important; }
+        .card-l7 { border-left: 4px solid #ef4444 !important; }
+        .card-wl { border-left: 4px solid #10b981 !important; }
+
         .stat-value { font-size: clamp(1.2rem, 1.6vw, 1.6rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; }
-        .stat-label { font-size: 0.80rem; text-transform: uppercase; letter-spacing: 1px; color: var(--sw-text-muted); font-weight: 600; }
+        .stat-label { font-size: 0.80rem; text-transform: uppercase; letter-spacing: 1px; color: var(--sw-text-muted); font-weight: 700; }
         .table-container { max-height: 350px; overflow-y: auto; }
         .chart-wrapper { position: relative; height: 320px; width: 100%; }
 
@@ -4487,18 +4506,21 @@ function generate_dashboard() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--sw-border); border-radius: 10px; }
         
-        /* Overrides - Enterprise Border Policy (Separators) */
+        /* Overrides */
         .table { --bs-table-bg: transparent !important; margin-bottom: 0 !important; }
         .table > :not(caption) > * > * { background-color: transparent !important; border-color: var(--sw-border) !important; }
-        .table > tbody > tr > td { border-bottom: 1px solid var(--sw-border) !important; padding-top: 10px; padding-bottom: 10px; }
-        .table > tbody > tr:last-child > td { border-bottom: none !important; }
-        .table > thead > tr > th { border-bottom: 1px solid var(--sw-border) !important; }
         .ip-font { font-size: 85% !important; }
+        
+        /* Striped Services Table */
+        .table-striped > tbody > tr:nth-of-type(odd) > * {
+            --bs-table-bg-type: var(--sw-sidebar-hover);
+        }
 
-        /* Mobile Sidebar Overrides */
+        /* Mobile Adjustments */
         @media (max-width: 991px) {
-            .sidebar { position: fixed; transform: translateX(-100%); }
+            .sidebar { position: fixed; transform: translateX(-100%); width: 280px !important; }
             .sidebar.show { transform: translateX(0); }
+            .sidebar.collapsed .hide-collapsed { display: block !important; } /* Reset collapse on mobile */
             .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1030; }
             .sidebar-overlay.show { display: block; }
         }
@@ -4508,240 +4530,266 @@ function generate_dashboard() {
 
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-    <aside class="sidebar py-4 px-3 d-flex flex-column" id="sidebar">
-        <div class="d-flex align-items-center gap-2 px-2 mb-5">
+    <aside class="sidebar py-4 d-flex flex-column" id="sidebar">
+        <div class="d-flex align-items-center justify-content-center gap-2 px-3 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill font-mono small ms-auto">v2.24</span>
+            <span class="fs-5 fw-bold hide-collapsed" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
         </div>
 
-        <nav class="flex-grow-1">
-            <div class="text-uppercase font-mono small text-muted px-2 mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Analytics</div>
-            <a href="#overview" class="nav-item-sw active" data-view="overview">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                Overview
+        <nav class="flex-grow-1 px-3">
+            <div class="text-uppercase small text-muted mb-2 hide-collapsed" style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1px;">Analytics</div>
+            <a href="#overview" class="nav-item-sw active" data-view="overview" title="Overview">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                <span class="hide-collapsed">Overview</span>
             </a>
-            <a href="#threats" class="nav-item-sw" data-view="threats">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                Threat Intel
+            <a href="#threats" class="nav-item-sw" data-view="threats" title="Threat Intel">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                <span class="hide-collapsed">Threat Intel</span>
             </a>
-            <a href="#system" class="nav-item-sw" data-view="system">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                System Health
+            <a href="#system" class="nav-item-sw" data-view="system" title="System Health">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                <span class="hide-collapsed">System Health</span>
             </a>
         </nav>
 
-        <div class="mt-auto border-top pt-4" style="border-color: var(--sw-border) !important;">
-            <div class="d-flex flex-column gap-2 px-2">
-                <div class="font-mono small text-muted d-flex align-items-center justify-content-between">
-                    <span id="sys-hostname" class="text-truncate">Node...</span>
-                    <div class="spinner-grow spinner-grow-sm text-success" style="width: 8px; height: 8px;" role="status"></div>
-                </div>
-                <div class="font-mono text-muted d-flex align-items-center gap-2 mb-3" style="font-size: 0.75rem;" id="last-update">Syncing...</div>
-                
-                <select class="form-select form-select-sm w-100 rounded-2 font-mono shadow-sm" id="theme-switcher" style="background-color: var(--sw-card-bg); border-color: var(--sw-border); color: var(--sw-text);">
-                    <option value="auto">🖥️ Auto Theme</option>
-                    <option value="dark">🌙 Dark Mode</option>
-                    <option value="light">☀️ Light Mode</option>
-                </select>
+        <div class="mt-auto border-top pt-3 px-3 pb-3 hide-collapsed" style="border-color: var(--sw-border) !important;">
+            <div class="d-flex flex-column gap-2">
+                <a href="https://github.com/duggytuxy/syswarden" target="_blank" rel="noopener noreferrer" class="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 text-decoration-none" style="background: var(--sw-bg); border: 1px solid var(--sw-border); color: var(--sw-text); transition: all 0.2s;">
+                    <div class="d-flex align-items-center gap-2 small fw-bold">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        Stars
+                    </div>
+                    <span id="gh-stars" class="font-mono fw-bold small">--</span>
+                </a>
+                <a href="https://github.com/duggytuxy/syswarden/releases/latest" target="_blank" rel="noopener noreferrer" class="d-flex justify-content-between align-items-center px-3 py-2 rounded-3 text-decoration-none" style="background: var(--sw-bg); border: 1px solid var(--sw-border); color: var(--sw-text); transition: all 0.2s;">
+                    <div class="d-flex align-items-center gap-2 small fw-bold">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                        Release
+                    </div>
+                    <span id="gh-release" class="font-mono fw-bold text-primary small">--</span>
+                </a>
             </div>
         </div>
     </aside>
 
-    <main class="main-wrapper">
-        
-        <div class="d-lg-none d-flex align-items-center justify-content-between p-3 bg-body border-bottom sticky-top">
-            <div class="d-flex align-items-center gap-2">
-                <svg style="color: var(--sw-brand-icon);" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                <span class="fw-bold">SYSWARDEN</span>
+    <div class="main-content">
+        <nav class="top-navbar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-sm btn-link text-body p-0" id="sidebarToggle">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <h5 class="mb-0 fw-bold d-none d-md-block text-uppercase" style="letter-spacing: 0.5px; font-size: 1rem;">Enterprise Console</h5>
             </div>
-            <button class="btn btn-sm border-0" id="mobileMenuBtn">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-            </button>
-        </div>
-
-        <div class="container-fluid px-xl-5 px-4 py-5">
             
-            <div id="view-overview" class="view-section active">
-                <h4 class="mb-4 fw-bold">Overview</h4>
+            <div class="d-flex align-items-center gap-3 gap-md-4">
+                <div class="d-flex align-items-center gap-2 px-3 py-1 rounded-pill" style="background: var(--sw-bg); border: 1px solid var(--sw-border);">
+                    <div id="status-spinner" class="spinner-grow spinner-grow-sm text-success" style="width: 8px; height: 8px;" role="status"></div>
+                    <span id="sys-hostname" class="text-truncate fw-bold small" style="max-width: 150px;">Node</span>
+                    <span id="sys-ip" class="text-muted font-mono small d-none d-lg-block"></span>
+                </div>
                 
-                <div class="row g-4 mb-4">
-                    <div class="col-xxl-4 col-lg-6">
-                        <div class="card h-100">
-                            <div class="card-body p-4">
-                                <div class="stat-label mb-3">L3 Kernel Blocks (Global)</div>
-                                <div class="stat-value text-success font-mono mb-3" id="l3-global">0</div>
-                                <div class="d-flex justify-content-between border-top pt-3 font-mono small text-muted" style="border-color: var(--sw-border) !important;">
-                                    <span>GeoIP: <strong class="text-body" id="l3-geoip">0</strong></span>
-                                    <span>ASN: <strong class="text-body" id="l3-asn">0</strong></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xxl-4 col-lg-6">
-                        <div class="card h-100">
-                            <div class="card-body p-4">
-                                <div class="stat-label mb-3">L7 Active Bans (Fail2ban)</div>
-                                <div class="stat-value text-danger font-mono mb-3" id="l7-banned">0</div>
-                                <div class="d-flex justify-content-between border-top pt-3 font-mono small text-muted" style="border-color: var(--sw-border) !important;">
-                                    <span>Active Guard Jails:</span>
-                                    <strong class="text-body" id="l7-jails">0</strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xxl-4 col-lg-12">
-                        <div class="card h-100">
-                            <div class="card-body p-4">
-                                <div class="d-flex justify-content-between align-items-start mb-3">
-                                    <div class="stat-label">Trusted Hosts (Whitelist)</div>
-                                    <span class="badge bg-success bg-opacity-10 text-success rounded-pill font-mono" id="wl-count">0</span>
-                                </div>
-                                <div class="table-container pe-2 font-mono small text-success" style="max-height: 70px;">
-                                    <ul class="list-unstyled mb-0" id="whitelist-ips-list"></ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row g-4 mb-4">
-                    <div class="col-xl-8">
-                        <div class="card h-100">
-                            <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
-                                <span class="text-danger">📈</span> L7 Threat Telemetry (Live Timeline)
-                            </div>
-                            <div class="card-body p-4">
-                                <div class="chart-wrapper">
-                                    <canvas id="threatChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-4">
-                        <div class="card h-100">
-                            <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
-                                <span class="text-warning">🕸️</span> Global Risk Vectors
-                            </div>
-                            <div class="card-body p-4 d-flex align-items-center justify-content-center">
-                                <div style="position: relative; height: 280px; width: 100%;">
-                                    <canvas id="riskChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <button class="theme-toggle-btn" id="theme-toggle-btn" title="Toggle Theme">
+                    <svg id="icon-sun" class="d-none" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                    <svg id="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </button>
             </div>
+        </nav>
 
-            <div id="view-threats" class="view-section">
-                <h4 class="mb-4 fw-bold">Threat Intelligence</h4>
+        <main class="main-wrapper">
+            <div class="container-fluid px-xl-5 px-4 py-4">
                 
-                <div class="row g-4">
-                    <div class="col-xl-6">
-                        <div class="card h-100">
-                            <div class="card-header bg-transparent pt-4 pb-3 px-4">🎯 Top Attackers (OSINT History)</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive table-container px-3 pb-3">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none; box-shadow: none;">
-                                            <tr>
-                                                <th class="text-muted small fw-normal pb-2">IP ADDRESS</th>
-                                                <th class="text-end text-muted small fw-normal pb-2">HITS</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="top-ips-list"></tbody>
+                <div id="view-overview" class="view-section active">
+                    <h4 class="mb-4 fw-bold">Overview</h4>
+                    
+                    <div class="row g-4 mb-4">
+                        <div class="col-xxl-4 col-lg-6">
+                            <div class="card card-l3 h-100">
+                                <div class="card-body p-4">
+                                    <div class="stat-label mb-3">L3 Kernel Blocks (Global)</div>
+                                    <div class="stat-value text-primary font-mono mb-3" id="l3-global">0</div>
+                                    <div class="d-flex justify-content-between border-top pt-3 font-mono small text-muted" style="border-color: var(--sw-border) !important;">
+                                        <span>GeoIP: <strong class="text-body" id="l3-geoip">0</strong></span>
+                                        <span>ASN: <strong class="text-body" id="l3-asn">0</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xxl-4 col-lg-6">
+                            <div class="card card-l7 h-100">
+                                <div class="card-body p-4">
+                                    <div class="stat-label mb-3">L7 Active Bans (Fail2ban)</div>
+                                    <div class="stat-value text-danger font-mono mb-3" id="l7-banned">0</div>
+                                    <div class="d-flex justify-content-between border-top pt-3 font-mono small text-muted" style="border-color: var(--sw-border) !important;">
+                                        <span>Active Guard Jails:</span>
+                                        <strong class="text-body" id="l7-jails">0</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xxl-4 col-lg-12">
+                            <div class="card card-wl h-100">
+                                <div class="card-body p-4">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div class="stat-label">Trusted Hosts (Whitelist)</div>
+                                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill font-mono" id="wl-count">0</span>
+                                    </div>
+                                    <div class="table-container pe-2 font-mono small text-success" style="max-height: 70px;">
+                                        <ul class="list-unstyled mb-0" id="whitelist-ips-list"></ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-xl-8">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                                    <span class="text-danger">📈</span> L7 Threat Telemetry (Live Timeline)
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="chart-wrapper">
+                                        <canvas id="threatChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                                    <span class="text-warning">🕸️</span> Global Risk Vectors
+                                </div>
+                                <div class="card-body p-4 d-flex align-items-center justify-content-center">
+                                    <div style="position: relative; height: 280px; width: 100%;">
+                                        <canvas id="riskChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="view-threats" class="view-section">
+                    <h4 class="mb-4 fw-bold">Threat Intelligence</h4>
+                    
+                    <div class="row g-4">
+                        <div class="col-xl-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-3 px-4">🎯 Top Attackers (OSINT History)</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive table-container">
+                                        <table class="table table-striped table-sm mb-0 small">
+                                            <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none; box-shadow: none;">
+                                                <tr>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4">IP ADDRESS</th>
+                                                    <th class="text-end text-muted small fw-normal pb-2 pe-4">HITS</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="top-ips-list"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-xl-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-3 px-4">🏢 Jails Load Distribution</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive table-container">
+                                        <table class="table table-striped table-sm mb-0 small">
+                                            <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none; box-shadow: none;">
+                                                <tr>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4">TARGET JAIL</th>
+                                                    <th class="text-end text-muted small fw-normal pb-2 pe-4">LOAD</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="top-jails-list"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-transparent pt-4 pb-3 px-4">🔴 L7 Banned IP Registry (Live Jail Allocations)</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive table-container" style="max-height: 450px;">
+                                        <table class="table table-striped table-sm mb-0 small">
+                                            <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none; box-shadow: none;">
+                                                <tr>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4">IP ADDRESS</th>
+                                                    <th class="text-muted small fw-normal pb-2">TARGET JAIL</th>
+                                                    <th class="text-end text-muted small fw-normal pb-2 pe-4">TRIGGER</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="banned-ips-list"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="view-system" class="view-section">
+                    <h4 class="mb-4 fw-bold">System Health</h4>
+                    
+                    <div class="row g-4">
+                        <div class="col-xl-6">
+                            <div class="card h-100">
+                                <div class="card-body p-4">
+                                    <div class="d-flex justify-content-between align-items-start mb-4">
+                                        <div class="stat-label">Node Status</div>
+                                        <span class="badge bg-secondary rounded-pill font-mono" id="sys-uptime">--</span>
+                                    </div>
+                                    <div class="mb-4 border-bottom pb-4" style="border-color: var(--sw-border) !important;">
+                                        <div class="text-muted small text-uppercase fw-bold mb-2">CPU Load Average (1, 5, 15m)</div>
+                                        <div class="stat-value font-mono" id="sys-load">--</div>
+                                    </div>
+                                    <div>
+                                        <div class="d-flex justify-content-between small text-muted mb-2 font-mono fw-bold">
+                                            <span>RAM Utilization</span>
+                                            <span id="sys-ram">-- MB</span>
+                                        </div>
+                                        <div class="progress" style="height: 8px; background-color: var(--sw-border);" id="ram-progress-container">
+                                            <div class="progress-bar bg-primary" role="progressbar" id="ram-progress" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4">
+                                        <div class="d-flex justify-content-between small text-muted mb-2 font-mono fw-bold">
+                                            <span>Storage Utilization (Root)</span>
+                                            <span id="sys-disk">-- GB</span>
+                                        </div>
+                                        <div class="progress" style="height: 8px; background-color: var(--sw-border);" id="disk-progress-container">
+                                            <div class="progress-bar bg-info" role="progressbar" id="disk-progress" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-xl-6">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-3 px-4 text-uppercase fw-bold small text-muted">
+                                    ⚙️ Core Processes
+                                </div>
+                                <div class="card-body px-0 pt-0">
+                                    <table class="table table-striped table-sm mb-0 small">
+                                        <tbody id="sys-services-list"></tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="col-xl-6">
-                        <div class="card h-100">
-                            <div class="card-header bg-transparent pt-4 pb-3 px-4">🏢 Jails Load Distribution</div>
-                            <div class="card-body px-4 pt-0">
-                                <ul class="list-group list-group-flush font-mono small border-0" id="top-jails-list"></ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header bg-transparent pt-4 pb-3 px-4">🔴 L7 Banned IP Registry (Live Jail Allocations)</div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive table-container px-3 pb-3" style="max-height: 450px;">
-                                    <table class="table table-sm table-hover align-middle mb-0">
-                                        <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none; box-shadow: none;">
-                                            <tr>
-                                                <th class="text-muted small fw-normal pb-2">IP ADDRESS</th>
-                                                <th class="text-muted small fw-normal pb-2">TARGET JAIL</th>
-                                                <th class="text-end text-muted small fw-normal pb-2">TRIGGER</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="banned-ips-list"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
-            </div>
 
-            <div id="view-system" class="view-section">
-                <h4 class="mb-4 fw-bold">System Health</h4>
-                
-                <div class="row g-4">
-                    <div class="col-xl-6">
-                        <div class="card h-100">
-                            <div class="card-body p-4">
-                                <div class="d-flex justify-content-between align-items-start mb-4">
-                                    <div class="stat-label">Node Status</div>
-                                    <span class="badge bg-secondary rounded-pill font-mono" id="sys-uptime">--</span>
-                                </div>
-                                <div class="mb-4 border-bottom pb-4" style="border-color: var(--sw-border) !important;">
-                                    <div class="text-muted small text-uppercase fw-bold mb-2">CPU Load Average (1, 5, 15m)</div>
-                                    <div class="stat-value font-mono" id="sys-load">--</div>
-                                </div>
-                                <div>
-                                    <div class="d-flex justify-content-between small text-muted mb-2 font-mono fw-bold">
-                                        <span>RAM Utilization</span>
-                                        <span id="sys-ram">-- MB</span>
-                                    </div>
-                                    <div class="progress" style="height: 8px; background-color: var(--sw-border);" id="ram-progress-container">
-                                        <div class="progress-bar bg-primary" role="progressbar" id="ram-progress" style="width: 0%;"></div>
-                                    </div>
-                                </div>
-                                <div class="mt-4">
-                                    <div class="d-flex justify-content-between small text-muted mb-2 font-mono fw-bold">
-                                        <span>Storage Utilization (Root)</span>
-                                        <span id="sys-disk">-- GB</span>
-                                    </div>
-                                    <div class="progress" style="height: 8px; background-color: var(--sw-border);" id="disk-progress-container">
-                                        <div class="progress-bar bg-info" role="progressbar" id="disk-progress" style="width: 0%;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-xl-6">
-                        <div class="card h-100">
-                            <div class="card-header bg-transparent pt-4 pb-3 px-4 text-uppercase fw-bold small text-muted">
-                                ⚙️ Core Processes
-                            </div>
-                            <div class="card-body px-4 pt-0">
-                                <ul class="list-group list-group-flush font-mono small border-0" id="sys-services-list">
-                                    </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
-
-        </div>
-    </main>
+        </main>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="app.js"></script>
@@ -4757,44 +4805,37 @@ const MAX_DATA_POINTS = 40;
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // --- SPA ROUTER (VIRTUAL NAVIGATION) ---
+    // --- SPA ROUTER & SIDEBAR ---
     const navItems = document.querySelectorAll('.nav-item-sw');
     const viewSections = document.querySelectorAll('.view-section');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const sidebarToggle = document.getElementById('sidebarToggle');
 
     function switchView(targetViewId) {
-        // Update active class on nav links
         navItems.forEach(item => {
             item.classList.remove('active');
-            if(item.getAttribute('data-view') === targetViewId) {
-                item.classList.add('active');
-            }
+            if(item.getAttribute('data-view') === targetViewId) item.classList.add('active');
         });
         
-        // Switch sections with fade
         viewSections.forEach(section => {
             if(section.id === 'view-' + targetViewId) {
                 section.style.display = 'block';
-                // small delay for css transition to trigger
                 setTimeout(() => section.classList.add('active'), 50);
             } else {
                 section.classList.remove('active');
-                setTimeout(() => section.style.display = 'none', 300); // match css transition
+                setTimeout(() => section.style.display = 'none', 300);
             }
         });
 
-        // Save state
         localStorage.setItem('syswarden-view', targetViewId);
         
-        // Close mobile menu if open
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if(sidebar.classList.contains('show')){
+        if(window.innerWidth < 992) {
             sidebar.classList.remove('show');
             overlay.classList.remove('show');
         }
     }
 
-    // Bind clicks
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -4802,44 +4843,63 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Restore last view or default to overview
     const savedView = localStorage.getItem('syswarden-view') || 'overview';
     switchView(savedView);
 
-    // --- MOBILE MENU LOGIC ---
-    document.getElementById('mobileMenuBtn').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.add('show');
-        document.getElementById('sidebarOverlay').classList.add('show');
+    // Sidebar Toggle Logic
+    sidebarToggle.addEventListener('click', () => {
+        if(window.innerWidth < 992) {
+            sidebar.classList.add('show');
+            overlay.classList.add('show');
+        } else {
+            sidebar.classList.toggle('collapsed');
+            localStorage.setItem('syswarden-sidebar', sidebar.classList.contains('collapsed') ? '1' : '0');
+        }
     });
-    document.getElementById('sidebarOverlay').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.remove('show');
-        document.getElementById('sidebarOverlay').classList.remove('show');
+    
+    overlay.addEventListener('click', () => {
+        sidebar.classList.remove('show');
+        overlay.classList.remove('show');
     });
 
-    // --- ADVANCED THEME ENGINE ---
-    const themeSwitcher = document.getElementById('theme-switcher');
+    // Restore desktop sidebar state
+    if(window.innerWidth >= 992 && localStorage.getItem('syswarden-sidebar') === '1') {
+        sidebar.classList.add('collapsed');
+    }
+
+    // --- THEME ENGINE (ICONS) ---
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    const iconSun = document.getElementById('icon-sun');
+    const iconMoon = document.getElementById('icon-moon');
     
-    const setTheme = (theme) => {
-        let activeTheme = theme;
-        if (theme === 'auto') {
-            activeTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const applyThemeState = (isDark) => {
+        document.documentElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+        if(isDark) {
+            iconMoon.classList.add('d-none');
+            iconSun.classList.remove('d-none');
+        } else {
+            iconSun.classList.add('d-none');
+            iconMoon.classList.remove('d-none');
         }
-        document.documentElement.setAttribute('data-bs-theme', activeTheme);
-        updateChartTheme(activeTheme);
+        updateChartTheme(isDark ? 'dark' : 'light');
     };
 
-    const currentTheme = localStorage.getItem('syswarden-theme') || 'auto';
-    themeSwitcher.value = currentTheme;
-    setTheme(currentTheme);
+    const toggleTheme = () => {
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('syswarden-theme', newTheme);
+        applyThemeState(newTheme === 'dark');
+    };
 
-    themeSwitcher.addEventListener('change', (e) => {
-        localStorage.setItem('syswarden-theme', e.target.value);
-        setTheme(e.target.value);
-    });
+    themeBtn.addEventListener('click', toggleTheme);
 
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-        if (localStorage.getItem('syswarden-theme') === 'auto') setTheme('auto');
-    });
+    // Initial Theme Load
+    const savedTheme = localStorage.getItem('syswarden-theme');
+    if (savedTheme) {
+        applyThemeState(savedTheme === 'dark');
+    } else {
+        applyThemeState(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
 
     // --- CHART.JS INITIALIZATION ---
     const chartData = {
@@ -4854,7 +4914,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-        // 1. Initialize Timeline Chart (L7 Threat Telemetry)
+        // 1. Timeline Chart
         const ctxThreat = document.getElementById('threatChart').getContext('2d');
         threatChart = new Chart(ctxThreat, {
             type: 'line', data: chartData,
@@ -4863,51 +4923,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 interaction: { mode: 'index', intersect: false },
                 plugins: { 
                     legend: { display: false },
-                    tooltip: {
-                        animation: false, titleFont: { family: 'JetBrains Mono', size: 13, weight: 'bold' },
-                        bodyFont: { family: 'JetBrains Mono', size: 12 }, padding: 12, cornerRadius: 8, displayColors: false
-                    }
+                    tooltip: { animation: false, titleFont: { family: 'monospace', size: 13 }, bodyFont: { family: 'monospace', size: 12 }, padding: 12, cornerRadius: 8, displayColors: false }
                 },
                 scales: {
                     x: { display: false },
-                    y: { beginAtZero: true, ticks: { font: { family: 'JetBrains Mono', size: 11 } }, border: { display: false } }
+                    y: { beginAtZero: true, ticks: { font: { family: 'monospace', size: 11 } }, border: { display: false } }
                 },
                 animation: { duration: 0 }
             }
         });
 
-        // 2. Initialize Risk Radar Chart (Global Risk Vectors)
+        // 2. Risk Doughnut Chart (Colors: Exploits, Brute-Force, Recon, DDoS, Abuse/Spam)
         const ctxRadar = document.getElementById('riskChart').getContext('2d');
         riskChart = new Chart(ctxRadar, {
-            type: 'radar',
+            type: 'doughnut',
             data: {
                 labels: ['Exploits', 'Brute-Force', 'Recon', 'DDoS', 'Abuse/Spam'],
                 datasets: [{
-                    label: 'Risk Vector',
                     data: [0, 0, 0, 0, 0],
-                    backgroundColor: 'rgba(239, 68, 68, 0.25)',
-                    borderColor: '#ef4444',
-                    pointBackgroundColor: '#ef4444',
+                    backgroundColor: [
+                        '#ef4444', // Red
+                        '#eab308', // Yellow
+                        '#3b82f6', // Blue
+                        'var(--sw-chart-ddos)', // Black/Grey depending on theme
+                        '#f97316'  // Orange
+                    ],
                     borderWidth: 2,
-                    pointRadius: 3
+                    borderColor: 'var(--sw-card-bg)'
                 }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    r: {
-                        angleLines: { color: 'rgba(107, 114, 128, 0.2)' },
-                        grid: { color: 'rgba(107, 114, 128, 0.2)' },
-                        pointLabels: { font: { family: 'JetBrains Mono', size: 10, weight: 'bold' } },
-                        ticks: { display: false }
-                    }
+                responsive: true, maintainAspectRatio: false, cutout: '65%',
+                plugins: { 
+                    legend: { position: 'bottom', labels: { padding: 20, font: { family: 'Roboto', size: 12, weight: '500' } } },
+                    tooltip: { padding: 10, cornerRadius: 8, bodyFont: { family: 'monospace', size: 13, weight: 'bold' } }
                 }
             }
         });
     } catch (e) { console.warn("Chart.js init failed:", e); }
 
-    // DEVSECOPS FIX: Force theme application on charts immediately after instantiation to fix F5 dimming bug
     updateChartTheme(document.documentElement.getAttribute('data-bs-theme'));
 
     function updateChartTheme(theme) {
@@ -4922,17 +4976,32 @@ document.addEventListener('DOMContentLoaded', () => {
         threatChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#000';
         threatChart.options.plugins.tooltip.bodyColor = isDark ? '#a1a1aa' : '#4b5563';
         threatChart.options.plugins.tooltip.borderColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-        threatChart.options.plugins.tooltip.borderWidth = 1;
         threatChart.update();
-		
-		// --- RADAR THEME UPDATE ---
+        
         if(riskChart) {
-            riskChart.options.scales.r.pointLabels.color = textColor;
-            // DEVSECOPS FIX: Increased opacity to 0.25 in dark mode for crisp web visibility
-            riskChart.options.scales.r.angleLines.color = isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.1)';
-            riskChart.options.scales.r.grid.color = isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.1)';
+            riskChart.data.datasets[0].borderColor = isDark ? '#09090b' : '#ffffff';
+            riskChart.options.plugins.legend.labels.color = textColor;
             riskChart.update();
         }
+    }
+	
+	// --- UI HELPER: MATCH JAIL TO DOUGHNUT CHART COLORS ---
+    function getJailBadgeStyle(jailName) {
+        const j = jailName.toLowerCase();
+        // Exploits (Red)
+        if (j.match(/(sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi|prestashop|atlassian|wordpress|drupal|nginx|apache)/)) 
+            return 'background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);';
+        // Recon (Blue)
+        if (j.match(/(portscan|scan|bot|mapper|enum|hunter|proxy)/)) 
+            return 'background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3);';
+        // Abuse/Spam (Orange)
+        if (j.match(/(recidive|postfix|dovecot|exim|mail)/)) 
+            return 'background-color: rgba(249, 115, 22, 0.15); color: #f97316; border: 1px solid rgba(249,115,22,0.3);';
+        // DDoS (Dark Grey/Theme Contrast)
+        if (j.match(/(flood|limit|ddos)/)) 
+            return 'background-color: rgba(107, 114, 128, 0.15); color: var(--sw-text); border: 1px solid var(--sw-border);';
+        // Brute-Force / Default (Yellow)
+        return 'background-color: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234,179,8,0.3);';
     }
 
     // --- DATA INGESTION ENGINE ---
@@ -4942,8 +5011,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('HTTP request failed');
             const data = await response.json();
 
-            // 1. System Metrics
+            // Status Spinner -> Online
+            const spinner = document.getElementById('status-spinner');
+            if (spinner) {
+                spinner.classList.remove('text-danger');
+                spinner.classList.add('text-success');
+            }
+
+            // System Metrics
             document.getElementById('sys-hostname').innerText = data.system.hostname;
+            if(data.system.ip) {
+                document.getElementById('sys-ip').innerText = data.system.ip;
+            }
             document.getElementById('sys-uptime').innerText = data.system.uptime;
             
             const ramUsed = parseInt(data.system.ram_used_mb) || 0;
@@ -4953,8 +5032,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const ramBar = document.getElementById('ram-progress');
             ramBar.style.width = `${ramPercent}%`;
             ramBar.className = `progress-bar ${ramPercent > 85 ? 'bg-danger' : ramPercent > 60 ? 'bg-warning' : 'bg-primary'}`;
-			
-			// Storage calculation (MB to GB conversion)
+            
             const diskUsed = (parseInt(data.system.disk_used_mb) / 1024).toFixed(1);
             const diskTotal = (parseInt(data.system.disk_total_mb) / 1024).toFixed(1);
             const diskPercent = Math.round((diskUsed / diskTotal) * 100) || 0;
@@ -4969,69 +5047,68 @@ document.addEventListener('DOMContentLoaded', () => {
             sysLoadEl.classList.remove('text-success', 'text-warning', 'text-danger');
             sysLoadEl.classList.add(load1m <= 0.35 ? 'text-success' : load1m <= 0.70 ? 'text-warning' : 'text-danger');
 
-            // 2. Layer 3 & 7 Metrics
+            // Layer 3 & 7 Metrics
             document.getElementById('l3-global').innerText = parseInt(data.layer3.global_blocked).toLocaleString();
             document.getElementById('l3-geoip').innerText = parseInt(data.layer3.geoip_blocked).toLocaleString();
             document.getElementById('l3-asn').innerText = parseInt(data.layer3.asn_blocked).toLocaleString();
             document.getElementById('l7-banned').innerText = parseInt(data.layer7.total_banned).toLocaleString();
             document.getElementById('l7-jails').innerText = data.layer7.active_jails;
             document.getElementById('wl-count').innerText = data.whitelist.active_ips;
-			
-			// Inject Services
+            
+            // Inject Striped Services Table
             const srvEl = document.getElementById('sys-services-list');
             if(data.system.services && srvEl) {
                 srvEl.innerHTML = data.system.services.map(srv => `
-                    <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 py-3 border-bottom" style="border-color: var(--sw-border) !important;">
-                        <span class="text-body fw-bold">${srv.name}</span>
-                        ${srv.status === 'active' 
-                            ? '<span class="badge bg-success bg-opacity-10 text-success rounded-pill border border-success border-opacity-25 px-3">ACTIVE</span>' 
-                            : '<span class="badge bg-danger bg-opacity-10 text-danger rounded-pill border border-danger border-opacity-25 px-3">OFFLINE</span>'}
-                    </li>`).join('');
+                    <tr>
+                        <td class="text-body fw-bold align-middle border-0 py-2 ps-4">${srv.name}</td>
+                        <td class="text-end align-middle border-0 py-2 pe-4">
+                            ${srv.status === 'active' 
+                                ? '<span class="badge bg-success bg-opacity-10 text-success rounded-pill border border-success border-opacity-25 px-3">ACTIVE</span>' 
+                                : '<span class="badge bg-danger bg-opacity-10 text-danger rounded-pill border border-danger border-opacity-25 px-3">OFFLINE</span>'}
+                        </td>
+                    </tr>`).join('');
             }
 
-            // Inject Radar Data
+            // Inject Doughnut Data
             if(riskChart && data.layer7.risk_radar) {
                 riskChart.data.datasets[0].data = data.layer7.risk_radar;
                 riskChart.update();
             }
 
-            // Renderers
+            // Renderers (Threat Intel Tables)
             document.getElementById('whitelist-ips-list').innerHTML = data.whitelist.ips.map(ip => `<li class="mb-1 opacity-75">${ip}</li>`).join('');
 
             const topIpsEl = document.getElementById('top-ips-list');
             if(data.layer7.top_attackers.length > 0) {
                 topIpsEl.innerHTML = data.layer7.top_attackers.map(attacker => `
                     <tr>
-                        <td class="font-mono"><a href="https://www.abuseipdb.com/check/${attacker.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger fw-bold opacity-75 ip-font">${attacker.ip}</a></td>
-                        <td class="text-end font-mono fw-bold text-body-secondary">${attacker.count.toLocaleString()}</td>
+                        <td class="align-middle border-0 py-2 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${attacker.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none fw-bold ip-font" style="color: var(--sw-text);">${attacker.ip}</a></td>
+                        <td class="text-end align-middle border-0 py-2 pe-4 font-mono fw-bold text-body-secondary">${attacker.count.toLocaleString()}</td>
                     </tr>`).join('');
-            } else { topIpsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4">No attackers recorded.</td></tr>`; }
+            } else { topIpsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4 border-0">No attackers recorded.</td></tr>`; }
 
             const jailsEl = document.getElementById('top-jails-list');
             if(data.layer7.jails_data.length > 0) {
                 jailsEl.innerHTML = [...data.layer7.jails_data].sort((a, b) => b.count - a.count).map(jail => `
-                    <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 py-3 border-bottom" style="border-color: var(--sw-border) !important;">
-                        <span class="text-body-secondary fw-medium">${jail.name}</span>
-                        <span class="badge bg-secondary bg-opacity-25 text-body rounded-pill">${jail.count}</span>
-                    </li>`).join('');
-            } else { jailsEl.innerHTML = `<li class="list-group-item bg-transparent text-muted small border-0 px-0">No active jails loaded.</li>`; }
+                    <tr>
+                        <td class="align-middle border-0 py-2 ps-4 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(jail.name)}">${jail.name}</span></td>
+                        <td class="text-end align-middle border-0 py-2 pe-4 font-mono fw-bold text-body-secondary">${jail.count}</td>
+                    </tr>`).join('');
+            } else { jailsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4 border-0">No active jails loaded.</td></tr>`; }
 
             const bannedEl = document.getElementById('banned-ips-list');
             if(data.layer7.banned_ips.length > 0) {
-                bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => {
-                    const isRecidive = entry.jail.includes('recidive');
-                    return `<tr>
-                        <td class="font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none text-danger fw-bold opacity-75 ip-font">${entry.ip}</a></td>
-                        <td class="font-mono"><span class="badge ${isRecidive ? 'bg-danger text-white' : 'bg-secondary bg-opacity-25 text-body'} fw-normal">${entry.jail}</span></td>
-                        <td class="text-end font-mono text-muted small" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
-                    </tr>`;
-                }).join('');
-            } else { bannedEl.innerHTML = `<tr><td colspan="3" class="text-center text-muted small py-5">Registry is empty. Architecture is secure.</td></tr>`; }
+                bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => `
+                    <tr>
+                        <td class="align-middle border-0 py-2 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none fw-bold ip-font" style="color: var(--sw-text);">${entry.ip}</a></td>
+                        <td class="align-middle border-0 py-2 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(entry.jail)}">${entry.jail}</span></td>
+                        <td class="text-end align-middle border-0 py-2 pe-4 font-mono text-muted small" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
+                    </tr>`).join('');
+            } else { bannedEl.innerHTML = `<tr><td colspan="3" class="text-center text-muted small py-5 border-0">Registry is empty. Architecture is secure.</td></tr>`; }
 
-            // Chart Updater
+            // Chart Updater (Live Timeline)
             const now = new Date();
             const timeString = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
-            document.getElementById('last-update').innerHTML = `Sync: ${timeString}`;
 
             if (threatChart) {
                 chartData.labels.push(timeString);
@@ -5044,9 +5121,41 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("Telemetry Sync Error:", error);
-            document.getElementById('last-update').innerHTML = `<span class="text-danger">Offline</span>`;
+            
+            // Status Spinner -> Offline (Red)
+            const spinner = document.getElementById('status-spinner');
+            if (spinner) {
+                spinner.classList.remove('text-success');
+                spinner.classList.add('text-danger');
+            }
         }
     }
+	
+	// --- GITHUB API FETCH (Executes ONCE on page load to prevent rate-limiting) ---
+    async function fetchGitHubData() {
+        try {
+            // Fetch Repo Stars
+            const repoRes = await fetch('https://api.github.com/repos/duggytuxy/syswarden');
+            if (repoRes.ok) {
+                const repoData = await repoRes.json();
+                document.getElementById('gh-stars').innerText = repoData.stargazers_count;
+            }
+            
+            // Fetch Latest Release Version
+            const relRes = await fetch('https://api.github.com/repos/duggytuxy/syswarden/releases/latest');
+            if (relRes.ok) {
+                const relData = await relRes.json();
+                document.getElementById('gh-release').innerText = relData.tag_name;
+            }
+        } catch (error) {
+            console.warn("GitHub API Fetch Error:", error);
+            document.getElementById('gh-stars').innerText = "N/A";
+            document.getElementById('gh-release').innerText = "N/A";
+        }
+    }
+    
+    // Initialize GitHub Fetch
+    fetchGitHubData();
 
     fetchTelemetry();
     setInterval(fetchTelemetry, 5000);
