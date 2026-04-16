@@ -34,7 +34,7 @@ CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
 # shellcheck disable=SC2034
-VERSION="v2.27"
+VERSION="v2.28"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -2990,7 +2990,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.27 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.28 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -3141,7 +3141,10 @@ function generate_dashboard() {
     <aside class="sidebar py-4 d-flex flex-column" id="sidebar">
         <div class="d-flex align-items-center justify-content-center gap-2 px-3 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <span class="fs-5 fw-bold hide-collapsed" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+            <div class="d-flex align-items-baseline gap-2 hide-collapsed">
+                <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.28</span>
+            </div>
         </div>
 
         <nav class="flex-grow-1 px-3">
@@ -3272,6 +3275,38 @@ function generate_dashboard() {
                                 <div class="card-body p-4 d-flex align-items-center justify-content-center">
                                     <div style="position: relative; height: 280px; width: 100%;">
                                         <canvas id="riskChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+					
+					<div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                                    <span class="text-success">🛡️</span> Filtration Efficiency (Signal vs Noise)
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-6 mb-4 mb-md-0" style="border-right: 1px solid var(--sw-border);">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Automated Noise Blocked (L3 Blocklists)</span>
+                                                <span id="noise-pct" class="text-success">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="noise-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 ps-md-4">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Actionable Signals (L7 Fail2ban)</span>
+                                                <span id="signal-pct" class="text-danger">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="signal-bar" class="progress-bar bg-danger" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3662,6 +3697,27 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('l7-banned').innerText = parseInt(data.layer7.total_banned).toLocaleString();
             document.getElementById('l7-jails').innerText = data.layer7.active_jails;
             document.getElementById('wl-count').innerText = data.whitelist.active_ips;
+
+            // --- DEVSECOPS FIX: SIGNAL VS NOISE CALCULATION ---
+            const l3Blocked = parseInt(data.layer3.global_blocked) || 0;
+            const l7Banned = parseInt(data.layer7.total_banned) || 0;
+            const totalThreats = l3Blocked + l7Banned;
+            
+            let noisePercent = 0;
+            let signalPercent = 0;
+            
+            if (totalThreats > 0) {
+                noisePercent = ((l3Blocked / totalThreats) * 100).toFixed(2);
+                signalPercent = ((l7Banned / totalThreats) * 100).toFixed(2);
+            }
+
+            // Update DOM
+            document.getElementById('noise-pct').innerText = `${noisePercent}%`;
+            document.getElementById('noise-bar').style.width = `${noisePercent}%`;
+
+            document.getElementById('signal-pct').innerText = `${signalPercent}%`;
+            document.getElementById('signal-bar').style.width = `${signalPercent}%`;
+            // ----------------------------------------------------
             
             // Inject Striped Services Table
             const srvEl = document.getElementById('sys-services-list');
@@ -4055,7 +4111,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.27                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.28                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -4074,7 +4130,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.27 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.28 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"

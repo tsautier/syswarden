@@ -33,7 +33,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v2.27"
+VERSION="v2.28"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -90,6 +90,15 @@ trap cleanup EXIT
 detect_os_backend() {
     log "INFO" "Detecting Operating System and Firewall Backend..."
 
+    # --- HOTFIX: PREVENT BACKEND AMNESIA ---
+    if [[ -f "$CONF_FILE" ]] && grep -q "FIREWALL_BACKEND=" "$CONF_FILE"; then
+        # shellcheck source=/dev/null
+        source "$CONF_FILE"
+        log "INFO" "Loaded saved Firewall Backend: $FIREWALL_BACKEND"
+        return
+    fi
+    # ---------------------------------------
+
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$NAME
@@ -114,6 +123,9 @@ detect_os_backend() {
 
     log "INFO" "OS: $OS"
     log "INFO" "Detected Firewall Backend: $FIREWALL_BACKEND"
+
+    # Save detection for future cron jobs
+    echo "FIREWALL_BACKEND='$FIREWALL_BACKEND'" >>"$CONF_FILE"
 }
 
 install_dependencies() {
@@ -431,16 +443,18 @@ define_firewall_engine() {
                 log "INFO" "Installing and enabling classic Iptables persistence..."
                 if command -v dnf >/dev/null; then
                     dnf install -y iptables-services >/dev/null 2>&1 || true
-                elif command -v yum >/dev/null; then
-                    yum install -y iptables-services >/dev/null 2>&1 || true
-                fi
+                elif command -v yum >/dev/null; then yum install -y iptables-services >/dev/null 2>&1 || true; fi
                 systemctl enable --now iptables >/dev/null 2>&1 || true
                 FIREWALL_BACKEND="iptables"
+                sed -i '/^FIREWALL_BACKEND=/d' "$CONF_FILE" 2>/dev/null || true
+                echo "FIREWALL_BACKEND='iptables'" >>"$CONF_FILE"
                 log "INFO" "Engine swapped: IPtables Active. Firewalld bypassed."
             else
                 log "INFO" "Enabling pure Nftables persistence..."
                 systemctl enable --now nftables >/dev/null 2>&1 || true
                 FIREWALL_BACKEND="nftables"
+                sed -i '/^FIREWALL_BACKEND=/d' "$CONF_FILE" 2>/dev/null || true
+                echo "FIREWALL_BACKEND='nftables'" >>"$CONF_FILE"
                 log "INFO" "Engine swapped: Nftables Active. Firewalld bypassed."
             fi
         else
@@ -1309,14 +1323,17 @@ EOF
         fi
 
         cat <<EOF >>"$TMP_DIR/syswarden.nft"
-        # Hardware Drops with SIEM & Dashboard Logging
-        ip saddr @$SET_NAME log prefix "[SysWarden-BLOCK] " drop
+        # Hardware Drops with SIEM Logging (Rate-Limited to prevent CPU/IO exhaustion)
+        ip saddr @$SET_NAME limit rate 2/second log prefix "[SysWarden-BLOCK] "
+        ip saddr @$SET_NAME drop
 EOF
         if [[ "${GEOBLOCK_COUNTRIES:-none}" != "none" ]] && [[ -s "$GEOIP_FILE" ]]; then
-            echo "        ip saddr @$GEOIP_SET_NAME log prefix \"[SysWarden-GEO] \" drop" >>"$TMP_DIR/syswarden.nft"
+            echo "        ip saddr @$GEOIP_SET_NAME limit rate 2/second log prefix \"[SysWarden-GEO] \"" >>"$TMP_DIR/syswarden.nft"
+            echo "        ip saddr @$GEOIP_SET_NAME drop" >>"$TMP_DIR/syswarden.nft"
         fi
         if [[ "${BLOCK_ASNS:-none}" != "none" ]] && [[ -s "$ASN_FILE" ]]; then
-            echo "        ip saddr @$ASN_SET_NAME log prefix \"[SysWarden-ASN] \" drop" >>"$TMP_DIR/syswarden.nft"
+            echo "        ip saddr @$ASN_SET_NAME limit rate 2/second log prefix \"[SysWarden-ASN] \"" >>"$TMP_DIR/syswarden.nft"
+            echo "        ip saddr @$ASN_SET_NAME drop" >>"$TMP_DIR/syswarden.nft"
         fi
 
         cat <<EOF >>"$TMP_DIR/syswarden.nft"
@@ -1377,7 +1394,8 @@ EOF
 
         cat <<EOF >>"$TMP_DIR/syswarden.nft"
         # The Catch-All Drop: Any packet surviving Frontline and Fail2ban hits this.
-        log prefix "[SysWarden-BLOCK] [Catch-All] " drop
+        limit rate 2/second log prefix "[SysWarden-BLOCK] [Catch-All] "
+        drop
     }
 }
 EOF
@@ -1465,10 +1483,11 @@ EOF
         # --------------------------------------------------------------
 
         # --- MODULAR PERSISTENCE (ZERO-TOUCH) ---
-        log "INFO" "Saving SysWarden Nftables table to isolated config..."
+        log "INFO" "Saving SysWarden Nftables tables to isolated config..."
         mkdir -p /etc/syswarden
-        # FIX: Export ONLY our specific table, preserving user custom rules
+        # FIX: Export BOTH tables (Tier 1 Hardware Drop + Tier 2 Stateful)
         nft list table inet syswarden_table >/etc/syswarden/syswarden.nft
+        nft list table netdev syswarden_hw_drop >>/etc/syswarden/syswarden.nft 2>/dev/null || true
 
         local MAIN_NFT_CONF="/etc/nftables.conf"
         if [[ -f "$MAIN_NFT_CONF" ]]; then
@@ -1522,7 +1541,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v2.27) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v2.28) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -4719,7 +4738,7 @@ uninstall_syswarden() {
     rm -rf /var/log/syswarden/* 2>/dev/null || true
     # ----------------------------------------------------------------
 
-    # --- Clean up all SysWarden Fail2ban filters (Including v2.27 additions) ---
+    # --- Clean up all SysWarden Fail2ban filters (Including v2.28 additions) ---
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
@@ -5011,7 +5030,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.27 - TELEMETRY BACKEND
+# SYSWARDEN v2.28 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -5282,7 +5301,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.27 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.28 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -5433,7 +5452,10 @@ function generate_dashboard() {
     <aside class="sidebar py-4 d-flex flex-column" id="sidebar">
         <div class="d-flex align-items-center justify-content-center gap-2 px-3 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <span class="fs-5 fw-bold hide-collapsed" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+            <div class="d-flex align-items-baseline gap-2 hide-collapsed">
+                <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.28</span>
+            </div>
         </div>
 
         <nav class="flex-grow-1 px-3">
@@ -5564,6 +5586,38 @@ function generate_dashboard() {
                                 <div class="card-body p-4 d-flex align-items-center justify-content-center">
                                     <div style="position: relative; height: 280px; width: 100%;">
                                         <canvas id="riskChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+					
+					<div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                                    <span class="text-success">🛡️</span> Filtration Efficiency (Signal vs Noise)
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-6 mb-4 mb-md-0" style="border-right: 1px solid var(--sw-border);">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Automated Noise Blocked (L3 Blocklists)</span>
+                                                <span id="noise-pct" class="text-success">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="noise-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 ps-md-4">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Actionable Signals (L7 Fail2ban)</span>
+                                                <span id="signal-pct" class="text-danger">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="signal-bar" class="progress-bar bg-danger" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -5954,6 +6008,27 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('l7-banned').innerText = parseInt(data.layer7.total_banned).toLocaleString();
             document.getElementById('l7-jails').innerText = data.layer7.active_jails;
             document.getElementById('wl-count').innerText = data.whitelist.active_ips;
+
+            // --- DEVSECOPS FIX: SIGNAL VS NOISE CALCULATION ---
+            const l3Blocked = parseInt(data.layer3.global_blocked) || 0;
+            const l7Banned = parseInt(data.layer7.total_banned) || 0;
+            const totalThreats = l3Blocked + l7Banned;
+            
+            let noisePercent = 0;
+            let signalPercent = 0;
+            
+            if (totalThreats > 0) {
+                noisePercent = ((l3Blocked / totalThreats) * 100).toFixed(2);
+                signalPercent = ((l7Banned / totalThreats) * 100).toFixed(2);
+            }
+
+            // Update DOM
+            document.getElementById('noise-pct').innerText = `${noisePercent}%`;
+            document.getElementById('noise-bar').style.width = `${noisePercent}%`;
+
+            document.getElementById('signal-pct').innerText = `${signalPercent}%`;
+            document.getElementById('signal-bar').style.width = `${signalPercent}%`;
+            // ----------------------------------------------------
             
             // Inject Striped Services Table
             const srvEl = document.getElementById('sys-services-list');
@@ -6800,7 +6875,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.27                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.28                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6838,7 +6913,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.27 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.28 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"

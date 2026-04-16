@@ -42,7 +42,7 @@ LOG_FILE="/var/log/syswarden-install.log"
 CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
-VERSION="v2.27"
+VERSION="v2.28"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -3242,7 +3242,7 @@ def monitor_logs():
         proc_f2b.stdout.fileno(): 'f2b'
     }
 
-    # v2.27 Logic: STRICT filter on [SysWarden-BLOCK] only.
+    # v2.28 Logic: STRICT filter on [SysWarden-BLOCK] only.
     regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+).*?DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
@@ -3904,7 +3904,7 @@ uninstall_syswarden() {
     rm -rf /var/lib/syswarden/* 2>/dev/null || true
     # -------------------------------------------------------------------------
 
-    # --- Clean up all SysWarden Fail2ban filters (Including v2.27 additions) ---
+    # --- Clean up all SysWarden Fail2ban filters (Including v2.28 additions) ---
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
@@ -4105,7 +4105,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v2.27 - TELEMETRY BACKEND
+# SYSWARDEN v2.28 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4383,7 +4383,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.27 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.28 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -4534,7 +4534,10 @@ function generate_dashboard() {
     <aside class="sidebar py-4 d-flex flex-column" id="sidebar">
         <div class="d-flex align-items-center justify-content-center gap-2 px-3 mb-5">
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <span class="fs-5 fw-bold hide-collapsed" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+            <div class="d-flex align-items-baseline gap-2 hide-collapsed">
+                <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.28</span>
+            </div>
         </div>
 
         <nav class="flex-grow-1 px-3">
@@ -4665,6 +4668,38 @@ function generate_dashboard() {
                                 <div class="card-body p-4 d-flex align-items-center justify-content-center">
                                     <div style="position: relative; height: 280px; width: 100%;">
                                         <canvas id="riskChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+					
+					<div class="row g-4 mb-4">
+                        <div class="col-12">
+                            <div class="card h-100">
+                                <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
+                                    <span class="text-success">🛡️</span> Filtration Efficiency (Signal vs Noise)
+                                </div>
+                                <div class="card-body p-4">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-6 mb-4 mb-md-0" style="border-right: 1px solid var(--sw-border);">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Automated Noise Blocked (L3 Blocklists)</span>
+                                                <span id="noise-pct" class="text-success">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="noise-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 ps-md-4">
+                                            <div class="d-flex justify-content-between small font-mono fw-bold mb-2">
+                                                <span class="text-muted">Actionable Signals (L7 Fail2ban)</span>
+                                                <span id="signal-pct" class="text-danger">--%</span>
+                                            </div>
+                                            <div class="progress" style="height: 10px; background-color: var(--sw-border);">
+                                                <div id="signal-bar" class="progress-bar bg-danger" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -5055,6 +5090,27 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('l7-banned').innerText = parseInt(data.layer7.total_banned).toLocaleString();
             document.getElementById('l7-jails').innerText = data.layer7.active_jails;
             document.getElementById('wl-count').innerText = data.whitelist.active_ips;
+
+            // --- DEVSECOPS FIX: SIGNAL VS NOISE CALCULATION ---
+            const l3Blocked = parseInt(data.layer3.global_blocked) || 0;
+            const l7Banned = parseInt(data.layer7.total_banned) || 0;
+            const totalThreats = l3Blocked + l7Banned;
+            
+            let noisePercent = 0;
+            let signalPercent = 0;
+            
+            if (totalThreats > 0) {
+                noisePercent = ((l3Blocked / totalThreats) * 100).toFixed(2);
+                signalPercent = ((l7Banned / totalThreats) * 100).toFixed(2);
+            }
+
+            // Update DOM
+            document.getElementById('noise-pct').innerText = `${noisePercent}%`;
+            document.getElementById('noise-bar').style.width = `${noisePercent}%`;
+
+            document.getElementById('signal-pct').innerText = `${signalPercent}%`;
+            document.getElementById('signal-bar').style.width = `${signalPercent}%`;
+            // ----------------------------------------------------
             
             // Inject Striped Services Table
             const srvEl = document.getElementById('sys-services-list');
@@ -5816,7 +5872,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.27                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.28                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -5837,7 +5893,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.27 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.28 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -5846,39 +5902,43 @@ if [[ "$MODE" != "update" ]]; then
         echo -e "${BOLD}1. SSH CONFIGURATION${NC}"
         echo -e "   You will need to confirm the custom SSH port used to connect to this server."
 
-        echo -e "\n${BOLD}2. WIREGUARD VPN${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}2. FIREWALL ENGINE OPTIMIZATION${NC} ${YELLOW}(RHEL/Alma/Fedora only)${NC}"
+        echo -e "   Decide whether to bypass Firewalld in favor of pure Nftables or Iptables"
+        echo -e "   for extreme performance when loading massive Threat Intelligence blocklists."
+
+        echo -e "\n${BOLD}3. WIREGUARD VPN${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Decide if you need a stealth admin VPN. If unsure, consult your SysAdmin."
 
-        echo -e "\n${BOLD}3. DOCKER INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}4. DOCKER INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Requires Layer 3 routing adjustments for containers. If unsure, consult your SysAdmin."
 
-        echo -e "\n${BOLD}4. OS HARDENING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}5. OS HARDENING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Strict restrictions for privileged groups (Sudo/Wheel) & Cron. Recommended for NEW servers only."
 
-        echo -e "\n${BOLD}5. GEOIP BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}6. GEOIP BLOCKING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   ISO country codes to drop instantly (e.g., RU,CN,KP)."
         echo -e "   Reference: ${CYAN}https://www.ipdeny.com/ipblocks/${NC}"
 
-        echo -e "\n${BOLD}6. ASN BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}7. ASN BLOCKING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Target Autonomous System Numbers to drop (e.g., AS1234, AS5678)."
         echo -e "   Reference: ${CYAN}https://www.spamhaus.org/drop/asndrop.json${NC}"
 
-        echo -e "\n${BOLD}7. HA CLUSTER SYNC${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}8. HA CLUSTER SYNC${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Standby Node IP for automatic threat intelligence replication."
 
-        echo -e "\n${BOLD}8. THREAT INTEL BLOCKLISTS${NC}"
+        echo -e "\n${BOLD}9. THREAT INTEL BLOCKLISTS${NC}"
         echo -e "   [1] Standard (Web Servers)      [2] Critical (High Security)"
         echo -e "   [3] Custom (Plaintext URL .txt) [4] Disabled"
 
-        echo -e "\n${BOLD}9. SIEM LOG FORWARDING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}10. SIEM LOG FORWARDING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   External SIEM IP, Port (Default: 6514), and Protocol for central log auditing."
         echo -e "   Required for strict ISO 27001 / NIS2 compliance."
 
-        echo -e "\n${BOLD}10. ABUSEIPDB INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}11. ABUSEIPDB INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Requires a valid API Key to automatically report Layer 7 attackers."
         echo -e "   Get one at: ${CYAN}https://www.abuseipdb.com/account/api${NC}"
 
-        echo -e "\n${BOLD}11. WAZUH SIEM AGENT${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}12. WAZUH SIEM AGENT${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Required: Manager IP, Enrollment Port (1515), Listen Port (1514)."
         echo -e "   If unsure about your SIEM architecture, consult your Security Admin."
 
