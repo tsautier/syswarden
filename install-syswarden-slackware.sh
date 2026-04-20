@@ -34,7 +34,7 @@ CONF_FILE="/etc/syswarden.conf"
 SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d)
 # shellcheck disable=SC2034
-VERSION="v2.39"
+VERSION="v2.40"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -2822,6 +2822,12 @@ SYS_RAM_TOTAL=${SYS_RAM_TOTAL:-0}
 SYS_DISK_USED=$(df -m / 2>/dev/null | awk 'NR==2 {print $3}' || echo 0)
 SYS_DISK_TOTAL=$(df -m / 2>/dev/null | awk 'NR==2 {print $2}' || echo 1)
 
+# NEW: Hardware and OS specifications
+SYS_CORES=$(nproc 2>/dev/null || echo "1")
+SYS_ARCH=$(uname -m 2>/dev/null || echo "Unknown")
+SYS_OS=$(grep -P '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
+SYS_CPU=$(grep -m 1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed -e 's/^[[:space:]]*//' || echo "Unknown")
+
 # --- Layer 3 Metrics ---
 L3_GLOBAL=0; L3_GEOIP=0; L3_ASN=0
 [[ -f "$SYSWARDEN_DIR/active_global_blocklist.txt" ]] && L3_GLOBAL=$(wc -l < "$SYSWARDEN_DIR/active_global_blocklist.txt")
@@ -2834,15 +2840,50 @@ SRV_CRON=$(pgrep -f "cron|crond" >/dev/null && echo "active" || echo "offline")
 SRV_NGX=$(pgrep -f "nginx" >/dev/null && echo "active" || echo "offline")
 SRV_L3=$(command -v nft >/dev/null || lsmod | grep -q ip_set && echo "active" || echo "offline")
 
+# FIX: Added absolute binary paths to the JSON payload for frontend display
 SERVICES_JSON=$(jq -n \
   --arg f2b "$SRV_F2B" --arg crn "$SRV_CRON" --arg ngx "$SRV_NGX" --arg fw "$SRV_L3" \
   '[
-    {"name":"fail2ban-server","status":$f2b},
-    {"name":"netfilter/nftables","status":$fw},
-    {"name":"nginx (worker)","status":$ngx},
-    {"name":"cron/crond","status":$crn},
-    {"name":"syswarden-telemetry","status":"active"}
+    {"name":"fail2ban-server","path":"/usr/bin/fail2ban-server","status":$f2b},
+    {"name":"netfilter/nftables","path":"/usr/sbin/nft","status":$fw},
+    {"name":"nginx (worker)","path":"/usr/sbin/nginx","status":$ngx},
+    {"name":"cron/crond","path":"/usr/sbin/cron","status":$crn},
+    {"name":"syswarden-telemetry","path":"/usr/local/bin/syswarden-telemetry.sh","status":"active"}
   ]')
+
+# --- Network Ports Gathering (ss) ---
+PORTS_JSON="[]"
+if command -v ss >/dev/null; then
+    while read -r proto state local_addr process; do
+        # Standardize protocol
+        proto=$(echo "$proto" | tr 'a-z' 'A-Z')
+        [[ "$proto" == "TCPV6" ]] && proto="TCP (v6)"
+        [[ "$proto" == "UDPV6" ]] && proto="UDP (v6)"
+        
+        # Parse Local IP and Port
+        port="${local_addr##*:}"
+        ip="${local_addr%:*}"
+        ip="${ip//\[/}"
+        ip="${ip//\]/}"
+        [[ "$ip" == "*" || "$ip" == "0.0.0.0" || "$ip" == "::" ]] && ip="0.0.0.0 (Any)"
+        
+        # Determine Interface
+        interface="Any"
+        if [[ "$ip" == "127.0.0.1" || "$ip" == "::1" ]]; then interface="lo"
+        elif [[ "$ip" != "0.0.0.0 (Any)" ]] && command -v ip >/dev/null; then
+            interface=$(ip -o addr show 2>/dev/null | grep -F "$ip" | awk '{print $2}' | head -n 1 || true)
+            [[ -z "$interface" ]] && interface="Mapped"
+        fi
+        
+        # Parse Process Name and PID
+        proc_name="System/Root"
+        if [[ "$process" =~ \"([^\"]+)\",pid=([0-9]+) ]]; then
+            proc_name="${BASH_REMATCH[1]} (${BASH_REMATCH[2]})"
+        fi
+        
+        PORTS_JSON=$(echo "$PORTS_JSON" | jq --arg i "$interface" --arg ip "$ip" --arg pr "$proc_name" --arg s "$state" --arg po "$port" --arg pt "$proto" '. + [{"interface": $i, "ip": $ip, "process": $pr, "state": $s, "port": $po, "protocol": $pt}]')
+    done <<< "$(ss -tulpn 2>/dev/null | tail -n +2 | awk '{print $1, $2, $5, $NF}' || true)"
+fi
 
 # --- Layer 7 Metrics & IP Registry (SECURE JSON ARRAYS) ---
 L7_TOTAL_BANNED=0; L7_ACTIVE_JAILS=0
@@ -2868,7 +2909,37 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
             L7_TOTAL_BANNED=$((L7_TOTAL_BANNED + BANNED_COUNT))
             
             if [[ "$BANNED_COUNT" -gt 0 ]]; then
-                JAILS_JSON=$(echo "$JAILS_JSON" | jq --arg n "$JAIL" --argjson c "$BANNED_COUNT" '. + [{"name": $n, "count": $c}]')
+                # --- THREAT INTEL: MITRE ATT&CK MAPPING ---
+                # Assign TTP (Tactic/Technique) based on Jail naming convention
+                MITRE_ID="T1499" # Default: Endpoint Denial of Service
+                MITRE_NAME="Endpoint DoS"
+                
+                case "${JAIL,,}" in
+                    *ssh*|*auth*|*privesc*|*prestashop*) 
+                        MITRE_ID="T1110"
+                        MITRE_NAME="Brute Force"
+                        ;;
+                    *sqli*|*xss*|*lfi*|*revshell*|*webshell*|*ssti*|*ssrf*|*jndi*)
+                        MITRE_ID="T1190"
+                        MITRE_NAME="Exploit Public-Facing App"
+                        ;;
+                    *scan*|*bot*|*mapper*|*enum*|*hunter*)
+                        MITRE_ID="T1595"
+                        MITRE_NAME="Active Scanning"
+                        ;;
+                    *flood*|*dos*)
+                        MITRE_ID="T1498"
+                        MITRE_NAME="Network Denial of Service"
+                        ;;
+                    *recidive*)
+                        MITRE_ID="T1078"
+                        MITRE_NAME="Valid Accounts (Abuse)"
+                        ;;
+                esac
+                MITRE_PAYLOAD="${MITRE_ID}: ${MITRE_NAME}"
+
+                # UPDATE: Inject the MITRE argument into the Jails JSON array
+                JAILS_JSON=$(echo "$JAILS_JSON" | jq --arg n "$JAIL" --argjson c "$BANNED_COUNT" --arg ttp "$MITRE_PAYLOAD" '. + [{"name": $n, "count": $c, "mitre": $ttp}]')
                 
                 # --- RISK RADAR CALCULATION ---
                 if [[ "$JAIL" =~ (sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi) ]]; then R_EXP=$((R_EXP + BANNED_COUNT))
@@ -2901,7 +2972,7 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                         [[ -z "$L7_PAYLOAD" ]] && L7_PAYLOAD="Log rotated or payload obscured"
                         
                         # Safe JSON injection via jq --arg (Separated Timestamp and Payload for UI columns)
-                        BANNED_IPS_JSON=$(echo "$BANNED_IPS_JSON" | jq --arg ip "$IP" --arg j "$JAIL" --arg ts "$TS" --arg p "$L7_PAYLOAD" '. + [{"ip": $ip, "jail": $j, "timestamp": $ts, "payload": $p}]')
+                        BANNED_IPS_JSON=$(echo "$BANNED_IPS_JSON" | jq --arg ip "$IP" --arg j "$JAIL" --arg ts "$TS" --arg p "$L7_PAYLOAD" --arg ttp "$MITRE_PAYLOAD" '. + [{"ip": $ip, "jail": $j, "timestamp": $ts, "payload": $p, "mitre": $ttp}]')
                     fi
                 done
             fi
@@ -2913,15 +2984,37 @@ fi
 TOP_ATTACKERS_JSON="[]"
 TOP_STATS=""
 
-# FIX: We rely exclusively on Fail2ban's core log to avoid 100% CPU spikes from journalctl 7-day queries.
+# FIX: Extracting both IP and Jail using a robust sed regex
 TOP_STATS=$( { 
     cat /var/log/fail2ban.log 2>/dev/null || true
-} | grep -E "\] (Restore )?Ban " | grep -Eo "([0-9]{1,3}\.){3}[0-9]{1,3}" | sort | uniq -c | sort -nr | head -n 10 || true )
+} | grep -E "\] (Restore )?Ban " | sed -E 's/.*\[([^]]+)\].*Ban ([0-9.]+)/\2 \1/' | sort | uniq -c | sort -nr | head -n 10 || true )
 
 if [[ -n "$TOP_STATS" ]]; then
-    while IFS=" " read -r count ip; do
+    while IFS=" " read -r count ip jail; do
         if [[ -n "$ip" && -n "$count" ]]; then
-            TOP_ATTACKERS_JSON=$(echo "$TOP_ATTACKERS_JSON" | jq --arg ip "$ip" --argjson c "$count" '. + [{"ip": $ip, "count": $c}]')
+            PORT="Unknown"
+            
+            # 1. Dynamically extract the MOST FREQUENT Destination Port (DPT) from raw system logs
+            EXACT_PORT=$(timeout 2 grep -h -F "$ip" /var/log/kern-firewall.log /var/log/kern.log /var/log/syslog /var/log/messages 2>/dev/null | grep -oE 'DPT=[0-9]+' | cut -d= -f2 | sort | uniq -c | sort -nr | awk 'NR==1 {print $2}' || true)
+            
+            if [[ -n "$EXACT_PORT" ]]; then
+                PORT="$EXACT_PORT"
+            else
+                # 2. Application layer fallback (L7 logs like Nginx do not print DPT natively)
+                case "${jail,,}" in
+                    *ssh*) PORT="22" ;;
+                    *http*|*web*|*nginx*|*apache*|*prestashop*|*sqli*|*xss*|*lfi*) PORT="80/443" ;;
+                    *ftp*) PORT="21" ;;
+                    *mail*|*postfix*|*exim*|*dovecot*) PORT="25/143" ;;
+                    *mysql*|*mariadb*) PORT="3306" ;;
+                    *recidive*) PORT="Multiple" ;;
+                    *scan*|*portscan*|*syswarden*) PORT="Network" ;;
+                    *) PORT="Unknown" ;;
+                esac
+            fi
+            
+            # Injecting exact data into the JSON payload
+            TOP_ATTACKERS_JSON=$(echo "$TOP_ATTACKERS_JSON" | jq --arg ip "$ip" --arg p "$PORT" --argjson c "$count" '. + [{"ip": $ip, "port": $p, "count": $c}]')
         fi
     done <<< "$TOP_STATS"
 fi
@@ -2952,6 +3045,11 @@ jq -n \
   --argjson rt "$SYS_RAM_TOTAL" \
   --argjson du "$SYS_DISK_USED" \
   --argjson dt "$SYS_DISK_TOTAL" \
+  --arg cores "$SYS_CORES" \
+  --arg arch "$SYS_ARCH" \
+  --arg os "$SYS_OS" \
+  --arg cpu "$SYS_CPU" \
+  --argjson pts "$PORTS_JSON" \
   --argjson lg "$L3_GLOBAL" \
   --argjson lgeo "$L3_GEOIP" \
   --argjson lasn "$L3_ASN" \
@@ -2966,7 +3064,7 @@ jq -n \
   --argjson rad "$RADAR_JSON" \
 '{
   timestamp: $ts,
-  system: { hostname: $host, uptime: $up, load_average: $load, ram_used_mb: $ru, ram_total_mb: $rt, disk_used_mb: $du, disk_total_mb: $dt, services: $srv },
+  system: { hostname: $host, uptime: $up, load_average: $load, ram_used_mb: $ru, ram_total_mb: $rt, disk_used_mb: $du, disk_total_mb: $dt, services: $srv, cores: $cores, arch: $arch, os: $os, cpu_model: $cpu, ports: $pts },
   layer3: { global_blocked: $lg, geoip_blocked: $lgeo, asn_blocked: $lasn },
   layer7: { total_banned: $ltb, active_jails: $laj, jails_data: $jj, banned_ips: $bip, top_attackers: $top, risk_radar: $rad },
   whitelist: { active_ips: $wlc, ips: $wlip }
@@ -2996,7 +3094,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.39 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.40 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -3145,7 +3243,7 @@ function generate_dashboard() {
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <div class="d-flex align-items-baseline gap-2 hide-collapsed">
                 <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-                <span class="stat-label" style="margin-bottom: 0;">v2.39</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.40</span>
             </div>
         </div>
 
@@ -3282,8 +3380,8 @@ function generate_dashboard() {
                             </div>
                         </div>
                     </div>
-					
-					<div class="row g-4 mb-4">
+                    
+                    <div class="row g-4 mb-4">
                         <div class="col-12">
                             <div class="card h-100">
                                 <div class="card-header bg-transparent pt-4 pb-0 px-4 d-flex align-items-center gap-2">
@@ -3329,6 +3427,7 @@ function generate_dashboard() {
                                             <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none;">
                                                 <tr>
                                                     <th class="text-muted small fw-normal pb-2 ps-4">IP ADDRESS</th>
+                                                    <th class="text-muted small fw-normal pb-2">PORT</th>
                                                     <th class="text-end text-muted small fw-normal pb-2 pe-4">HITS</th>
                                                 </tr>
                                             </thead>
@@ -3348,6 +3447,7 @@ function generate_dashboard() {
                                             <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none;">
                                                 <tr>
                                                     <th class="text-muted small fw-normal pb-2 ps-4">TARGET JAIL</th>
+                                                    <th class="text-muted small fw-normal pb-2">MITRE ATT&CK</th>
                                                     <th class="text-end text-muted small fw-normal pb-2 pe-4">LOAD</th>
                                                 </tr>
                                             </thead>
@@ -3366,10 +3466,11 @@ function generate_dashboard() {
                                         <table class="table table-sm mb-0 small">
                                             <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none;">
                                                 <tr>
-                                                    <th class="text-muted small fw-normal pb-2 ps-4" style="min-width: 170px; width: 170px;">IP ADDRESS</th>
-                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 160px; width: 160px;">TARGET JAIL</th>
-                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 170px; width: 170px;">TIMESTAMP</th>
-                                                    <th class="text-muted small fw-normal pb-2 pe-4" style="min-width: 350px;">TRIGGER</th>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4" style="min-width: 150px;">IP ADDRESS</th>
+                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 150px;">TARGET JAIL</th>
+                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 180px;">MITRE ATT&CK</th>
+                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 160px;">TIMESTAMP</th>
+                                                    <th class="text-muted small fw-normal pb-2 pe-4" style="min-width: 250px;">TRIGGER</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="banned-ips-list"></tbody>
@@ -3383,6 +3484,16 @@ function generate_dashboard() {
 
                 <div id="view-system" class="view-section">
                     <h4 class="mb-4 fw-bold">System Health</h4>
+                    
+                    <div class="card mb-4">
+                        <div class="card-body py-3 px-4 d-flex flex-wrap align-items-center justify-content-between" style="min-height: 60px;">
+                            <div class="font-mono small mb-2 mb-md-0"><span class="text-muted">Cores (CPU):</span> <span class="text-body fw-normal ms-1" id="hw-cores">--</span></div>
+                            <div class="font-mono small mb-2 mb-md-0"><span class="text-muted">Arch:</span> <span class="text-body fw-normal ms-1" id="hw-arch">--</span></div>
+                            <div class="font-mono small mb-2 mb-md-0"><span class="text-muted">Operating System:</span> <span class="text-body fw-normal ms-1" id="hw-os">--</span></div>
+                            <div class="font-mono small mb-2 mb-md-0 d-flex align-items-center"><span class="text-muted me-1">CPU:</span> <span class="text-body fw-normal text-truncate" style="max-width: 250px;" id="hw-cpu" title="CPU Model">--</span></div>
+                            <div class="font-mono small"><span class="text-muted">Last update:</span> <span class="text-body fw-normal ms-1" id="hw-update">--</span></div>
+                        </div>
+                    </div>
                     
                     <div class="row g-4">
                         <div class="col-xl-6">
@@ -3427,6 +3538,29 @@ function generate_dashboard() {
                                     <table class="table table-sm mb-0 small">
                                         <tbody id="sys-services-list"></tbody>
                                     </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-transparent pt-4 pb-3 px-4 border-bottom-0">Network Ports</div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive table-container" style="max-height: 450px;">
+                                        <table class="table table-sm mb-0 small">
+                                            <thead style="position: sticky; top: 0; background: var(--sw-card-bg); z-index: 2; border: none;">
+                                                <tr>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4">INTERFACE</th>
+                                                    <th class="text-muted small fw-normal pb-2">LOCAL IP ADDRESS</th>
+                                                    <th class="text-muted small fw-normal pb-2">PROCESSES</th>
+                                                    <th class="text-muted small fw-normal pb-2">STATE</th>
+                                                    <th class="text-muted small fw-normal pb-2">LOCAL PORT</th>
+                                                    <th class="text-muted small fw-normal pb-2 pe-4">PROTOCOL</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="network-ports-list"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -3630,24 +3764,27 @@ document.addEventListener('DOMContentLoaded', () => {
             riskChart.update();
         }
     }
-	
-	// --- UI HELPER: MATCH JAIL TO DOUGHNUT CHART COLORS ---
+    
+    // --- UI HELPER: MATCH JAIL TO DOUGHNUT CHART COLORS ---
     function getJailBadgeStyle(jailName) {
         const j = jailName.toLowerCase();
+        // FIX: Global application of 0.70rem font size for perfect alignment with MITRE badges
+        const baseStyle = 'font-size: 0.70rem; ';
+        
         // Exploits (Red)
         if (j.match(/(sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi|prestashop|atlassian|wordpress|drupal|nginx|apache)/)) 
-            return 'background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);';
+            return baseStyle + 'background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);';
         // Recon (Blue)
         if (j.match(/(portscan|scan|bot|mapper|enum|hunter|proxy)/)) 
-            return 'background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3);';
+            return baseStyle + 'background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3);';
         // Abuse/Spam (Orange)
         if (j.match(/(recidive|postfix|dovecot|exim|mail)/)) 
-            return 'background-color: rgba(249, 115, 22, 0.15); color: #f97316; border: 1px solid rgba(249,115,22,0.3);';
+            return baseStyle + 'background-color: rgba(249, 115, 22, 0.15); color: #f97316; border: 1px solid rgba(249,115,22,0.3);';
         // DDoS (Dark Grey/Theme Contrast)
         if (j.match(/(flood|limit|ddos)/)) 
-            return 'background-color: rgba(107, 114, 128, 0.15); color: var(--sw-text); border: 1px solid var(--sw-border);';
+            return baseStyle + 'background-color: rgba(107, 114, 128, 0.15); color: var(--sw-text); border: 1px solid var(--sw-border);';
         // Brute-Force / Default (Yellow)
-        return 'background-color: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234,179,8,0.3);';
+        return baseStyle + 'background-color: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234,179,8,0.3);';
     }
 
     // --- DATA INGESTION ENGINE ---
@@ -3670,6 +3807,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('sys-ip').innerText = data.system.ip;
             }
             document.getElementById('sys-uptime').innerText = data.system.uptime;
+            
+            // NEW: Bind Hardware Banner Data
+            if (document.getElementById('hw-cores')) {
+                document.getElementById('hw-cores').innerText = data.system.cores || '--';
+                document.getElementById('hw-arch').innerText = data.system.arch || '--';
+                document.getElementById('hw-os').innerText = data.system.os || '--';
+                document.getElementById('hw-cpu').innerText = data.system.cpu_model || '--';
+                
+                // Format the exact client-side fetch time for "Last update"
+                const fetchTime = new Date();
+                document.getElementById('hw-update').innerText = fetchTime.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
+            }
             
             const ramUsed = parseInt(data.system.ram_used_mb) || 0;
             const ramTotal = parseInt(data.system.ram_total_mb) || 1;
@@ -3727,13 +3876,55 @@ document.addEventListener('DOMContentLoaded', () => {
             if(data.system.services && srvEl) {
                 srvEl.innerHTML = data.system.services.map(srv => `
                     <tr>
-                        <td class="text-body fw-bold align-middle py-3 ps-4">${srv.name}</td>
-                        <td class="text-end align-middle py-3 pe-4">
+                        <td class="text-body align-middle py-2 ps-4 font-mono">
+                            <div style="font-size: 0.85rem;">${srv.name}</div>
+                            <div class="text-muted" style="font-size: 0.65rem; letter-spacing: 0.5px;">${srv.path || 'Path unavailable'}</div>
+                        </td>
+                        <td class="text-end align-middle py-2 pe-4">
                             ${srv.status === 'active' 
-                                ? '<span class="badge bg-success bg-opacity-10 text-success rounded-pill border border-success border-opacity-25 px-3">ACTIVE</span>' 
-                                : '<span class="badge bg-danger bg-opacity-10 text-danger rounded-pill border border-danger border-opacity-25 px-3">OFFLINE</span>'}
+                                ? '<span class="badge bg-success bg-opacity-10 text-success rounded-pill border border-success border-opacity-25 px-3 py-1 d-inline-flex align-items-center justify-content-center" style="min-width: 80px; font-weight: 600; letter-spacing: 0.5px;">ACTIVE</span>' 
+                                : '<span class="badge bg-danger bg-opacity-10 text-danger rounded-pill border border-danger border-opacity-25 px-3 py-1 d-inline-flex align-items-center justify-content-center" style="min-width: 80px; font-weight: 600; letter-spacing: 0.5px;">OFFLINE</span>'}
                         </td>
                     </tr>`).join('');
+            }
+
+            // NEW: Inject Network Ports Table
+            const portsEl = document.getElementById('network-ports-list');
+            if(data.system.ports && portsEl) {
+                if(data.system.ports.length > 0) {
+                    portsEl.innerHTML = data.system.ports.map(p => {
+                        // FIX: Fallback to " - " if values are missing, unknown, or equal to an asterisk "*"
+                        const safeIp = (p.ip && p.ip.trim() !== '' && p.ip !== '*') ? p.ip : ' - ';
+                        const safeState = (p.state && p.state.trim() !== '' && p.state !== '*') ? p.state : ' - ';
+                        const safePort = (p.port && p.port.trim() !== '' && p.port !== '*') ? p.port : ' - ';
+                        
+                        // Dynamic styling based on socket state
+                        let stateBadge = '';
+                        if (safeState === ' - ') {
+                            // Render a simple dash if the state is unknown, without the pill badge format
+                            stateBadge = `<span class="text-muted fw-bold mx-2">${safeState}</span>`;
+                        } else {
+                            const stateStyle = (safeState.toUpperCase() === 'LISTEN') 
+                                ? 'background-color: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);' 
+                                : 'background-color: rgba(107, 114, 128, 0.15); color: var(--sw-text); border: 1px solid var(--sw-border);';
+                            stateBadge = `<span class="badge rounded-pill" style="${stateStyle} font-size: 0.70rem;">${safeState}</span>`;
+                        }
+                            
+                        return `
+                        <tr>
+                            <td class="align-middle py-3 ps-4 font-mono text-muted small">${p.interface || ' - '}</td>
+                            <td class="align-middle py-3 font-mono">${safeIp}</td>
+                            <td class="align-middle py-3 font-mono">${p.process || ' - '}</td>
+                            <td class="align-middle py-3 font-mono">
+                                ${stateBadge}
+                            </td>
+                            <td class="align-middle py-3 font-mono fw-bold" style="color: var(--sw-brand-icon);">${safePort}</td>
+                            <td class="align-middle py-3 pe-4 font-mono text-muted small">${p.protocol || ' - '}</td>
+                        </tr>`;
+                    }).join('');
+                } else {
+                    portsEl.innerHTML = `<tr><td colspan="6" class="text-center text-muted small py-5">No active network ports detected.</td></tr>`;
+                }
             }
 
             // Inject Doughnut Data
@@ -3750,29 +3941,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 topIpsEl.innerHTML = data.layer7.top_attackers.map(attacker => `
                     <tr>
                         <td class="align-middle py-3 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${attacker.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none ip-font" style="color: var(--sw-text);">${attacker.ip}</a></td>
+                        <td class="align-middle py-3 font-mono">
+                            <span class="badge rounded-pill" style="background-color: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); font-size: 0.70rem;">
+                                ${attacker.port || 'N/A'}
+                            </span>
+                        </td>
                         <td class="text-end align-middle py-3 pe-4 font-mono text-body-secondary">${attacker.count.toLocaleString()}</td>
                     </tr>`).join('');
-            } else { topIpsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4">No attackers recorded.</td></tr>`; }
+            } else { topIpsEl.innerHTML = `<tr><td colspan="3" class="text-center text-muted small py-4">No attackers recorded.</td></tr>`; }
 
             const jailsEl = document.getElementById('top-jails-list');
             if(data.layer7.jails_data.length > 0) {
-                jailsEl.innerHTML = [...data.layer7.jails_data].sort((a, b) => b.count - a.count).map(jail => `
+                jailsEl.innerHTML = [...data.layer7.jails_data].sort((a, b) => b.count - a.count).map(jail => {
+                    // Extraction MITRE
+                    const mitreId = jail.mitre ? jail.mitre.split(':')[0] : 'T1499';
+                    const mitreLabel = jail.mitre || 'Unknown';
+                    
+                    return `
                     <tr>
                         <td class="align-middle py-3 ps-4 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(jail.name)}">${jail.name}</span></td>
+                        <td class="align-middle py-3 font-mono">
+                            <a href="https://attack.mitre.org/techniques/${mitreId}/" target="_blank" rel="noopener noreferrer" class="text-decoration-none badge rounded-pill" style="${getJailBadgeStyle(jail.name)} font-size: 0.70rem;">
+                                ${mitreLabel}
+                            </a>
+                        </td>
                         <td class="text-end align-middle py-3 pe-4 font-mono text-body-secondary">${jail.count}</td>
-                    </tr>`).join('');
-            } else { jailsEl.innerHTML = `<tr><td colspan="2" class="text-center text-muted small py-4">No active jails loaded.</td></tr>`; }
+                    </tr>`;
+                }).join('');
+            } else { jailsEl.innerHTML = `<tr><td colspan="3" class="text-center text-muted small py-4">No active jails loaded.</td></tr>`; }
 
             const bannedEl = document.getElementById('banned-ips-list');
             if(data.layer7.banned_ips.length > 0) {
-                bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => `
+                bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => {
+                    // Extract MITRE ID for the hyperlink (e.g., "T1110" from "T1110: Brute Force")
+                    const mitreId = entry.mitre ? entry.mitre.split(':')[0] : 'T1499';
+                    const mitreLabel = entry.mitre || 'Unknown';
+                    
+                    return `
                     <tr>
                         <td class="align-middle py-3 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none ip-font" style="color: var(--sw-text);">${entry.ip}</a></td>
                         <td class="align-middle py-3 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(entry.jail)}">${entry.jail}</span></td>
+                        <td class="align-middle py-3 font-mono">
+                            <a href="https://attack.mitre.org/techniques/${mitreId}/" target="_blank" rel="noopener noreferrer" class="text-decoration-none badge rounded-pill" style="${getJailBadgeStyle(entry.jail)} font-size: 0.70rem;">
+                                ${mitreLabel}
+                            </a>
+                        </td>
                         <td class="align-middle py-3 font-mono text-muted small" style="font-size: 0.75rem;">${entry.timestamp || 'N/A'}</td>
                         <td class="align-middle py-3 pe-4 font-mono text-muted small text-nowrap" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
-                    </tr>`).join('');
-            } else { bannedEl.innerHTML = `<tr><td colspan="4" class="text-center text-muted small py-5">Registry is empty. Architecture is secure.</td></tr>`; }
+                    </tr>`
+                }).join('');
+            } else { 
+                bannedEl.innerHTML = `<tr><td colspan="5" class="text-center text-muted small py-5">Registry is empty. Architecture is secure.</td></tr>`; 
+            }
 
             // Chart Updater (Live Timeline)
             const now = new Date();
@@ -3798,8 +4018,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-	
-	// --- GITHUB API FETCH (Executes ONCE on page load to prevent rate-limiting) ---
+    
+    // --- GITHUB API FETCH (Executes ONCE on page load to prevent rate-limiting) ---
     async function fetchGitHubData() {
         try {
             // Fetch Repo Stars
@@ -4139,7 +4359,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.39                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.40                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -4158,7 +4378,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.39 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.40 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
