@@ -45,7 +45,7 @@ SET_NAME="syswarden_blacklist"
 # Ensure absolute privacy for the temporary directory to prevent unauthorized access
 TMP_DIR=$(mktemp -d -t syswarden-install-XXXXXX)
 chmod 0700 "$TMP_DIR"
-VERSION="v2.46"
+VERSION="v2.47"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -3363,7 +3363,7 @@ def monitor_logs():
         proc_f2b.stdout.fileno(): 'f2b'
     }
 
-    # v2.46 Logic: STRICT filter on [SysWarden-BLOCK] only.
+    # v2.47 Logic: STRICT filter on [SysWarden-BLOCK] only.
     regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+).*?DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
@@ -4259,7 +4259,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v2.46 - TELEMETRY BACKEND
+# SYSWARDEN v2.47 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4658,7 +4658,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.46 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.47 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -4807,7 +4807,7 @@ function generate_dashboard() {
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <div class="d-flex align-items-baseline gap-2 hide-collapsed">
                 <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-                <span class="stat-label" style="margin-bottom: 0;">v2.46</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.47</span>
             </div>
         </div>
 
@@ -5032,9 +5032,9 @@ function generate_dashboard() {
                                                 <tr>
                                                     <th class="text-muted small fw-normal pb-2 ps-4" style="min-width: 150px;">IP ADDRESS</th>
                                                     <th class="text-muted small fw-normal pb-2" style="min-width: 150px;">TARGET JAIL</th>
-                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 180px;">MITRE ATT&CK</th>
-                                                    <th class="text-muted small fw-normal pb-2" style="min-width: 160px;">TIMESTAMP</th>
-                                                    <th class="text-muted small fw-normal pb-2 pe-4" style="min-width: 250px;">TRIGGER</th>
+                                                    <th class="text-muted small fw-normal pb-2 ps-3" style="min-width: 200px;">MITRE ATT&CK</th>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4" style="min-width: 180px;">TIMESTAMP</th>
+                                                    <th class="text-muted small fw-normal pb-2 ps-4 pe-4" style="min-width: 250px;">TRIGGER</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="banned-ips-list"></tbody>
@@ -5541,17 +5541,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     const mitreId = entry.mitre ? entry.mitre.split(':')[0] : 'T1499';
                     const mitreLabel = entry.mitre || 'Unknown';
                     
+                    // UI/UX FIX: Added matching padding-start (ps-3, ps-4) to data cells 
+                    // to perfectly align with the newly aerated table headers.
                     return `
                     <tr>
                         <td class="align-middle py-3 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none ip-font" style="color: var(--sw-text);">${entry.ip}</a></td>
                         <td class="align-middle py-3 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(entry.jail)}">${entry.jail}</span></td>
-                        <td class="align-middle py-3 font-mono">
+                        <td class="align-middle py-3 ps-3 font-mono">
                             <a href="https://attack.mitre.org/techniques/${mitreId}/" target="_blank" rel="noopener noreferrer" class="text-decoration-none badge rounded-pill" style="${getJailBadgeStyle(entry.jail)} font-size: 0.70rem;">
                                 ${mitreLabel}
                             </a>
                         </td>
-                        <td class="align-middle py-3 font-mono text-muted small" style="font-size: 0.75rem;">${entry.timestamp || 'N/A'}</td>
-                        <td class="align-middle py-3 pe-4 font-mono text-muted small text-nowrap" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
+                        <td class="align-middle py-3 ps-4 font-mono text-muted small" style="font-size: 0.75rem;">${entry.timestamp || 'N/A'}</td>
+                        <td class="align-middle py-3 ps-4 pe-4 font-mono text-muted small text-nowrap" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
                     </tr>`
                 }).join('');
             } else { 
@@ -6267,7 +6269,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.46                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.47                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6289,7 +6291,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.46 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.47 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
