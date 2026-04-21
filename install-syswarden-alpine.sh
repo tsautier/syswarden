@@ -45,7 +45,7 @@ SET_NAME="syswarden_blacklist"
 # Ensure absolute privacy for the temporary directory to prevent unauthorized access
 TMP_DIR=$(mktemp -d -t syswarden-install-XXXXXX)
 chmod 0700 "$TMP_DIR"
-VERSION="v2.45"
+VERSION="v2.46"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -3363,7 +3363,7 @@ def monitor_logs():
         proc_f2b.stdout.fileno(): 'f2b'
     }
 
-    # v2.45 Logic: STRICT filter on [SysWarden-BLOCK] only.
+    # v2.46 Logic: STRICT filter on [SysWarden-BLOCK] only.
     regex_fw = re.compile(r"\[SysWarden-BLOCK\].*?SRC=([\d\.]+).*?DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
 
@@ -4259,7 +4259,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v2.45 - TELEMETRY BACKEND
+# SYSWARDEN v2.46 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4333,14 +4333,37 @@ L3_GLOBAL=0; L3_GEOIP=0; L3_ASN=0
 SRV_F2B=$(pgrep -f fail2ban-server >/dev/null && echo "active" || echo "offline")
 SRV_CRON=$(pgrep -f "cron|crond" >/dev/null && echo "active" || echo "offline")
 SRV_NGX=$(pgrep -f "nginx" >/dev/null && echo "active" || echo "offline")
-SRV_L3=$(command -v nft >/dev/null || lsmod | grep -q ip_set && echo "active" || echo "offline")
 
-# FIX: Added absolute binary paths to the JSON payload for frontend display
+# --- DEVSECOPS: Advanced Dynamic Firewall Backend Detection ---
+FW_NAME="Unknown Firewall"
+FW_PATH="unknown"
+FW_STATUS="offline"
+
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+    FW_NAME="ufw (Uncomplicated Firewall)"
+    FW_PATH=$(command -v ufw)
+    FW_STATUS="active"
+elif command -v nft >/dev/null 2>&1 && systemctl is-active --quiet nftables 2>/dev/null; then
+    FW_NAME="netfilter/nftables"
+    FW_PATH=$(command -v nft)
+    FW_STATUS="active"
+elif command -v iptables >/dev/null 2>&1 && lsmod | grep -qE '^ip_tables'; then
+    FW_NAME="iptables (Legacy)"
+    FW_PATH=$(command -v iptables)
+    FW_STATUS="active"
+elif lsmod | grep -qE '^ip_set'; then
+    FW_NAME="ipset (Standalone Module)"
+    FW_PATH=$(command -v ipset)
+    FW_STATUS="active"
+fi
+
+# FIX: Added dynamic firewall detection and absolute binary paths for frontend display
 SERVICES_JSON=$(jq -n \
-  --arg f2b "$SRV_F2B" --arg crn "$SRV_CRON" --arg ngx "$SRV_NGX" --arg fw "$SRV_L3" \
+  --arg f2b "$SRV_F2B" --arg crn "$SRV_CRON" --arg ngx "$SRV_NGX" \
+  --arg fw_name "$FW_NAME" --arg fw_path "$FW_PATH" --arg fw_status "$FW_STATUS" \
   '[
     {"name":"fail2ban-server","path":"/usr/bin/fail2ban-server","status":$f2b},
-    {"name":"netfilter/nftables","path":"/usr/sbin/nft","status":$fw},
+    {"name":$fw_name,"path":$fw_path,"status":$fw_status},
     {"name":"nginx (worker)","path":"/usr/sbin/nginx","status":$ngx},
     {"name":"cron/crond","path":"/usr/sbin/cron","status":$crn},
     {"name":"syswarden-telemetry","path":"/usr/local/bin/syswarden-telemetry.sh","status":"active"}
@@ -4418,31 +4441,59 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
             L7_TOTAL_BANNED=$((L7_TOTAL_BANNED + BANNED_COUNT))
             
             if [[ "$BANNED_COUNT" -gt 0 ]]; then
-                # --- THREAT INTEL: MITRE ATT&CK MAPPING ---
-                # Assign TTP (Tactic/Technique) based on Jail naming convention
+                # --- THREAT INTEL: MITRE ATT&CK MAPPING (Advanced 51-Jails Coverage) ---
+                # Assign TTP (Tactic/Technique) based on strict Jail nomenclature
                 MITRE_ID="T1499" # Default: Endpoint Denial of Service
                 MITRE_NAME="Endpoint DoS"
                 
                 case "${JAIL,,}" in
-                    *ssh*|*auth*|*privesc*|*prestashop*) 
-                        MITRE_ID="T1110"
-                        MITRE_NAME="Brute Force"
+                    *webshell*)
+                        MITRE_ID="T1505.003"
+                        MITRE_NAME="Server Software Component: Web Shell"
                         ;;
-                    *sqli*|*xss*|*lfi*|*revshell*|*webshell*|*ssti*|*ssrf*|*jndi*)
+                    *revshell*|*rce*)
+                        MITRE_ID="T1059"
+                        MITRE_NAME="Command and Scripting Interpreter"
+                        ;;
+                    *sqli*|*xss*|*lfi*|*ssti*|*jndi*|*haproxy*)
                         MITRE_ID="T1190"
-                        MITRE_NAME="Exploit Public-Facing App"
+                        MITRE_NAME="Exploit Public-Facing Application"
                         ;;
-                    *scan*|*bot*|*mapper*|*enum*|*hunter*)
+                    *privesc*|*auditd*)
+                        MITRE_ID="T1068"
+                        MITRE_NAME="Exploitation for Privilege Escalation"
+                        ;;
+                    *secretshunter*|*hunter*|*ssrf*|*idor*)
+                        MITRE_ID="T1552"
+                        MITRE_NAME="Unsecured Credentials / Cloud Discovery"
+                        ;;
+                    *proxy-abuse*|*squid*)
+                        MITRE_ID="T1090"
+                        MITRE_NAME="Connection Proxy"
+                        ;;
+                    *portscan*)
+                        MITRE_ID="T1046"
+                        MITRE_NAME="Network Service Discovery"
+                        ;;
+                    *scanner*|*bot*|*mapper*|*enum*)
                         MITRE_ID="T1595"
                         MITRE_NAME="Active Scanning"
                         ;;
                     *flood*|*dos*)
-                        MITRE_ID="T1498"
-                        MITRE_NAME="Network Denial of Service"
+                        MITRE_ID="T1498.001"
+                        MITRE_NAME="Direct Network Flood"
+                        ;;
+                    *wireguard*|*openvpn*)
+                        MITRE_ID="T1136"
+                        MITRE_NAME="External Remote Services"
+                        ;;
+                    *ssh*|*auth*|*telnet*|*ftp*|*mail*|*postfix*|*dovecot*|*mysql*|*mariadb*|*redis*|*rabbitmq*|*zabbix*|*grafana*|*vaultwarden*|*sso*|*odoo*|*prestashop*|*atlassian*|*jenkins*|*gitlab*|*proxmox*|*cockpit*|*nextcloud*)
+                        MITRE_ID="T1110"
+                        MITRE_NAME="Brute Force / Password Guessing"
                         ;;
                     *recidive*)
-                        MITRE_ID="T1078"
-                        MITRE_NAME="Valid Accounts (Abuse)"
+                        MITRE_ID="T1133"
+                        MITRE_NAME="External Remote Services / Repeat Offender"
                         ;;
                 esac
                 MITRE_PAYLOAD="${MITRE_ID}: ${MITRE_NAME}"
@@ -4607,7 +4658,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.45 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.46 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -4756,7 +4807,7 @@ function generate_dashboard() {
             <svg style="color: var(--sw-brand-icon);" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <div class="d-flex align-items-baseline gap-2 hide-collapsed">
                 <span class="fs-5 fw-bold" style="color: var(--sw-brand-text); letter-spacing: -0.5px;">SYSWARDEN</span>
-                <span class="stat-label" style="margin-bottom: 0;">v2.45</span>
+                <span class="stat-label" style="margin-bottom: 0;">v2.46</span>
             </div>
         </div>
 
@@ -6216,7 +6267,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.45                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.46                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6238,7 +6289,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.45 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.46 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
