@@ -17,7 +17,7 @@ By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield
 ## Enterprise-Grade Features
 
 **Core Network Defense (Hardware & Layer 2/3)**
-* **Layer 2 Acceleration (eBPF/XDP Alternative):** Injects threat intelligence directly into a dedicated `nftables` `netdev` table. Malicious packets are dropped at the NIC ingress hook, entirely bypassing kernel routing and `conntrack` for zero CPU overhead during volumetric DDoS attacks.
+* **Layer 2/3 Acceleration (eBPF/XDP Alternative):** Injects threat intelligence directly into a dedicated `nftables` `netdev` table. Malicious packets are dropped at the NIC ingress hook, entirely bypassing kernel routing and `conntrack` for zero CPU overhead during volumetric DDoS attacks.
 * **Pre-Routing Shield (Legacy OS):** For older environments, utilizes the `iptables` `raw PREROUTING` chain to shatter massive automated scans before memory-heavy state tracking is allocated.
 * **Global Threat Intelligence:** Automatically blocks hostile countries (GeoIP), Cybercrime Hosters, and rogue Autonomous System Numbers (ASN) to drop 97% of internet background noise instantly.
 
@@ -38,7 +38,7 @@ By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield
 
 SysWarden does not simply append rules to standard firewall chains; it fundamentally alters the Linux networking stack to neutralize threats before they consume system resources:
 
-1. **Layer 2 Ingress Drop (Priority -500):** Utilizing the `nftables` `netdev` family (or `iptables raw PREROUTING`), global OSINT blocklists, hostile ASNs, and GeoIP blocks are enforced directly at the Network Interface Card (NIC) hook. Malicious packets are destroyed before reaching the kernel routing or `conntrack` modules, preventing state-table exhaustion and CPU overhead.
+1. **Layer 2/3 Ingress Drop (Priority -500):** Utilizing the `nftables` `netdev` family (or `iptables raw PREROUTING`), global OSINT blocklists, hostile ASNs, and GeoIP blocks are enforced directly at the Network Interface Card (NIC) hook. Malicious packets are destroyed before reaching the kernel routing or `conntrack` modules, preventing state-table exhaustion and CPU overhead.
 2. **Stateful Fast-Path (Priority 0):** Legitimate established connections and dynamic container traffic (e.g., Docker's `DOCKER-USER` chain) are prioritized. This stateful bypass guarantees zero latency for your production application traffic.
 3. **Behavioral L7 Defense (Dynamic WAF):** The active defense layer analyzes application logs (Nginx, SSH, Databases) in real-time. Behavioral anomalies—such as brute-force attempts, SQLi, or LFI—trigger instant, surgical IP bans that dynamically synchronize with the underlying Layer 3/2 drop tables.
 4. **Zero-Trust "Catch-All":** The attack surface is entirely sealed. Any incoming traffic not explicitly whitelisted by the administrator or the automated service discovery engine is silently dropped and logged, enforcing a mathematically strict Zero-Trust policy.
