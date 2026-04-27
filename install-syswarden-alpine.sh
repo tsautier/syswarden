@@ -45,7 +45,7 @@ SET_NAME="syswarden_blacklist"
 # Ensure absolute privacy for the temporary directory to prevent unauthorized access
 TMP_DIR=$(mktemp -d -t syswarden-install-XXXXXX)
 chmod 0700 "$TMP_DIR"
-VERSION="v2.61"
+VERSION="v2.62"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -844,7 +844,8 @@ select_list_type() {
     echo -e "\n${BLUE}=== Step 1: Select Blocklist Type ===${NC}"
     # --- CI/CD AUTO MODE CHECK ---
     if [[ "${1:-}" == "auto" ]]; then
-        choice=${SYSWARDEN_LIST_CHOICE:-1}
+        # Preemptive cleanup of spaces/newlines to prevent switch-case bypass
+        choice=$(echo "${SYSWARDEN_LIST_CHOICE:-1}" | tr -d '[:space:]')
         log "INFO" "Auto Mode: Blocklist choice loaded via env var [${choice}]"
     else
         echo "1) Standard List (~85,000 IPs) - Recommended for Web Servers"
@@ -862,24 +863,30 @@ select_list_type() {
             if [[ "${1:-}" == "auto" ]]; then
                 CUSTOM_URL=${SYSWARDEN_CUSTOM_URL:-""}
 
-                # --- SECURITY FIX: Strict URL Validation for Auto Mode ---
-                CUSTOM_URL=$(echo "$CUSTOM_URL" | tr -d " '\"\;\$\|\&\<\>\`")
-                if [[ -n "$CUSTOM_URL" && ! "$CUSTOM_URL" =~ ^https?:// ]]; then
-                    log "ERROR" "Auto Mode: Invalid CUSTOM_URL. Must start with http:// or https://. Defaulting to Standard List."
+                # --- SECURITY FIX: Strict URL Validation & Anti-Poisoning ---
+                # Strip newlines (\r\n) and dangerous escape characters
+                CUSTOM_URL=$(echo "$CUSTOM_URL" | tr -d "\r\n '\"\;\$\|\&\<\>\`")
+
+                # Strict Regex: Must have a valid domain or IP, and no exotic characters (Anti-SSRF)
+                if [[ -n "$CUSTOM_URL" && ! "$CUSTOM_URL" =~ ^https?://[a-zA-Z0-9.-]+(\.[a-zA-Z]{2,})?(:[0-9]+)?(/.*)?$ ]]; then
+                    log "ERROR" "Auto Mode: Invalid CUSTOM_URL. Bad format or invalid characters. Defaulting to Standard List."
                     LIST_TYPE="Standard"
                     CUSTOM_URL=""
                 fi
                 # ---------------------------------------------------------
                 log "INFO" "Auto Mode: Custom URL loaded via env var"
             else
-                # --- SECURITY FIX: STRICT URL VALIDATION ---
+                # --- SECURITY FIX: STRICT URL VALIDATION (INTERACTIVE) ---
                 while true; do
-                    read -p "Enter the full URL: " CUSTOM_URL
-                    CUSTOM_URL=$(echo "$CUSTOM_URL" | tr -d " '\"\;\$\|\&\<\>\`")
+                    read -p "Enter the full URL (must be raw .txt format): " CUSTOM_URL
+
+                    # Absolute sanitization
+                    CUSTOM_URL=$(echo "$CUSTOM_URL" | tr -d "\r\n '\"\;\$\|\&\<\>\`")
+
                     if [[ -z "$CUSTOM_URL" ]]; then
                         log "WARN" "URL cannot be empty."
-                    elif [[ ! "$CUSTOM_URL" =~ ^https?:// ]]; then
-                        echo -e "${RED}ERROR: URL must start with http:// or https://${NC}"
+                    elif [[ ! "$CUSTOM_URL" =~ ^https?://[a-zA-Z0-9.-]+(\.[a-zA-Z]{2,})?(:[0-9]+)?(/.*)?$ ]]; then
+                        echo -e "${RED}ERROR: Invalid URL format. Must start with http:// or https:// and contain a valid domain/IP.${NC}"
                     else
                         break
                     fi
@@ -3439,7 +3446,7 @@ def monitor_logs():
         proc_f2b.stdout.fileno(): 'f2b'
     }
 
-    # v2.61 Logic: Universal Firewall Netfilter Regex (Matches Standard, Docker, GeoIP and ASN)
+    # v2.62 Logic: Universal Firewall Netfilter Regex (Matches Standard, Docker, GeoIP and ASN)
     regex_fw = re.compile(r"\[SysWarden-(BLOCK|DOCKER|GEO|ASN)\].*?SRC=([\d\.]+)")
     regex_dpt = re.compile(r"DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
@@ -4398,7 +4405,7 @@ setup_wazuh_agent() {
 }
 
 # ==============================================================================
-# SYSWARDEN v2.61 - TELEMETRY BACKEND
+# SYSWARDEN v2.62 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -4746,7 +4753,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v2.61 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v2.62 - NGINX SECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/Sidebar/CSP)..."
@@ -4835,7 +4842,7 @@ function generate_dashboard() {
     <nav class="top-navbar">
         <div class="d-flex align-items-center gap-3">
             <svg style="color: var(--sw-brand-icon);" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <h5 class="mb-0 fw-bold d-none d-md-block text-uppercase" style="letter-spacing: 0.5px; font-size: 1.1rem; color: var(--sw-text);">SYSWARDEN v2.61</h5>
+            <h5 class="mb-0 fw-bold d-none d-md-block text-uppercase" style="letter-spacing: 0.5px; font-size: 1.1rem; color: var(--sw-text);">SYSWARDEN v2.62</h5>
         </div>
         
         <div class="d-flex align-items-center gap-3 gap-md-4">
@@ -6007,7 +6014,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.61                  ${NC}"
+    echo -e "${GREEN}               Advanced Firewall & Blocklist Orchestrator | v2.62                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -6029,7 +6036,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.61 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v2.62 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
