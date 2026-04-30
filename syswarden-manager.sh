@@ -2,7 +2,7 @@
 
 # SysWarden Manager - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v0.27.1
+# Version: v0.27.2
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v0.27.1"
+VERSION="v0.27.2"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
@@ -264,38 +264,81 @@ whitelist_ip() {
     echo -e "${GREEN}[✔] Hot-injected VIP Accept Rule into Kernel ($FW_BACKEND)${NC}"
 
     # ==============================================================================
-    # --- HOTFIX: DYNAMIC NGINX ACL INJECTION ---
+    # --- HOTFIX: DYNAMIC WEB ACL INJECTION (APACHE & NGINX) ---
     # ==============================================================================
-    local nginx_conf="/etc/nginx/conf.d/syswarden-ui.conf"
+    local web_conf=""
+    local web_server=""
 
-    if [[ -f "/etc/nginx/sites-available/syswarden-ui.conf" ]]; then
-        nginx_conf="/etc/nginx/sites-available/syswarden-ui.conf"
+    # 1. Check for Apache configurations
+    if [[ -f "/etc/apache2/sites-available/syswarden-ui.conf" ]]; then
+        web_conf="/etc/apache2/sites-available/syswarden-ui.conf"
+        web_server="apache2"
+    elif [[ -f "/etc/httpd/conf.d/syswarden-ui.conf" ]]; then
+        web_conf="/etc/httpd/conf.d/syswarden-ui.conf"
+        web_server="httpd"
+    elif [[ -f "/etc/apache2/conf.d/syswarden-ui.conf" ]]; then
+        web_conf="/etc/apache2/conf.d/syswarden-ui.conf"
+        web_server="apache2"
+    # 2. Check for Nginx configurations
+    elif [[ -f "/etc/nginx/sites-available/syswarden-ui.conf" ]]; then
+        web_conf="/etc/nginx/sites-available/syswarden-ui.conf"
+        web_server="nginx"
+    elif [[ -f "/etc/nginx/conf.d/syswarden-ui.conf" ]]; then
+        web_conf="/etc/nginx/conf.d/syswarden-ui.conf"
+        web_server="nginx"
     elif [[ -f "/etc/nginx/http.d/syswarden-ui.conf" ]]; then
-        nginx_conf="/etc/nginx/http.d/syswarden-ui.conf"
+        web_conf="/etc/nginx/http.d/syswarden-ui.conf"
+        web_server="nginx"
     fi
 
-    if [[ -f "$nginx_conf" ]]; then
-        echo -e "${BLUE}>> Injecting $target_ip into Nginx UI Access Control List (ACL)...${NC}"
+    if [[ -n "$web_conf" && -f "$web_conf" ]]; then
+        echo -e "${BLUE}>> Injecting $target_ip into Web UI Access Control List (ACL)...${NC}"
 
-        if ! grep -q "allow $target_ip;" "$nginx_conf"; then
-            awk -v ip="$target_ip" '/^[[:space:]]*deny all;/ { print "    allow " ip ";" } { print }' "$nginx_conf" >"${nginx_conf}.tmp" && cat "${nginx_conf}.tmp" >"$nginx_conf" && rm -f "${nginx_conf}.tmp"
+        if [[ "$web_server" == "nginx" ]]; then
+            if ! grep -q "allow $target_ip;" "$web_conf"; then
+                awk -v ip="$target_ip" '/^[[:space:]]*deny all;/ { print "    allow " ip ";" } { print }' "$web_conf" >"${web_conf}.tmp" && cat "${web_conf}.tmp" >"$web_conf" && rm -f "${web_conf}.tmp"
 
-            if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
-                # HOTFIX: Slackware Nginx Reload Support
-                if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.nginx ]]; then
-                    /etc/rc.d/rc.nginx restart >/dev/null 2>&1 || true
-                elif command -v systemctl >/dev/null; then
-                    systemctl reload nginx >/dev/null 2>&1 || true
-                elif command -v rc-service >/dev/null; then
-                    rc-service nginx reload >/dev/null 2>&1 || true
+                if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
+                    # HOTFIX: Slackware Nginx Reload Support
+                    if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.nginx ]]; then
+                        /etc/rc.d/rc.nginx restart >/dev/null 2>&1 || true
+                    elif command -v systemctl >/dev/null; then
+                        systemctl reload nginx >/dev/null 2>&1 || true
+                    elif command -v rc-service >/dev/null; then
+                        rc-service nginx reload >/dev/null 2>&1 || true
+                    fi
+                    echo -e "${GREEN}[V] Dashboard UI access instantly granted to $target_ip via Nginx.${NC}"
+                else
+                    echo -e "${RED}[!] Nginx configuration test failed. Reverting ACL injection.${NC}"
+                    sed -i "/allow $target_ip;/d" "$web_conf"
                 fi
-                echo -e "${GREEN}[✔] Dashboard UI access instantly granted to $target_ip via Nginx.${NC}"
             else
-                echo -e "${RED}[!] Nginx configuration test failed. Reverting ACL injection.${NC}"
-                sed -i "/allow $target_ip;/d" "$nginx_conf"
+                echo -e "${YELLOW}[i] IP $target_ip is already authorized in Nginx ACL.${NC}"
             fi
         else
-            echo -e "${YELLOW}[i] IP $target_ip is already authorized in Nginx ACL.${NC}"
+            # Apache Injection Logic
+            if ! grep -q "Require ip $target_ip" "$web_conf"; then
+                awk -v ip="$target_ip" '/^[[:space:]]*<\/RequireAny>/ { print "        Require ip " ip } { print }' "$web_conf" >"${web_conf}.tmp" && cat "${web_conf}.tmp" >"$web_conf" && rm -f "${web_conf}.tmp"
+
+                if { command -v apache2ctl >/dev/null 2>&1 && apache2ctl configtest >/dev/null 2>&1; } ||
+                    { command -v apachectl >/dev/null 2>&1 && apachectl configtest >/dev/null 2>&1; } ||
+                    { command -v httpd >/dev/null 2>&1 && httpd -t >/dev/null 2>&1; }; then
+
+                    if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.httpd ]]; then
+                        /etc/rc.d/rc.httpd restart >/dev/null 2>&1 || true
+                    elif command -v systemctl >/dev/null; then
+                        systemctl reload "$web_server" >/dev/null 2>&1 || true
+                    elif command -v rc-service >/dev/null; then
+                        rc-service "$web_server" reload >/dev/null 2>&1 || true
+                    fi
+                    echo -e "${GREEN}[V] Dashboard UI access instantly granted to $target_ip via Apache.${NC}"
+                else
+                    echo -e "${RED}[!] Apache configuration test failed. Reverting ACL injection.${NC}"
+                    sed -i "/Require ip $target_ip/d" "$web_conf"
+                fi
+            else
+                echo -e "${YELLOW}[i] IP $target_ip is already authorized in Apache ACL.${NC}"
+            fi
         fi
     fi
     # ==============================================================================

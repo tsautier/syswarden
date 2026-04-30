@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v0.27.1 - DevSecOps Audit & Compliance Tool
+# SysWarden v0.27.2 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -516,6 +516,14 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 5 "* ]]; then
         pass "Telemetry Orchestrator script is deployed and executable."
     else
         fail "Telemetry Orchestrator script is missing."
+    fi
+
+    if is_service_active "apache2" || is_service_active "httpd"; then
+        pass "Apache Enterprise Web Server daemon is active."
+    elif is_service_active "nginx"; then
+        pass "Nginx Enterprise Web Server daemon is active."
+    else
+        fail "No Supported Web Server (Apache/Nginx) is offline or not installed."
     fi
 
     info "Initiating Deep-Scan for Telemetry Idempotence (60s cron overlap observation)..."
