@@ -120,4 +120,4 @@ SysWarden is free and open-source software licensed under the **GNU General Publ
 
 You are free to use, modify, and distribute this software in compliance with the license terms. See the [LICENSE](/LICENSE) file for more details.
 
-*Powered by DuggyTuxy (Laurent M.) - Securing the Open Source community.*
+*Powered by DuggyTuxy (Laurent M.).*
