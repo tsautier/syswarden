@@ -39,7 +39,7 @@ TMP_DIR=$(mktemp -d -t syswarden-install-XXXXXX)
 chmod 0700 "$TMP_DIR"
 # ------------------------------------
 
-VERSION="v0.27.4"
+VERSION="v0.28.0"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
@@ -1757,7 +1757,7 @@ EOF
             # 3. Allow WireGuard UDP port for tunnel establishment
             firewall-cmd --permanent --add-port="${WG_PORT:-51820}/udp" >/dev/null 2>&1 || true
 
-            # --- STRICT ZERO TRUST HIERARCHY (v0.27.4) - DEBIAN PARITY) ---
+            # --- STRICT ZERO TRUST HIERARCHY (v0.28.0) - DEBIAN PARITY) ---
 
             # Priority -1000: Highest priority. Allow SSH & Dashboard strictly from VPN.
             firewall-cmd --permanent --add-rich-rule="rule priority='-1000' family='ipv4' source address='${WG_SUBNET}' port port='${SSH_PORT:-22}' protocol='tcp' accept" >/dev/null 2>&1 || true
@@ -3343,16 +3343,16 @@ EOF
 
         # 31. DYNAMIC DETECTION: RCE & REVERSE SHELL PAYLOADS
         RCE_LOGS=""
-        # Dynamically aggregate all available web access logs (Nginx, Apache Debian, Apache RHEL)
         for log_file in "/var/log/nginx/access.log" "/var/log/apache2/access.log" "/var/log/httpd/access_log"; do
             if [[ -f "$log_file" ]]; then
-                # Space-separated list of log files for Fail2ban
-                RCE_LOGS="$RCE_LOGS $log_file"
+                if [[ -z "$RCE_LOGS" ]]; then
+                    RCE_LOGS="$log_file"
+                else
+                    # DEVSECOPS FIX: Strict Python ConfigParser multiline format
+                    RCE_LOGS+=$'\n          '"$log_file"
+                fi
             fi
         done
-
-        # Trim leading/trailing whitespace safely
-        RCE_LOGS=$(echo "$RCE_LOGS" | xargs)
 
         if [[ -n "$RCE_LOGS" ]]; then
             log "INFO" "Web access logs detected. Enabling Reverse Shell & RCE Guard."
@@ -3482,8 +3482,51 @@ bantime  = 24h
 EOF
         fi
 
+        # --- 34.5 DYNAMIC DETECTION: MODSECURITY WAF (PURPLE TEAM INTEGRATION) ---
+        local MODSEC_ACTIVE=0
+        local MODSEC_LOGS=""
+
+        # Aggregate error logs where ModSecurity typically writes its alerts
+        for log_file in "/var/log/nginx/error.log" "/var/log/apache2/error.log" "/var/log/httpd/error_log" "/var/log/modsec_audit.log"; do
+            if [[ -f "$log_file" ]]; then
+                MODSEC_LOGS="$MODSEC_LOGS $log_file"
+            fi
+        done
+        MODSEC_LOGS=$(echo "$MODSEC_LOGS" | xargs)
+
+        # Detect ModSecurity config or recent logs
+        if [[ -n "$MODSEC_LOGS" ]] && { grep -riE 'modsecurity|SecRuleEngine On' /etc/nginx/ /etc/apache2/ /etc/httpd/ 2>/dev/null | grep -q . || grep -q 'ModSecurity' $MODSEC_LOGS 2>/dev/null; }; then
+            MODSEC_ACTIVE=1
+            log "INFO" "ModSecurity WAF detected. Enabling Purple Team integration."
+
+            if [[ ! -f "/etc/fail2ban/filter.d/syswarden-modsec.conf" ]]; then
+                cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-modsec.conf
+[Definition]
+# DEVSECOPS OPTIMIZATION: Catch Critical/Error ModSecurity drops to ban the attacker at Kernel level.
+failregex = ^.*\[(?:error|warn)\].*?\[client <HOST>(?::\d+)?\].*?ModSecurity: Access denied with code [45]\d\d.*$
+            ^.*\[(?:error|warn)\].*?\[client <HOST>(?::\d+)?\].*?ModSecurity: Warning\. Pattern match.*$
+ignoreregex = 
+EOF
+            fi
+
+            cat <<EOF >>/etc/fail2ban/jail.local
+
+# --- ModSecurity WAF Integration (Purple Team) ---
+[syswarden-modsec]
+enabled  = true
+port     = http,https
+filter   = syswarden-modsec
+logpath  = $MODSEC_LOGS
+backend  = auto
+# Policy: 3 ModSec drops = 24h Kernel Ban
+maxretry = 3
+findtime = 10m
+bantime  = 24h
+EOF
+        fi
+
         # 35. DYNAMIC DETECTION: WEBSHELL UPLOADS (LFI / RFI)
-        if [[ -n "$RCE_LOGS" ]]; then
+        if [[ -n "$RCE_LOGS" ]] && [[ $MODSEC_ACTIVE -eq 0 ]]; then
             log "INFO" "Web access logs detected. Enabling WebShell Upload Guard."
 
             # Create Filter for malicious file uploads
@@ -3512,7 +3555,7 @@ EOF
         fi
 
         # 36. DYNAMIC DETECTION: SQL INJECTION (SQLi) & XSS PAYLOADS
-        if [[ -n "$RCE_LOGS" ]]; then
+        if [[ -n "$RCE_LOGS" ]] && [[ $MODSEC_ACTIVE -eq 0 ]]; then
             log "INFO" "Web access logs detected. Enabling SQLi & XSS Payload Guard."
 
             # Create Filter for SQLi, XSS, and Path Traversal payloads in URIs
@@ -3602,7 +3645,7 @@ EOF
         fi
 
         # 39. DYNAMIC DETECTION: JNDI, LOG4J & SSTI PAYLOADS
-        if [[ -n "$RCE_LOGS" ]]; then
+        if [[ -n "$RCE_LOGS" ]] && [[ $MODSEC_ACTIVE -eq 0 ]]; then
             log "INFO" "Web access logs detected. Enabling JNDI & SSTI Guard."
 
             # Create Filter for Log4Shell (JNDI) and Server-Side Template Injection (SSTI)
@@ -3692,7 +3735,7 @@ EOF
         fi
 
         # 41. DYNAMIC DETECTION: ADVANCED LFI & WRAPPER ABUSE
-        if [[ -n "$RCE_LOGS" ]]; then
+        if [[ -n "$RCE_LOGS" ]] && [[ $MODSEC_ACTIVE -eq 0 ]]; then
             log "INFO" "Web access logs detected. Enabling Advanced LFI Guard."
 
             # Create Filter for Advanced Local File Inclusion and PHP Wrapper abuse
@@ -4533,7 +4576,7 @@ def monitor_logs():
     p = select.poll()
     p.register(f.stdout)
 
-    # v0.27.4 Logic: Universal Firewall Netfilter Regex (Matches Standard, Docker, GeoIP and ASN)
+    # v0.28.0 Logic: Universal Firewall Netfilter Regex (Matches Standard, Docker, GeoIP and ASN)
     regex_fw = re.compile(r"\[SysWarden-(BLOCK|DOCKER|GEO|ASN)\].*?SRC=([\d\.]+)")
     regex_dpt = re.compile(r"DPT=(\d+)")
     regex_f2b = re.compile(r"\[([a-zA-Z0-9_-]+)\]\s+Ban\s+([\d\.]+)")
@@ -4601,8 +4644,8 @@ def monitor_logs():
                     if any(x in jail for x in ["badbot", "scanner", "apimapper", "secretshunter", "idor"]): cats.extend(["14", "15", "19", "21"])
                     # 2. SQLi & XSS
                     elif "sqli" in jail or "xss" in jail: cats.extend(["15", "16", "21"])
-                    # 3. RCE, WebShells, LFI/RFI, SSRF, JNDI
-                    elif any(x in jail for x in ["revshell", "webshell", "lfi", "ssrf", "jndi"]): cats.extend(["15", "21"])
+                    # 3. RCE, WebShells, LFI/RFI, SSRF, JNDI, ModSecurity
+                    elif any(x in jail for x in ["revshell", "webshell", "lfi", "ssrf", "jndi", "modsec"]): cats.extend(["15", "21"])
                     # 4. Layer 7 DDoS (HTTP Flood)
                     elif "httpflood" in jail: cats.extend(["4", "21"])
                     # 5. AI Bots & Scrapers
@@ -5129,6 +5172,7 @@ uninstall_syswarden() {
     for filter in nginx-scanner mariadb-auth mongodb-guard syswarden-privesc syswarden-portscan \
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
+        syswarden-modsec \
         syswarden-lfi-advanced syswarden-vaultwarden syswarden-sso syswarden-silent-scanner syswarden-recidive syswarden-generic-auth \
         syswarden-proxy-abuse syswarden-jenkins syswarden-gitlab syswarden-redis syswarden-rabbitmq \
         syswarden-idor-enum syswarden-odoo syswarden-prestashop syswarden-atlassian \
@@ -5455,7 +5499,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v0.27.4 - TELEMETRY BACKEND
+# SYSWARDEN v0.28.0 - TELEMETRY BACKEND
 # ==============================================================================
 function setup_telemetry_backend() {
     log "INFO" "Installation of the advanced telemetry engine (Backend)..."
@@ -5539,6 +5583,19 @@ else
     WEB_STATUS=$(pgrep -f "nginx" >/dev/null && echo "active" || echo "offline")
 fi
 
+# --- ModSecurity WAF Tracking (Module embedded in Web Server) ---
+# We check if SysWarden integrated it or if the default config folder exists.
+if [[ -f "/etc/fail2ban/filter.d/syswarden-modsec.conf" ]] || [[ -d "/etc/modsecurity" ]]; then
+    # Since ModSecurity runs inside the web server, its state matches the web worker
+    if [[ "$WEB_STATUS" == "active" ]]; then
+        SRV_MODSEC="active"
+    else
+        SRV_MODSEC="offline"
+    fi
+else
+    SRV_MODSEC="skipped"
+fi
+
 # AbuseIPDB Reporter Tracking (3 States)
 if [[ -f "/usr/local/bin/syswarden_reporter.py" ]]; then
     if pgrep -f "syswarden_reporter" >/dev/null; then
@@ -5577,11 +5634,12 @@ fi
 
 SERVICES_JSON=$(jq -n \
   --arg f2b "$SRV_F2B" --arg crn "$SRV_CRON" --arg web_name "$WEB_NAME" --arg web_path "$WEB_PATH" --arg web_status "$WEB_STATUS" --arg rep "$SRV_REP" \
-  --arg fw_name "$FW_NAME" --arg fw_path "$FW_PATH" --arg fw_status "$FW_STATUS" \
+  --arg fw_name "$FW_NAME" --arg fw_path "$FW_PATH" --arg fw_status "$FW_STATUS" --arg modsec "$SRV_MODSEC" \
   '[
     {"name":"fail2ban-server","path":"/usr/bin/fail2ban-server","status":$f2b},
     {"name":$fw_name,"path":$fw_path,"status":$fw_status},
     {"name":$web_name,"path":$web_path,"status":$web_status},
+    {"name":"modsecurity (waf)","path":"web-server-module","status":$modsec},
     {"name":"cron/crond","path":"/usr/sbin/cron","status":$crn},
     {"name":"syswarden-reporter","path":"/usr/local/bin/syswarden_reporter.py","status":$rep},
     {"name":"syswarden-telemetry","path":"/usr/local/bin/syswarden-telemetry.sh","status":"active"}
@@ -5653,7 +5711,7 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                 case "${JAIL,,}" in
                     *webshell*) MITRE_ID="T1505.003"; MITRE_NAME="Server Software Component: Web Shell" ;;
                     *revshell*|*rce*) MITRE_ID="T1059"; MITRE_NAME="Command and Scripting Interpreter" ;;
-                    *sqli*|*xss*|*lfi*|*ssti*|*jndi*|*haproxy*) MITRE_ID="T1190"; MITRE_NAME="Exploit Public-Facing Application" ;;
+                    *sqli*|*xss*|*lfi*|*ssti*|*jndi*|*haproxy*|*modsec*) MITRE_ID="T1190"; MITRE_NAME="Exploit Public-Facing Application" ;;
                     *privesc*|*auditd*) MITRE_ID="T1068"; MITRE_NAME="Exploitation for Privilege Escalation" ;;
                     *secretshunter*|*hunter*|*ssrf*|*idor*) MITRE_ID="T1552"; MITRE_NAME="Unsecured Credentials / Cloud Discovery" ;;
                     *proxy-abuse*|*squid*) MITRE_ID="T1090"; MITRE_NAME="Connection Proxy" ;;
@@ -5669,7 +5727,7 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                 JAILS_JSON=$(echo "$JAILS_JSON" | jq --arg n "$JAIL" --argjson c "$BANNED_COUNT" --arg ttp "$MITRE_PAYLOAD" '. + [{"name": $n, "count": $c, "mitre": $ttp}]')
                 
                 # --- RISK RADAR CALCULATION ---
-                if [[ "$JAIL" =~ (sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi) ]]; then R_EXP=$((R_EXP + BANNED_COUNT))
+                if [[ "$JAIL" =~ (sqli|xss|lfi|revshell|webshell|ssti|ssrf|jndi|modsec) ]]; then R_EXP=$((R_EXP + BANNED_COUNT))
                 elif [[ "$JAIL" =~ (ssh|auth|privesc|prestashop) ]]; then R_BF=$((R_BF + BANNED_COUNT))
                 elif [[ "$JAIL" =~ (scan|bot|mapper|enum|hunter) ]]; then R_REC=$((R_REC + BANNED_COUNT))
                 elif [[ "$JAIL" =~ (flood) ]]; then R_DOS=$((R_DOS + BANNED_COUNT))
@@ -5810,7 +5868,7 @@ EOF
 }
 
 # ==============================================================================
-# SYSWARDEN v0.27.4 - NGINX / APACHESECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
+# SYSWARDEN v0.28.0 - NGINX / APACHESECURE DASHBOARD (ENTERPRISE SAAS UI / SPA / CSP)
 # ==============================================================================
 function generate_dashboard() {
     log "INFO" "Generating the Enterprise SaaS Nginx Dashboard (SPA/CSP)..."
@@ -5906,7 +5964,7 @@ function generate_dashboard() {
     <nav class="top-navbar">
         <div class="d-flex align-items-center gap-3">
             <svg style="color: var(--sw-brand-icon);" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <h5 class="mb-0 fw-bold d-none d-md-block text-uppercase" style="letter-spacing: 0.5px; font-size: 1.1rem; color: var(--sw-text);">SYSWARDEN v0.27.4</h5>
+            <h5 class="mb-0 fw-bold d-none d-md-block text-uppercase" style="letter-spacing: 0.5px; font-size: 1.1rem; color: var(--sw-text);">SYSWARDEN v0.28.0</h5>
         </div>
         
         <div class="d-flex align-items-center gap-3 gap-md-4">
@@ -7213,7 +7271,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.27.4                  ${NC}"
+    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.28.0                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -7252,7 +7310,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.27.4 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.28.0 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
