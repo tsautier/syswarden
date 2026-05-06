@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/Open%20Source-100%25-brightgreen?style=for-the-badge&logo=opensourceinitiative">
   <img src="https://img.shields.io/badge/Status-Production_Ready-blue?style=for-the-badge&logo=status">
   <img src="https://img.shields.io/badge/Security-Zero_Trust-darkred?style=for-the-badge&logo=security">
+  <img src="https://img.shields.io/badge/Security_Audit-Passed-brightgreen?style=for-the-badge&logo=githubactions">
   <img src="https://img.shields.io/badge/Platform-Linux_Universal-0052cc?style=for-the-badge&logo=linux">
   <img src="https://img.shields.io/badge/License-GNU_GPLv3-yellow?style=for-the-badge&logo=license">
 </p>
