@@ -25,7 +25,7 @@ By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield
 
 **Application Security & Active Response (Layer 7)**
 * **Dynamic L7 WAF:** Protects 51+ vital services (Docker, Nginx, Databases, CMS) using heavily optimized Fail2ban jails with a near-zero memory footprint.
-* **Standalone ModSecurity WAF:** Seamlessly integrates [OWASP ModSecurity (v0.29.2 standalone)](https://github.com/owasp-modsecurity/ModSecurity) via the `syswarden-waf.sh` script, providing advanced HTTP traffic inspection and Layer 7 threat mitigation.
+* **Standalone ModSecurity WAF:** Seamlessly integrates [OWASP ModSecurity (v3.0.15 standalone)](https://github.com/owasp-modsecurity/ModSecurity) via the `syswarden-waf.sh` script, providing advanced HTTP traffic inspection and Layer 7 threat mitigation.
 * **Automated Retaliation:** Natively integrates with the global AbuseIPDB network to proactively report attackers and share telemetry.
 
 **Zero-Trust & Compliance Architecture**
