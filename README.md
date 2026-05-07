@@ -51,7 +51,6 @@ SysWarden does not simply append rules to standard firewall chains; it fundament
 
 SysWarden is built to run flawlessly across modern Linux infrastructures:
 * **Universal (systemd):** Debian 13+, Ubuntu 24.04+, AlmaLinux, Rocky Linux, CentOS Stream, Fedora.
-* **Alpine Linux (OpenRC):** Highly optimized for lightweight containers and edge nodes.
 
 ## The Fortress Dashboard (Web & CLI)
 
@@ -84,12 +83,6 @@ chmod +x *.sh
 
 ```bash
 ./install-syswarden.sh
-```
-
-*Alpine Linux:*
-
-```bash
-./install-syswarden-alpine.sh
 ```
 
 ## Quick uninstall
