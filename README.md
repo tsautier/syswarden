@@ -117,7 +117,7 @@ sudo ./install-syswarden.sh syswarden-auto.conf
 Uninstall Syswarden properly while keeping your original settings.
 
 ```bash
-./install-syswarden*.sh uninstall
+./install-syswarden.sh uninstall
 ```
 
 ## Documentation
