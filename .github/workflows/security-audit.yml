@@ -28,7 +28,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run ShellCheck on Bash scripts
-        run: find . -type f -name "*.sh" -exec shellcheck --severity=warning {} +
+        # --shell=bash: Forces Bash mode analysis to compensate for missing shebangs in modules
+        # --exclude=SC2034,SC2154: Disables false positives related to cross-file variables
+        run: find . -type f -name "*.sh" -exec shellcheck --shell=bash --exclude=SC2034,SC2154 --severity=warning {} +
 
       - name: Setup shfmt
         uses: mfinelli/setup-shfmt@v4
