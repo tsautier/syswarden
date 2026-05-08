@@ -1,1 +1,7 @@
 shfmt.exe
+
+# SysWarden Build Artifacts
+dist/
+*.tar.gz
+*.sig
+*.crt
