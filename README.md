@@ -7,8 +7,6 @@
   <img src="https://img.shields.io/badge/License-GNU_GPLv3-yellow?style=for-the-badge&logo=license">
 </p>
 
-![Alt](https://repobeats.axiom.co/api/embed/d909eab3c0cafb3a64294546f37a130f18a7e2f0.svg "Repobeats analytics image")
-
 # SysWarden
 
 **SysWarden** is an ultra-lightweight **Host-based Security Orchestrator** for Linux. Acting as a powerful alternative to eBPF/XDP, it drops malicious packets directly at the hardware level (Layer 2/3) to prevent CPU overhead
