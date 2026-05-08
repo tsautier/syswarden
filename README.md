@@ -9,9 +9,12 @@
 
 # SysWarden
 
-**SysWarden** is an ultra-lightweight **Host-based Security Orchestrator** for Linux. Acting as a powerful alternative to eBPF/XDP, it drops malicious packets directly at the hardware level (Layer 2/3) to prevent CPU overhead
+**SysWarden** is an ultra-lightweight **Enterprise Host-based Intrusion Detection System (HIDS)** for Linux. Acting as a powerful alternative to eBPF/XDP, it drops malicious packets directly at the hardware level (Layer 2/3) to prevent CPU overhead.
 
-By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist), CINS Army, Blocklist.de, GeoIP, ASN tracking, a dynamic L7 WAF (Fail2ban), and a strict Zero-Trust Catch-All policy, it neutralizes 97% of internet noise with a near-zero memory footprint. 
+By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist), CINS Army, Blocklist.de, GeoIP, ASN tracking, a dynamic L7 WAF (Fail2ban), and real-time SIEM logging, SysWarden transforms any bare-metal server or VM into a Zero-Trust fortress within seconds.
+
+> **Deprecation Notice: Alpine Linux Support**
+> Effective immediately, support for Alpine Linux is officially deprecated. The dedicated Alpine installation script has been removed. SysWarden is evolving into a pure Enterprise HIDS. While Alpine remains an industry standard for lightweight containers, enterprise bare-metal servers and virtual machines—which SysWarden is designed to protect at the host level—are predominantly driven by the Systemd-based ecosystems (RHEL, Debian, Ubuntu). Unifying the architecture around `systemd` allows for deeper security integrations and ensures maximum reliability and compliance for production environments.
 
 > Built for critical infrastructures, SysWarden enforces automated server hardening to accelerate your ISO 27001 and NIS2 compliance.
 
@@ -64,26 +67,52 @@ SysWarden provides dual-layer observability, ensuring you maintain complete situ
 * **Terminal Dashboard:** Manage your infrastructure directly from the shell using the `syswarden-manager` (instant visibility into blocked IPs, whitelists, and rule idempotency).
 * **Rich Installation Alerts:** The core orchestration scripts (`install-syswarden.sh alerts`) provide structured, color-coded logging for instant feedback on OS hardening, SIEM (Wazuh) integration, and Zero-Trust policy enforcement.
 
-## Quick Start
+## Installation Guide
 
-Deploying enterprise-grade security takes less than 10 minutes.
+SysWarden is distributed as a pre-compiled, self-contained shell script. All complex modules are bundled into a single deployment artifact. 
 
-**1. Clone the repository:**
-```bash
-git clone https://github.com/duggytuxy/syswarden.git
-cd syswarden
-chmod +x *.sh
-```
+It supports two installation methods: a standard interactive mode and an Enterprise Zero-Trust mode for environments requiring strict supply chain validation.
 
-**2. Execute the installer matching your OS:**
+### 1. Quick Installation (Standard)
 
-*For Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+:*
+Download the execution script and run it as root. Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
 
 ```bash
-./install-syswarden.sh
+wget [https://github.com/duggytuxy/syswarden/releases/latest/download/install-syswarden.sh](https://github.com/duggytuxy/syswarden/releases/latest/download/install-syswarden.sh)
+chmod +x install-syswarden.sh
+sudo ./install-syswarden.sh
 ```
 
-## Quick uninstall
+### 2. Enterprise Installation (Zero-Trust / SLSA Level 3)
+
+SysWarden releases are cryptographically signed using GitHub Artifact Attestations to guarantee supply chain integrity. For environments compliant with ISO 27001 or NIS2, it is strictly recommended to verify the script's provenance before execution.
+
+```bash
+# 1. Download the release bundle
+wget [https://github.com/duggytuxy/syswarden/releases/latest/download/syswarden-release.tar.gz](https://github.com/duggytuxy/syswarden/releases/latest/download/syswarden-release.tar.gz)
+
+# 2. Verify the cryptographic attestation using the official GitHub CLI
+gh attestation verify syswarden-release.tar.gz --owner duggytuxy
+
+# 3. If the verification is successful (exit code 0), extract and run
+tar -xzf syswarden-release.tar.gz
+chmod +x install-syswarden.sh
+sudo ./install-syswarden.sh
+```
+
+### 3. Automated / Headless Deployment (CI/CD)
+
+SysWarden can be deployed without any user interaction using a configuration file, ideal for Ansible, Terraform, or Cloud-init deployments.
+
+```bash
+# Secure the configuration file permissions
+chmod 600 syswarden-auto.conf
+
+# Execute the silent installation
+sudo ./install-syswarden.sh syswarden-auto.conf
+```
+
+### 4.Quick uninstall
 
 Uninstall Syswarden properly while keeping your original settings.
 
