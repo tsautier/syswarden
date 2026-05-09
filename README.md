@@ -28,7 +28,7 @@
 By fusing [Data-Shield IPv4 blocklists](https://github.com/duggytuxy/Data-Shield_IPv4_Blocklist), CINS Army, Blocklist.de, GeoIP, ASN tracking, a dynamic L7 WAF (Fail2ban), and real-time SIEM logging, SysWarden transforms any bare-metal server or VM into a Zero-Trust fortress within seconds.
 
 > **Deprecation Notice: Alpine Linux Support**
-> Effective immediately, support for Alpine Linux is officially deprecated. The dedicated Alpine installation script has been removed. SysWarden is evolving into a pure Enterprise HIDS. While Alpine remains an industry standard for lightweight containers, enterprise bare-metal servers and virtual machines—which SysWarden is designed to protect at the host level—are predominantly driven by the Systemd-based ecosystems (RHEL, Debian, Ubuntu). Unifying the architecture around `systemd` allows for deeper security integrations and ensures maximum reliability and compliance for production environments.
+> Effective immediately, support for Alpine Linux is officially deprecated. The dedicated Alpine installation script has been removed. SysWarden is evolving into a pure Enterprise HIDS. While Alpine remains an industry standard for lightweight containers, enterprise bare-metal servers and virtual machines which SysWarden is designed to protect at the host level are predominantly driven by the Systemd-based ecosystems (RHEL, Debian, Ubuntu). Unifying the architecture around `systemd` allows for deeper security integrations and ensures maximum reliability and compliance for production environments.
 
 > Built for critical infrastructures, SysWarden enforces automated server hardening to accelerate your ISO 27001 and NIS2 compliance.
 
