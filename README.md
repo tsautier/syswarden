@@ -102,7 +102,7 @@ chmod +x build.sh
 
 # Navigate to the distribution folder and execute the installation with root privileges
 cd dist/ || exit
-sudo ./install-syswarden.sh
+./install-syswarden.sh
 ```
 
 ### 2. Enterprise Installation (Zero-Trust / SLSA Level 3)
@@ -119,7 +119,7 @@ gh attestation verify syswarden-release.tar.gz --owner duggytuxy
 # 3. If the verification is successful (exit code 0), extract and run
 tar -xzf syswarden-release.tar.gz
 chmod +x install-syswarden.sh
-sudo ./install-syswarden.sh
+./install-syswarden.sh
 ```
 
 ### 3. Automated / Headless Deployment (CI/CD)
