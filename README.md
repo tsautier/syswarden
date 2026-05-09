@@ -89,11 +89,19 @@ It supports two installation methods: a standard interactive mode and an Enterpr
 
 ### 1. Quick Installation (Standard)
 
-Download the execution script and run it as root. Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
+> Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
 
 ```bash
-wget https://github.com/duggytuxy/syswarden/releases/latest/download/install-syswarden.sh
-chmod +x install-syswarden.sh
+# Clone the repository and enter the directory (root)
+git clone https://github.com/duggytuxy/syswarden.git
+cd syswarden || exit
+
+# Make the builder executable and compile the artifact
+chmod +x build.sh
+./build.sh
+
+# Navigate to the distribution folder and execute the installation with root privileges
+cd dist/ || exit
 sudo ./install-syswarden.sh
 ```
 
@@ -119,14 +127,20 @@ sudo ./install-syswarden.sh
 SysWarden can be deployed without any user interaction using a configuration file, ideal for Ansible, Terraform, or Cloud-init deployments.
 
 ```bash
-# Secure the configuration file permissions
-chmod 600 syswarden-auto.conf
+# Copy the configuration template to the distribution directory
+cp syswarden-auto.conf dist/
 
-# Execute the silent installation
-sudo ./install-syswarden.sh syswarden-auto.conf
+# Navigate to the distribution directory
+cd dist/ || exit
+
+# Secure the configuration file permissions
+chmod 600 syswarden-auto.conf (modify if needed)
+
+# Execute the silent installation with root privileges
+./install-syswarden.sh syswarden-auto.conf
 ```
 
-### 4.Quick uninstall
+### 4.Quick uninstall (root)
 
 Uninstall Syswarden properly while keeping your original settings.
 
