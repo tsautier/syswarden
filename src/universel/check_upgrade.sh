@@ -17,18 +17,14 @@ check_upgrade() {
         exit 1
     }
 
-    # DEVSECOPS FIX: Append '|| true' to prevent 'set -e' from killing the script if grep finds nothing
-    local download_url
-    download_url=$(echo "$response" | grep -o '"browser_download_url": "[^"]*/install-syswarden\.sh"' | head -n 1 | cut -d'"' -f4 || true)
-
-    if [[ -z "$download_url" ]]; then
-        echo -e "${GREEN}No update found in the latest release. You are up to date!${NC}"
-        return
-    fi
-
-    # DEVSECOPS FIX: Append '|| true' to prevent silent crashes
+    # DEVSECOPS FIX: Append '|| true' to prevent silent crashes from 'set -e'
     local latest_version
     latest_version=$(echo "$response" | grep -o '"tag_name": "[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
+
+    if [[ -z "$latest_version" ]]; then
+        echo -e "${RED}Failed to parse the latest version from GitHub API. Upgrade aborted.${NC}"
+        return
+    fi
 
     echo -e "Current Version : ${YELLOW}${VERSION}${NC}"
     echo -e "Latest Version  : ${GREEN}${latest_version}${NC}\n"
@@ -38,6 +34,14 @@ check_upgrade() {
     else
         echo -e "${YELLOW}A new Enterprise version ($latest_version) is available!${NC}"
 
+        # --- DEVSECOPS: PREREQUISITE CHECK ---
+        # Git is now mandatory for the local build process
+        if ! command -v git >/dev/null 2>&1; then
+            echo -e "${RED}[ CRITICAL ALERT ] 'git' is not installed. Required for compilation.${NC}"
+            echo -e "${YELLOW}Please run: apt install git (or equivalent)${NC}"
+            return
+        fi
+
         # --- DEVSECOPS: INTERACTIVE CONFIRMATION ---
         read -p "Do you want to proceed with the automated in-place upgrade now? (y/N): " proceed_upgrade
         if [[ ! "$proceed_upgrade" =~ ^[Yy]$ ]]; then
@@ -45,31 +49,49 @@ check_upgrade() {
             return
         fi
 
-        echo -e "${YELLOW}Downloading update securely via TLS 1.2+...${NC}"
+        echo -e "${YELLOW}Cloning and compiling update securely...${NC}"
 
-        # --- HOTFIX: SAME-FILE COLLISION PREVENTION ---
-        # Create an isolated sub-directory for the update payload to guarantee
+        # --- HOTFIX: ISOLATED BUILD ENVIRONMENT ---
+        # Create an isolated sub-directory for the source code to guarantee
         # it never collides with the script's current execution path.
         local UPGRADE_DIR="$TMP_DIR/syswarden_upgrade_payload"
+        rm -rf "$UPGRADE_DIR" # Enforce clean state
         mkdir -p "$UPGRADE_DIR"
 
-        wget --https-only --secure-protocol=TLSv1_2 --max-redirect=2 --no-hsts -qO "$UPGRADE_DIR/install-syswarden.sh" "$download_url"
-
-        cd "$UPGRADE_DIR" || exit 1
-
-        # --- SECURITY FIX: BASIC INTEGRITY CHECK (Post-SHA256 Era) ---
-        # Ensure the file downloaded correctly and is a valid bash script
-        # This prevents executing corrupted files or HTML pages from captive networks
-        if ! head -n 1 install-syswarden.sh | grep -q "#!/bin/bash"; then
-            echo -e "${RED}[ CRITICAL ALERT ]${NC}"
-            echo -e "${RED}The downloaded script is invalid or corrupted!${NC}"
-            echo -e "${RED}Possible causes: Captive portal, network filtering, or incomplete download.${NC}"
-            echo -e "${RED}Update aborted to protect system integrity.${NC}"
+        # --- SURGICAL CLONE: SPECIFIC RELEASE TAG ---
+        # We clone the exact tag to ensure stability, rather than the main branch
+        if ! git clone --branch "$latest_version" --depth 1 https://github.com/duggytuxy/syswarden.git "$UPGRADE_DIR" &>/dev/null; then
+            echo -e "${RED}[ CRITICAL ALERT ] Failed to clone the repository. Update aborted.${NC}"
             rm -rf "$UPGRADE_DIR"
             exit 1
         fi
 
-        echo -e "${GREEN}Payload validated successfully. Preparing in-place upgrade...${NC}"
+        cd "$UPGRADE_DIR" || exit 1
+
+        # --- COMPILATION STAGE ---
+        log "INFO" "Executing SysWarden Universal Build..."
+        chmod +x build.sh
+        ./build.sh >/dev/null 2>&1 || {
+            echo -e "${RED}[ CRITICAL ALERT ] Compilation failed. Update aborted.${NC}"
+            cd /
+            rm -rf "$UPGRADE_DIR"
+            exit 1
+        }
+
+        local compiled_artifact="dist/install-syswarden.sh"
+
+        # --- SECURITY FIX: BASIC INTEGRITY CHECK ---
+        # Ensure the file compiled correctly and is a valid bash script
+        if [[ ! -f "$compiled_artifact" ]] || ! head -n 1 "$compiled_artifact" | grep -q "#!/bin/bash"; then
+            echo -e "${RED}[ CRITICAL ALERT ]${NC}"
+            echo -e "${RED}The compiled artifact is invalid or corrupted!${NC}"
+            echo -e "${RED}Update aborted to protect system integrity.${NC}"
+            cd /
+            rm -rf "$UPGRADE_DIR"
+            exit 1
+        fi
+
+        echo -e "${GREEN}Artifact compiled and validated successfully. Preparing in-place upgrade...${NC}"
 
         # --- PRE-UPGRADE: SURGICAL PROCESS TERMINATION ---
         # We must kill background telemetry and UI processes to avoid zombie orphans
@@ -87,7 +109,7 @@ check_upgrade() {
         log "INFO" "Replacing current orchestrator at $current_script..."
 
         # We explicitly copy instead of move in case the OS locks the executing file
-        cp -f "$UPGRADE_DIR/install-syswarden.sh" "$current_script"
+        cp -f "$compiled_artifact" "$current_script"
         chmod 700 "$current_script"
 
         # Configuration sanity check
@@ -96,6 +118,10 @@ check_upgrade() {
         else
             log "INFO" "Configuration file $CONF_FILE found. User settings will be strictly preserved."
         fi
+
+        # --- CLEANUP ---
+        cd /
+        rm -rf "$UPGRADE_DIR"
 
         echo -e "${GREEN}In-place upgrade sequence initiated. Handing over to the new version...${NC}"
 

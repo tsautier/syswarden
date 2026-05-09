@@ -2,7 +2,7 @@
 
 # SysWarden Manager - Blocklists and Whitelists Manager
 # Copyright (C) 2026 duggytuxy - Laurent M.
-# Version: v0.30.1
+# Version: v0.30.2
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -27,7 +27,7 @@ WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
 SSH_WHITELIST_FILE="$SYSWARDEN_DIR/ssh_whitelist.txt"
 SET_NAME="syswarden_blacklist"
-VERSION="v0.30.1"
+VERSION="v0.30.2"
 
 # --- ROOT ENFORCEMENT ---
 if [[ $EUID -ne 0 ]]; then
@@ -35,10 +35,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# --- HOTFIX: OS DETECTION ---
 OS_TYPE="Universal"
-if [[ -f /etc/alpine-release ]]; then OS_TYPE="Alpine"; fi
-if [[ -f /etc/slackware-version ]]; then OS_TYPE="Slackware"; fi
 
 # --- FIREWALL BACKEND DETECTION ---
 detect_backend() {
@@ -54,9 +51,6 @@ detect_backend() {
         FW_BACKEND="unknown"
     fi
 }
-
-# --- HOTFIX: DYNAMIC NFTABLES CHAIN RESOLUTION ---
-# Slackware & Debian use 'input_frontline', Alpine uses 'input'
 get_nft_chain() {
     if nft list chain inet syswarden_table input_frontline >/dev/null 2>&1; then
         NFT_CHAIN="input_frontline"
@@ -248,13 +242,7 @@ whitelist_ip() {
             ;;
         ipset | unknown)
             iptables -t raw -I PREROUTING 1 -s "$target_ip" -j ACCEPT 2>/dev/null || true
-            iptables -I INPUT 1 -s "$target_ip" -j ACCEPT 2>/dev/null || true
-
-            # HOTFIX: Persistence for Slackware vs Systemd environments
-            if [[ "$OS_TYPE" == "Slackware" ]]; then
-                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
-                ipset save >/etc/syswarden/ipsets.save 2>/dev/null || true
-            elif command -v netfilter-persistent >/dev/null; then
+            if command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -299,10 +287,7 @@ whitelist_ip() {
                 awk -v ip="$target_ip" '/^[[:space:]]*deny all;/ { print "    allow " ip ";" } { print }' "$web_conf" >"${web_conf}.tmp" && cat "${web_conf}.tmp" >"$web_conf" && rm -f "${web_conf}.tmp"
 
                 if command -v nginx >/dev/null && nginx -t >/dev/null 2>&1; then
-                    # HOTFIX: Slackware Nginx Reload Support
-                    if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.nginx ]]; then
-                        /etc/rc.d/rc.nginx restart >/dev/null 2>&1 || true
-                    elif command -v systemctl >/dev/null; then
+                    if command -v systemctl >/dev/null; then
                         systemctl reload nginx >/dev/null 2>&1 || true
                     elif command -v rc-service >/dev/null; then
                         rc-service nginx reload >/dev/null 2>&1 || true
@@ -324,9 +309,7 @@ whitelist_ip() {
                     { command -v apachectl >/dev/null 2>&1 && apachectl configtest >/dev/null 2>&1; } ||
                     { command -v httpd >/dev/null 2>&1 && httpd -t >/dev/null 2>&1; }; then
 
-                    if [[ "$OS_TYPE" == "Slackware" ]] && [[ -x /etc/rc.d/rc.httpd ]]; then
-                        /etc/rc.d/rc.httpd restart >/dev/null 2>&1 || true
-                    elif command -v systemctl >/dev/null; then
+                    if command -v systemctl >/dev/null; then
                         systemctl reload "$web_server" >/dev/null 2>&1 || true
                     elif command -v rc-service >/dev/null; then
                         rc-service "$web_server" reload >/dev/null 2>&1 || true
@@ -400,12 +383,7 @@ allow_ssh_ip() {
             ;;
         ipset | unknown)
             iptables -t raw -I PREROUTING 1 -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
-            iptables -I INPUT 1 -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
-
-            if [[ "$OS_TYPE" == "Slackware" ]]; then
-                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
-                ipset save >/etc/syswarden/ipsets.save 2>/dev/null || true
-            elif command -v netfilter-persistent >/dev/null; then
+            if command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -474,11 +452,7 @@ revoke_ssh_ip() {
             ;;
         ipset | unknown)
             while iptables -t raw -D PREROUTING -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null; do :; done
-            while iptables -D INPUT -p tcp -s "$target_ip" --dport "$SSH_PORT" -j ACCEPT 2>/dev/null; do :; done
-
-            if [[ "$OS_TYPE" == "Slackware" ]]; then
-                iptables-save >/etc/syswarden/iptables.save 2>/dev/null || true
-            elif command -v netfilter-persistent >/dev/null; then
+            if command -v netfilter-persistent >/dev/null; then
                 netfilter-persistent save 2>/dev/null || true
             elif command -v /etc/init.d/iptables >/dev/null; then
                 /etc/init.d/iptables save 2>/dev/null || true
@@ -719,16 +693,8 @@ case "$COMMAND" in
 
         if [[ -f "/usr/local/bin/install-syswarden.sh" ]]; then
             bash /usr/local/bin/install-syswarden.sh update
-        elif [[ -f "/usr/local/bin/install-syswarden-alpine.sh" ]]; then
-            bash /usr/local/bin/install-syswarden-alpine.sh update
-        elif [[ -f "/usr/local/bin/install-syswarden-slackware.sh" ]]; then
-            bash /usr/local/bin/install-syswarden-slackware.sh update
         elif [[ -f "/root/install-syswarden.sh" ]]; then
             bash /root/install-syswarden.sh update
-        elif [[ -f "/root/install-syswarden-alpine.sh" ]]; then
-            bash /root/install-syswarden-alpine.sh update
-        elif [[ -f "/root/install-syswarden-slackware.sh" ]]; then
-            bash /root/install-syswarden-slackware.sh update
         else
             echo -e "${RED}Main orchestrator script not found in /usr/local/bin/ or /root/. Please run it manually.${NC}"
         fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v0.30.1 - DevSecOps Audit & Compliance Tool
+# SysWarden v0.30.2 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Architecture: Universal (Alpine, Debian, Ubuntu, RHEL, Alma, Slackware)
+# Architecture: Universal (Debian, Ubuntu, RHEL, Alma)
 # Objective: Verify Component Status, Log Isolation, and Zero Trust Permissions
 # ==============================================================================
 
@@ -71,21 +71,9 @@ info() {
     echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") [INFO] $1" >>"$AUDIT_LOG"
     sleep 2
 }
-
-# --- HOTFIX: SLACKWARE NATIVE PROCESS DETECTION ---
 is_service_active() {
     local svc="$1"
-    if [[ "$OS_TYPE" == "Slackware" ]]; then
-        case "$svc" in
-            rsyslog | syslog | syslogd) ps -ef 2>/dev/null | grep "[s]yslogd\|[r]syslogd" >/dev/null ;;
-            fail2ban) ps -ef 2>/dev/null | grep "[f]ail2ban-server" >/dev/null ;;
-            nginx) ps -ef 2>/dev/null | grep "[n]ginx" >/dev/null ;;
-            syswarden-reporter) ps -ef 2>/dev/null | grep "[s]yswarden_reporter.py" >/dev/null ;;
-            docker) ps -ef 2>/dev/null | grep "[d]ockerd" >/dev/null ;;
-            *) return 1 ;;
-        esac
-        return $?
-    elif command -v systemctl >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1; then
         systemctl is-active --quiet "$svc"
     elif command -v rc-service >/dev/null 2>&1; then
         rc-service "$svc" status 2>/dev/null | grep "started" >/dev/null
@@ -125,8 +113,6 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 OS_TYPE="Universal"
-if [[ -f /etc/alpine-release ]]; then OS_TYPE="Alpine"; fi
-if [[ -f /etc/slackware-version ]]; then OS_TYPE="Slackware"; fi
 info "Detected OS Environment: $OS_TYPE"
 
 if [[ -f "/etc/syswarden.conf" ]]; then
@@ -221,19 +207,10 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 1 "* ]]; then
 
     if [[ "${APPLY_OS_HARDENING:-n}" == "y" ]]; then
 
-        # HOTFIX: OS-Specific Cron Allow Path
-        if [[ "$OS_TYPE" == "Slackware" ]]; then
-            if [[ -f "/var/spool/cron/cron.allow" ]]; then
-                check_file_perms "/var/spool/cron/cron.allow" "600" "root"
-            else
-                fail "/var/spool/cron/cron.allow is missing (Crontab not locked down)"
-            fi
+        if [[ -f "/etc/cron.allow" ]]; then
+            check_file_perms "/etc/cron.allow" "600" "root"
         else
-            if [[ -f "/etc/cron.allow" ]]; then
-                check_file_perms "/etc/cron.allow" "600" "root"
-            else
-                fail "/etc/cron.allow is missing (Crontab not locked down)"
-            fi
+            fail "/etc/cron.allow is missing (Crontab not locked down)"
         fi
 
         PRIV_USERS=$(awk -F':' '/^(wheel|sudo|adm):/ {print $4}' /etc/group | tr ',' '\n' | grep -v '^$' | grep -v 'root' || true)
@@ -317,25 +294,12 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 2 "* ]]; then
 
     check_file_perms "/var/log/kern-firewall.log" "600" "root"
 
-    if [[ "$OS_TYPE" == "Alpine" ]]; then
-        check_file_perms "/var/log/auth.log" "600" "root"
-    else
-        check_file_perms "/var/log/auth-syswarden.log" "600" "root"
-    fi
+    check_file_perms "/var/log/auth-syswarden.log" "600" "root"
 
-    # HOTFIX: Support for native syslogd on Slackware
-    if [[ "$OS_TYPE" == "Slackware" ]]; then
-        if is_service_active "syslog"; then
-            pass "Syslogd daemon (Native Slackware) is active and routing logs securely."
-        else
-            fail "Syslogd daemon is not running."
-        fi
+    if is_service_active "rsyslog"; then
+        pass "Rsyslog daemon is active and routing logs securely."
     else
-        if is_service_active "rsyslog"; then
-            pass "Rsyslog daemon is active and routing logs securely."
-        else
-            fail "Rsyslog daemon is not running."
-        fi
+        fail "Rsyslog daemon is not running."
     fi
 fi
 
@@ -395,8 +359,6 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 3 "* ]]; then
     CATCH_ALL_PASSED=0
     if [[ "$FW_ENGINE" == "Nftables" ]]; then
         if nft list chain inet syswarden_table input_backend 2>/dev/null | grep "Catch-All" >/dev/null; then
-            CATCH_ALL_PASSED=1
-        elif [[ "$OS_TYPE" == "Alpine" ]] && nft list chain inet filter input 2>/dev/null | grep -E "policy[[:space:]]+drop" >/dev/null; then
             CATCH_ALL_PASSED=1
         elif nft list chain inet syswarden_table input 2>/dev/null | grep "Catch-All" >/dev/null; then
             CATCH_ALL_PASSED=1
@@ -465,7 +427,7 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 4 "* ]]; then
                 pass "Process Idempotence VERIFIED: A single, strictly controlled Fail2ban daemon is active."
             fi
 
-            if [[ -f "/etc/fail2ban/jail.d/alpine-ssh.conf" ]] || [[ -f "/etc/fail2ban/jail.d/defaults-debian.conf" ]]; then
+            if [[ -f "/etc/fail2ban/jail.d/defaults-debian.conf" ]]; then
                 fail "Conflicting default OS jails were detected in jail.d/"
             else
                 pass "Zero Trust environment: No conflicting default OS jails found."
@@ -696,26 +658,11 @@ fi
 if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 7 "* ]]; then
     log_header "Phase 7: Exposed Services & Firewall Persistence (CSPM)"
 
-    # HOTFIX: Persistence check specifically for Slackware RC Hooks
-    if [[ "$OS_TYPE" == "Slackware" ]]; then
-        if [[ -x "/etc/rc.d/rc.syswarden-firewall" ]] && grep -q "/etc/rc.d/rc.syswarden-firewall" /etc/rc.d/rc.local 2>/dev/null; then
-            pass "Firewall Persistence VERIFIED: Slackware rc.local securely triggers SysWarden ($FW_ENGINE) on boot."
-        else
-            fail "Firewall Persistence FAILED: Slackware rc.local integration is missing or rc.syswarden-firewall is not executable."
-        fi
-    elif [[ "$FW_ENGINE" == "Nftables" ]]; then
+    if [[ "$FW_ENGINE" == "Nftables" ]]; then
         if grep 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.nft >/dev/null 2>&1 || grep 'include "/etc/syswarden/syswarden.nft"' /etc/nftables.conf >/dev/null 2>&1; then
             pass "Firewall Persistence VERIFIED: SysWarden Nftables rules are firmly anchored in main OS config."
         else
             fail "Firewall Persistence FAILED: SysWarden include directive is missing in main Nftables config."
-        fi
-
-        if [[ "$OS_TYPE" == "Alpine" ]]; then
-            if [[ -f "/etc/nftables.d/syswarden-os-bypass.nft" ]]; then
-                pass "OS Bypass Module VERIFIED: Native Alpine drop policy safely bypassed for essential active services."
-            else
-                warn "OS Bypass Module Missing: If this is a Web/SSH server, Alpine's default drop policy might block legitimate traffic."
-            fi
         fi
 
     elif [[ "$FW_ENGINE" == "Firewalld" ]]; then
@@ -733,7 +680,7 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 7 "* ]]; then
         fi
 
     elif [[ "$FW_ENGINE" == "Iptables" ]]; then
-        if [[ -f "/etc/iptables/rules.v4" ]] || [[ -f "/etc/sysconfig/iptables" ]] || [[ "$OS_TYPE" == "Alpine" && -f "/etc/iptables/iptables.rules" ]]; then
+        if [[ -f "/etc/iptables/rules.v4" ]] || [[ -f "/etc/sysconfig/iptables" ]]; then
             pass "Firewall Persistence VERIFIED: Iptables static save files detected."
         else
             warn "Firewall Persistence UNKNOWN: Could not definitively locate Iptables persistent save files. Rules might flush on reboot."

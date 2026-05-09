@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # SysWarden WAF - Enterprise ModSecurity v3 & OWASP CRS Deployment Module
-# Designed for SysWarden v0.30.1 Architecture
-# Compatibility: Ubuntu, Debian, RHEL, AlmaLinux, Rocky, CentOS, Alpine Linux
+# Designed for SysWarden v0.30.2 Architecture
+# Compatibility: Ubuntu, Debian, RHEL, AlmaLinux, Rocky, CentOS
 
 # --- SAFETY FIRST ---
 set -euo pipefail
@@ -92,11 +92,6 @@ install_dependencies() {
             zlib-devel pcre-devel pcre2-devel libxml2-devel lmdb-devel autoconf automake libtool \
             wget git pkgconf python3 libxslt-devel gd-devel perl-devel httpd-devel
 
-    elif [[ "$OS_ID" == "alpine" ]]; then
-        # Alpine 3.21+ specific compilation headers (musl libc compatible)
-        apk add --no-cache gcc g++ make automake autoconf libtool pcre-dev pcre2-dev \
-            libxml2-dev curl-dev geoip-dev yajl-dev lmdb-dev linux-headers git wget \
-            flex bison python3 ruby doxygen coreutils libxslt-dev gd-dev perl-dev apache2-dev
     else
         log "ERROR" "Unsupported OS for automated ModSecurity compilation: $OS_ID"
         exit 1
@@ -123,12 +118,7 @@ compile_libmodsecurity() {
     log "INFO" "Building environment..."
     ./build.sh
 
-    # Alpine requires strict prefixing for musl
-    if [[ "$OS_ID" == "alpine" ]]; then
-        ./configure --prefix=/usr --enable-standalone-module
-    else
-        ./configure
-    fi
+    ./configure
 
     log "INFO" "Compiling C++ Source (This may take several minutes)..."
     # Utilize all available CPU cores for compilation speed
