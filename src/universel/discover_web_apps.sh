@@ -33,24 +33,29 @@ discover_web_apps() {
     # 2. Application Heuristic Discovery (Only if a Web Server runs)
     if [[ -n "$web_conf_dirs" ]]; then
         # Fast configuration parsing (Reverse lookup)
-        grep -riEq 'dolibarr' $web_conf_dirs 2>/dev/null && SYSW_HAS_DOLIBARR=true
-        grep -riEq 'prestashop' $web_conf_dirs 2>/dev/null && SYSW_HAS_PRESTASHOP=true
-        grep -riEq 'wp-config|wordpress' $web_conf_dirs 2>/dev/null && SYSW_HAS_WORDPRESS=true
-        grep -riEq 'drupal' $web_conf_dirs 2>/dev/null && SYSW_HAS_DRUPAL=true
-        grep -riEq 'nextcloud' $web_conf_dirs 2>/dev/null && SYSW_HAS_NEXTCLOUD=true
-        grep -riEq 'phpmyadmin' $web_conf_dirs 2>/dev/null && SYSW_HAS_PHPMYADMIN=true
-        grep -riEq 'laravel|artisan' $web_conf_dirs 2>/dev/null && SYSW_HAS_LARAVEL=true
+        # Fail-Safe: Appended || true to prevent set -e from killing the script if grep finds nothing
+        grep -riEq 'dolibarr' $web_conf_dirs 2>/dev/null && SYSW_HAS_DOLIBARR=true || true
+        grep -riEq 'prestashop' $web_conf_dirs 2>/dev/null && SYSW_HAS_PRESTASHOP=true || true
+        grep -riEq 'wp-config|wordpress' $web_conf_dirs 2>/dev/null && SYSW_HAS_WORDPRESS=true || true
+        grep -riEq 'drupal' $web_conf_dirs 2>/dev/null && SYSW_HAS_DRUPAL=true || true
+        grep -riEq 'nextcloud' $web_conf_dirs 2>/dev/null && SYSW_HAS_NEXTCLOUD=true || true
+        grep -riEq 'phpmyadmin' $web_conf_dirs 2>/dev/null && SYSW_HAS_PHPMYADMIN=true || true
+        grep -riEq 'laravel|artisan' $web_conf_dirs 2>/dev/null && SYSW_HAS_LARAVEL=true || true
 
         # Shallow filesystem probing (Depth 4 max for strict I/O optimization)
         for root in /var/www /usr/share/nginx/html /opt; do
             if [[ -d "$root" ]]; then
                 # POSIX compliant fast exits using head
-                find "$root" -maxdepth 4 -type f -name "wp-config.php" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_WORDPRESS=true
-                find "$root" -maxdepth 4 -type f -name "artisan" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_LARAVEL=true
-                find "$root" -maxdepth 4 -type d -name "phpmyadmin" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_PHPMYADMIN=true
-                find "$root" -maxdepth 4 -type d -name "drupal" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_DRUPAL=true
-                find "$root" -maxdepth 4 -type f -name "status.php" -path "*/nextcloud/*" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_NEXTCLOUD=true
+                # Fail-Safe: Appended || true to neutralize pipeline failure propagation
+                find "$root" -maxdepth 4 -type f -name "wp-config.php" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_WORDPRESS=true || true
+                find "$root" -maxdepth 4 -type f -name "artisan" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_LARAVEL=true || true
+                find "$root" -maxdepth 4 -type d -name "phpmyadmin" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_PHPMYADMIN=true || true
+                find "$root" -maxdepth 4 -type d -name "drupal" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_DRUPAL=true || true
+                find "$root" -maxdepth 4 -type f -name "status.php" -path "*/nextcloud/*" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_NEXTCLOUD=true || true
             fi
         done
     fi
+
+    # 3. Ultimate Fail-Safe: Ensure the function always returns 0 to satisfy set -e
+    return 0
 }
