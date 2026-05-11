@@ -80,7 +80,9 @@ if [[ "$MODE" == "fail2ban-jails" ]]; then
     fi
 
     # 2. Trigger the existing Fail2ban configuration function (Auto-Discovery)
-    log "INFO" "Scanning system for active services (Nginx, Apache, MongoDB, etc.)..."
+    log "INFO" "Scanning system for active services and web applications..."
+    discover_active_services 2>/dev/null || true
+    discover_web_apps
     configure_fail2ban
 
     # --- HOTFIX: RHEL/ALMA CHICKEN & EGG LOG FIX ---
@@ -153,6 +155,7 @@ if [[ "$MODE" == "cron-update" ]]; then
 
     # 2. Inject silently into Kernel (Zero-Downtime)
     discover_active_services
+    discover_web_apps
     apply_firewall_rules
 
     log "INFO" "CRON Update Complete. Firewall rules refreshed securely."
@@ -171,7 +174,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.31.2                  ${NC}"
+    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.32.0                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -210,7 +213,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.31.2 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.32.0 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -279,6 +282,7 @@ if [[ "$MODE" != "update" ]]; then
     # The actual OS modification happens inside this function.
     setup_siem_logging "$MODE"
 
+    discover_web_apps
     configure_fail2ban
 fi
 
@@ -301,6 +305,7 @@ download_osint
 # service dependency crashes (like Fail2ban starting too early).
 if [[ "$MODE" != "update" ]]; then
     discover_active_services
+    discover_web_apps
     apply_firewall_rules
 fi
 
@@ -313,12 +318,14 @@ download_asn
 # the firewall to inject the freshest GeoIP, ASN, and Blocklist data.
 log "INFO" "Applying massive downloaded lists to active firewall..."
 discover_active_services
+discover_web_apps
 apply_firewall_rules
 
 # --- NEW DEVSECOPS UPGRADE LOGIC ---
 # Ensures that both fresh installs and in-place upgrades receive the
 # absolute latest Layer 7 application firewall rules and regex payloads.
 log "INFO" "Applying Layer 7 Application Firewall Rules (Fail2ban)..."
+# Redundant execution of discover_web_apps is skipped here as it was just cached
 configure_fail2ban
 # -----------------------------------
 

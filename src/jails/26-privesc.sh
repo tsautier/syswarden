@@ -1,18 +1,25 @@
 syswarden_jail_privesc() {
     local AUTH_LOG=""
+
+    # 1. Dynamic log path discovery based on OS distribution
     if [[ -f "/var/log/auth-syswarden.log" ]]; then
         AUTH_LOG="/var/log/auth-syswarden.log"
     elif [[ -f "/var/log/auth.log" ]]; then
-        AUTH_LOG="/var/log/auth.log"
+        AUTH_LOG="/var/log/auth.log" # Debian/Ubuntu
     elif [[ -f "/var/log/secure" ]]; then
-        AUTH_LOG="/var/log/secure"
+        AUTH_LOG="/var/log/secure" # RHEL/Alma/Rocky
     fi
 
-    if [[ -n "$AUTH_LOG" ]]; then
-        log "INFO" "PAM/Auth logs detected. Enabling Privilege Escalation Guard (Su/Sudo)."
+    # 2. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$AUTH_LOG" ]]; then
+        return 0
+    fi
 
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-privesc.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-privesc.conf
+    log "INFO" "PAM/Auth logs detected. Enabling Privilege Escalation Guard (Su/Sudo)."
+
+    # Create Filter for Privilege Escalation Attempts
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-privesc.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-privesc.conf
 [INCLUDES]
 before = common.conf
 
@@ -22,17 +29,17 @@ failregex = ^%(__prefix_line)s(?:su|sudo)(?:\[\d+\])?: .*pam_unix\((?:su|sudo):a
             ^%(__prefix_line)s PAM \d+ more authentication failures; logname=.* uid=.* euid=.* tty=.* ruser=.* rhost=<HOST>.*\s*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-privesc.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-privesc.conf
 [syswarden-privesc]
-enabled = true
-port    = 0:65535
-filter  = syswarden-privesc
-logpath = $AUTH_LOG
-backend = ${SYSW_OS_BACKEND:-auto}
+enabled  = true
+port     = 0:65535
+filter   = syswarden-privesc
+logpath  = $AUTH_LOG
+backend  = ${SYSW_OS_BACKEND:-auto}
 maxretry = 3
 bantime  = 24h
 EOF
-    fi
 }

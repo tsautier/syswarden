@@ -1,16 +1,27 @@
 syswarden_jail_asterisk() {
+    # 1. Fail-Fast: Verify native daemon execution at the absolute top
+    if ! systemctl is-active --quiet asterisk 2>/dev/null; then
+        return 0
+    fi
+
     local ASTERISK_LOG=""
 
+    # 2. Dynamic log path discovery
     if [[ -f "/var/log/asterisk/messages" ]]; then
         ASTERISK_LOG="/var/log/asterisk/messages"
     elif [[ -f "/var/log/asterisk/full" ]]; then
         ASTERISK_LOG="/var/log/asterisk/full"
     fi
 
-    if [[ -n "$ASTERISK_LOG" ]]; then
-        log "INFO" "Asterisk logs detected. Enabling VoIP Jail."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$ASTERISK_LOG" ]]; then
+        return 0
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/asterisk.conf
+    log "INFO" "Asterisk daemon and logs detected. Enabling VoIP Jail."
+
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/asterisk.conf
 [asterisk]
 enabled  = true
 filter   = asterisk
@@ -19,5 +30,4 @@ logpath  = $ASTERISK_LOG
 maxretry = 5
 bantime  = 24h
 EOF
-    fi
 }

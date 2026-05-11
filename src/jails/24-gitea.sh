@@ -1,33 +1,43 @@
 syswarden_jail_gitea() {
+    # 1. Fail-Fast: Verify native daemon execution at the absolute top
+    if ! systemctl is-active --quiet gitea 2>/dev/null && ! systemctl is-active --quiet forgejo 2>/dev/null; then
+        return 0
+    fi
+
     local GITEA_LOG=""
 
+    # 2. Dynamic log path discovery
     if [[ -f "/var/log/gitea/gitea.log" ]]; then
         GITEA_LOG="/var/log/gitea/gitea.log"
     elif [[ -f "/var/log/forgejo/forgejo.log" ]]; then
         GITEA_LOG="/var/log/forgejo/forgejo.log"
     fi
 
-    if [[ -n "$GITEA_LOG" ]]; then
-        log "INFO" "Gitea/Forgejo detected. Enabling Git Server Jail."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$GITEA_LOG" ]]; then
+        return 0
+    fi
 
-        # Filter for Git Web UI Auth Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/gitea-custom.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/gitea-custom.conf
+    log "INFO" "Gitea/Forgejo daemon and logs detected. Enabling Git Server Jail."
+
+    # Filter for Git Web UI Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/gitea-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/gitea-custom.conf
 [Definition]
 failregex = ^.*?Failed authentication attempt for .*? from <HOST>:.*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/gitea.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/gitea.conf
 [gitea-custom]
-enabled = true
-port    = http,https,3000
-filter  = gitea-custom
-logpath = $GITEA_LOG
-backend = auto
+enabled  = true
+port     = http,https,3000
+filter   = gitea-custom
+logpath  = $GITEA_LOG
+backend  = auto
 maxretry = 5
 bantime  = 24h
 EOF
-    fi
 }

@@ -1,21 +1,34 @@
 syswarden_jail_grafana() {
-    if [[ -f "/var/log/grafana/grafana.log" ]]; then
-        log "INFO" "Grafana logs detected. Enabling Grafana Jail."
+    # 1. Fail-Fast: Verify native daemon execution at the absolute top
+    if ! systemctl is-active --quiet grafana-server 2>/dev/null; then
+        return 0
+    fi
 
-        # Create Filter for Grafana Auth Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/grafana-auth.conf" ]]; then
-            echo -e "[Definition]\nfailregex = ^.*(?:msg=\"Invalid username or password\"|status=401).*remote_addr=<HOST>.*\$\nignoreregex =" >/etc/fail2ban/filter.d/grafana-auth.conf
-        fi
+    # 2. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ ! -f "/var/log/grafana/grafana.log" ]]; then
+        return 0
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/grafana.conf
+    log "INFO" "Grafana daemon and logs detected. Enabling Grafana Jail."
+
+    # Create Filter for Grafana Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/grafana-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/grafana-auth.conf
+[Definition]
+failregex = ^.*(?:msg="Invalid username or password"|status=401).*remote_addr=<HOST>.*$
+ignoreregex = 
+EOF
+    fi
+
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/grafana.conf
 [grafana-auth]
-enabled = true
-port    = 3000,http,https
-filter  = grafana-auth
-logpath = /var/log/grafana/grafana.log
-backend = auto
+enabled  = true
+port     = 3000,http,https
+filter   = grafana-auth
+logpath  = /var/log/grafana/grafana.log
+backend  = auto
 maxretry = 3
 bantime  = 24h
 EOF
-    fi
 }

@@ -1,16 +1,24 @@
 syswarden_jail_ssrf() {
-    if [[ -n "${SYSW_RCE_LOGS:-}" ]]; then
-        log "INFO" "Web access logs detected. Enabling SSRF & Cloud Metadata Guard."
+    # 1. Fail-Fast: Check against discovery engine results (Zero I/O overhead)
+    if [[ -z "${SYSW_RCE_LOGS:-}" ]]; then
+        return 0
+    fi
 
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-ssrf.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-ssrf.conf
+    log "INFO" "Web access logs detected. Enabling SSRF & Cloud Metadata Guard."
+
+    # Create Filter for SSRF & Cloud Metadata Exfiltration attempts
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-ssrf.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-ssrf.conf
 [Definition]
+# Detects requests targeting Cloud Metadata IP (169.254.169.254) and specific provider endpoints
 failregex = ^<HOST> \S+ \S+ \[.*?\] "(?:GET|POST|HEAD|PUT) .*(?:169\.254\.169\.254|latest/meta-data|metadata\.google\.internal|/v1/user-data|/metadata/v1).* HTTP/.*" \d{3} .*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-ssrf.conf
+    # Write directly to jail.d
+    # maxretry = 1: Critical alert, instant ban for 48h to protect infrastructure credentials
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-ssrf.conf
 [syswarden-ssrf]
 enabled  = true
 port     = http,https
@@ -20,5 +28,4 @@ backend  = auto
 maxretry = 1
 bantime  = 48h
 EOF
-    fi
 }

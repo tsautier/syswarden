@@ -1,26 +1,43 @@
 syswarden_jail_proxmox() {
-    if command -v pveversion >/dev/null 2>&1; then
-        log "INFO" "Proxmox VE detected. Enabling PVE Jail."
+    # 1. Fail-Fast: Verify hypervisor API daemon at the absolute top
+    if ! systemctl is-active --quiet pveproxy 2>/dev/null; then
+        return 0
+    fi
 
-        local PVE_LOG="/var/log/daemon.log"
-        if [[ ! -f "$PVE_LOG" ]]; then
-            PVE_LOG="/var/log/syslog"
-        fi
+    local PVE_LOG=""
 
-        # Filter for Proxmox Web GUI Auth Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/proxmox-custom.conf" ]]; then
-            echo -e "[Definition]\nfailregex = ^.*pvedaemon\\[\\d+\\]: authentication failure; rhost=<HOST> user=.*\$\nignoreregex =" >/etc/fail2ban/filter.d/proxmox-custom.conf
-        fi
+    # 2. Dynamic log path discovery
+    if [[ -f "/var/log/daemon.log" ]]; then
+        PVE_LOG="/var/log/daemon.log"
+    elif [[ -f "/var/log/syslog" ]]; then
+        PVE_LOG="/var/log/syslog"
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/proxmox.conf
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$PVE_LOG" ]]; then
+        return 0
+    fi
+
+    log "INFO" "Proxmox VE hypervisor and logs detected. Enabling PVE Jail."
+
+    # Filter for Proxmox Web GUI Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/proxmox-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/proxmox-custom.conf
+[Definition]
+failregex = ^.*pvedaemon\[\d+\]: authentication failure; rhost=<HOST> user=.*$
+ignoreregex = 
+EOF
+    fi
+
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/proxmox.conf
 [proxmox-custom]
-enabled = true
-port    = https,8006
-filter  = proxmox-custom
-logpath = $PVE_LOG
-backend = auto
+enabled  = true
+port     = https,8006
+filter   = proxmox-custom
+logpath  = $PVE_LOG
+backend  = auto
 maxretry = 3
 bantime  = 24h
 EOF
-    fi
 }

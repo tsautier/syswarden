@@ -1,18 +1,23 @@
 syswarden_jail_atlassian() {
-    if [[ -n "${SYSW_RCE_LOGS:-}" ]]; then
-        log "INFO" "Web access logs detected. Enabling Atlassian Guard."
+    # 1. Fail-Fast: Check against discovery engine results (Zero I/O overhead)
+    if [[ -z "${SYSW_RCE_LOGS:-}" ]]; then
+        return 0
+    fi
 
-        # Create Filter for Jira and Confluence Auth Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-atlassian.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-atlassian.conf
+    log "INFO" "Web access logs detected. Enabling Atlassian Guard."
+
+    # Create Filter for Jira and Confluence Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-atlassian.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-atlassian.conf
 [Definition]
-# RED TEAM FIX: Strict non-greedy bounds inside the HTTP method quotes.
+# RED TEAM FIX: Strict non-greedy bounds inside the HTTP method quotes to prevent ReDoS.
 failregex = ^<HOST> \S+ \S+ \[[^\]]+\] "POST [^"]*?(?:/login\.jsp|/dologin\.action|/rest/auth/\d+/session)[^"]*?" (?:401|403|200)
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-atlassian.conf
+    # Write directly to jail.d
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-atlassian.conf
 [syswarden-atlassian]
 enabled  = true
 port     = http,https,8080,8090
@@ -22,5 +27,4 @@ backend  = auto
 maxretry = 5
 bantime  = 24h
 EOF
-    fi
 }

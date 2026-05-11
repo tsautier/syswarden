@@ -1,28 +1,45 @@
 syswarden_jail_sso() {
+    # 1. Fail-Fast: Verify native daemon or process execution at the absolute top
+    # Accounts for both bare-metal systemd services and containerized processes
+    if ! systemctl is-active --quiet authelia 2>/dev/null &&
+        ! systemctl is-active --quiet authentik 2>/dev/null &&
+        ! pgrep -x "authelia" >/dev/null 2>&1 &&
+        ! pgrep -f "authentik" >/dev/null 2>&1; then
+        return 0
+    fi
+
     local SSO_LOG=""
 
-    # Check standard output logs for major open-source SSO providers
-    for path in "/var/log/authelia/authelia.log" "/var/log/authentik/authentik.log" "/opt/authelia/authelia.log" "/opt/authentik/authentik.log"; do
-        if [[ -f "$path" ]]; then
-            SSO_LOG="$path"
-            break
-        fi
-    done
+    # 2. Dynamic log path discovery (Flattened structure)
+    if [[ -f "/var/log/authelia/authelia.log" ]]; then
+        SSO_LOG="/var/log/authelia/authelia.log"
+    elif [[ -f "/var/log/authentik/authentik.log" ]]; then
+        SSO_LOG="/var/log/authentik/authentik.log"
+    elif [[ -f "/opt/authelia/authelia.log" ]]; then
+        SSO_LOG="/opt/authelia/authelia.log"
+    elif [[ -f "/opt/authentik/authentik.log" ]]; then
+        SSO_LOG="/opt/authentik/authentik.log"
+    fi
 
-    if [[ -n "$SSO_LOG" ]]; then
-        log "INFO" "SSO (Authelia/Authentik) logs detected. Enabling IAM Guard."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$SSO_LOG" ]]; then
+        return 0
+    fi
 
-        # Create Filter for Identity and Access Management credential stuffing
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-sso.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-sso.conf
+    log "INFO" "SSO (Authelia/Authentik) processes and logs detected. Enabling IAM Guard."
+
+    # Create Filter for Identity and Access Management credential stuffing
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-sso.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-sso.conf
 [Definition]
 failregex = ^.*(?:level=error|level=\"error\").*msg=\"Authentication failed\".*remote_ip=\"<HOST>\".*$
             ^.*(?:\"event\":\"Failed login\"|event=\'Failed login\').*(?:\"client_ip\":\"<HOST>\"|\"remote_ip\":\"<HOST>\").*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-sso.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-sso.conf
 [syswarden-sso]
 enabled  = true
 port     = http,https
@@ -32,5 +49,4 @@ backend  = auto
 maxretry = 3
 bantime  = 24h
 EOF
-    fi
 }

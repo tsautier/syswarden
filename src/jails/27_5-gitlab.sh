@@ -1,24 +1,37 @@
 syswarden_jail_gitlab() {
+    # 1. Fail-Fast: Verify Omnibus binary or systemd daemon at the absolute top
+    if ! command -v gitlab-ctl >/dev/null 2>&1 && ! systemctl is-active --quiet gitlab-runsvdir 2>/dev/null; then
+        return 0
+    fi
+
     local GITLAB_LOG=""
+
+    # 2. Dynamic log path discovery
     if [[ -f "/var/log/gitlab/gitlab-rails/application.log" ]]; then
         GITLAB_LOG="/var/log/gitlab/gitlab-rails/application.log"
     elif [[ -f "/var/log/gitlab/gitlab-rails/auth.log" ]]; then
         GITLAB_LOG="/var/log/gitlab/gitlab-rails/auth.log"
     fi
 
-    if [[ -n "$GITLAB_LOG" ]]; then
-        log "INFO" "GitLab logs detected. Enabling GitLab Guard."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$GITLAB_LOG" ]]; then
+        return 0
+    fi
 
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-gitlab.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-gitlab.conf
+    log "INFO" "GitLab instance and logs detected. Enabling GitLab Guard."
+
+    # Create Filter for GitLab Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-gitlab.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-gitlab.conf
 [Definition]
 failregex = ^.*(?:Failed Login|Authentication failed).* (?:user|username)=.* (?:ip|IP)=<HOST>.*\s*$
             ^.*ActionController::InvalidAuthenticityToken.* IP: <HOST>.*\s*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-gitlab.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-gitlab.conf
 [syswarden-gitlab]
 enabled  = true
 port     = http,https
@@ -28,5 +41,4 @@ backend  = auto
 maxretry = 5
 bantime  = 24h
 EOF
-    fi
 }

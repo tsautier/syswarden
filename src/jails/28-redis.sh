@@ -1,24 +1,37 @@
 syswarden_jail_redis() {
+    # 1. Fail-Fast: Verify native daemon execution at the absolute top
+    if ! systemctl is-active --quiet redis-server 2>/dev/null && ! systemctl is-active --quiet redis 2>/dev/null; then
+        return 0
+    fi
+
     local REDIS_LOG=""
+
+    # 2. Dynamic log path discovery
     if [[ -f "/var/log/redis/redis-server.log" ]]; then
         REDIS_LOG="/var/log/redis/redis-server.log"
     elif [[ -f "/var/log/redis/redis.log" ]]; then
         REDIS_LOG="/var/log/redis/redis.log"
     fi
 
-    if [[ -n "$REDIS_LOG" ]]; then
-        log "INFO" "Redis logs detected. Enabling Redis Guard."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$REDIS_LOG" ]]; then
+        return 0
+    fi
 
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-redis.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-redis.conf
+    log "INFO" "Redis daemon and logs detected. Enabling Redis Guard."
+
+    # Create Filter for Redis Auth Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-redis.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-redis.conf
 [Definition]
 failregex = ^.*? <HOST>:\d+ .*? [Aa]uthentication failed.*$
             ^.*? Client <HOST>:\d+ disconnected, .*? [Aa]uthentication.*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-redis.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-redis.conf
 [syswarden-redis]
 enabled  = true
 port     = 6379
@@ -28,5 +41,4 @@ backend  = auto
 maxretry = 4
 bantime  = 24h
 EOF
-    fi
 }

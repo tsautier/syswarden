@@ -1,5 +1,7 @@
 syswarden_jail_portscan() {
     local FIREWALL_LOG=""
+
+    # 1. Dynamic log path discovery for Kernel/Netfilter messages
     if [[ -f "/var/log/kern-firewall.log" ]]; then
         FIREWALL_LOG="/var/log/kern-firewall.log"
     elif [[ -f "/var/log/kern.log" ]]; then
@@ -10,11 +12,16 @@ syswarden_jail_portscan() {
         FIREWALL_LOG="/var/log/syslog"
     fi
 
-    if [[ -n "$FIREWALL_LOG" ]]; then
-        log "INFO" "Kernel logs detected. Enabling Port Scanner Guard."
+    # 2. Fail-Fast: Ensure kernel logs exist to prevent Fail2ban crash
+    if [[ -z "$FIREWALL_LOG" ]]; then
+        return 0
+    fi
 
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-portscan.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-portscan.conf
+    log "INFO" "Kernel logs detected. Enabling Port Scanner Guard."
+
+    # Create Filter for SysWarden-BLOCK iptables/nftables prefix
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-portscan.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-portscan.conf
 [INCLUDES]
 before = common.conf
 
@@ -22,9 +29,10 @@ before = common.conf
 failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-BLOCK\].*?SRC=<HOST> 
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-portscan.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-portscan.conf
 [syswarden-portscan]
 enabled  = true
 port     = 0:65535
@@ -35,5 +43,4 @@ maxretry = 3
 findtime = 10m
 bantime  = 24h
 EOF
-    fi
 }

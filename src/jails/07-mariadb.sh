@@ -1,33 +1,42 @@
 syswarden_jail_mariadb() {
+    # 1. Fail-Fast: Verify native daemon execution at the absolute top
+    if ! systemctl is-active --quiet mariadb 2>/dev/null && ! systemctl is-active --quiet mysql 2>/dev/null; then
+        return 0
+    fi
+
     local MARIADB_LOG=""
 
+    # 2. Dynamic log path discovery based on OS distribution
     if [[ -f "/var/log/mysql/error.log" ]]; then
         MARIADB_LOG="/var/log/mysql/error.log"
     elif [[ -f "/var/log/mariadb/mariadb.log" ]]; then
         MARIADB_LOG="/var/log/mariadb/mariadb.log"
     fi
 
-    if [[ -n "$MARIADB_LOG" ]]; then
-        log "INFO" "MariaDB logs detected. Enabling MariaDB Jail."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$MARIADB_LOG" ]]; then
+        return 0
+    fi
 
-        # Create Filter for Authentication Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/mariadb-auth.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/mariadb-auth.conf
+    log "INFO" "MariaDB/MySQL daemon and logs detected. Enabling MariaDB Jail."
+
+    # Create Filter for Authentication Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/mariadb-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/mariadb-auth.conf
 [Definition]
 failregex = ^.*? \[?(?:Note|Warning|ERROR)\]? [Aa]ccess denied for user .*?@'<HOST>'(?: \(using password: (?:YES|NO)\))?
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/mariadb.conf
+    cat <<EOF >/etc/fail2ban/jail.d/mariadb.conf
 [mariadb-auth]
-enabled = true
-port = 3306
-filter = mariadb-auth
-logpath = $MARIADB_LOG
-backend = auto
+enabled  = true
+port     = 3306
+filter   = mariadb-auth
+logpath  = $MARIADB_LOG
+backend  = auto
 maxretry = 3
 bantime  = 24h
 EOF
-    fi
 }

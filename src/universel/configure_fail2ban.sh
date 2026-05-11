@@ -2,13 +2,15 @@ configure_fail2ban() {
     if command -v fail2ban-client >/dev/null; then
         log "INFO" "Generating Fail2ban configuration (Universal Mode)..."
 
-        # --- SECURITY FIX: PURGE CONFLICTING DEFAULT JAILS ---
+        # --- SECURITY FIX: PURGE CONFLICTING DEFAULT JAILS & FILTERS ---
+        log "INFO" "Purging legacy definitions to prevent rule conflicts..."
         if [[ -d /etc/fail2ban/jail.d ]]; then
             rm -rf /etc/fail2ban/jail.d
         fi
         mkdir -p /etc/fail2ban/jail.d
         chmod 755 /etc/fail2ban/jail.d
-        log "INFO" "Purged fail2ban/jail.d/ directory entirely to enforce absolute Zero Trust."
+        rm -f /etc/fail2ban/filter.d/syswarden-*.conf 2>/dev/null || true
+        log "INFO" "Purged fail2ban/jail.d/ and old filters entirely to enforce absolute Zero Trust."
 
         if [[ -f /etc/fail2ban/jail.local ]] && [[ ! -f /etc/fail2ban/jail.local.bak ]]; then
             cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.bak
@@ -131,11 +133,23 @@ EOF
         fi
 
         # 6. DYNAMIC MODULE INVOCATION
+        log "INFO" "Applying Layer 7 Application Firewall Rules (Fail2ban)..."
+
+        # --- SURGICAL WEB APP DISCOVERY ---
+        # Instantiates variables to isolate Jails matching only the active environment.
+        # This will securely override the fallback SYSW_RCE_LOGS defined in Step 5.
+        if command -v discover_web_apps >/dev/null 2>&1; then
+            discover_web_apps
+        fi
+        # ----------------------------------
+
         log "INFO" "Executing modular jail definitions..."
         local jail_functions
         jail_functions=$(compgen -A function | grep '^syswarden_jail_' || true)
         if [[ -n "$jail_functions" ]]; then
             for func in $jail_functions; do
+                # Executes the function. The Fail-Fast pattern inside each
+                # function will instantly abort if conditions aren't met.
                 "$func"
             done
         else

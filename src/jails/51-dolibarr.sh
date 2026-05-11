@@ -1,18 +1,23 @@
 syswarden_jail_dolibarr() {
-    if [[ -n "${SYSW_RCE_LOGS:-}" ]]; then
-        log "INFO" "Web access logs detected. Enabling Dolibarr ERP Guard."
+    # 1. Fail-Fast: Check against discovery engine results (Zero I/O overhead)
+    if [[ -z "${SYSW_RCE_LOGS:-}" ]]; then
+        return 0
+    fi
 
-        # Create Filter for Dolibarr Authentication Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-dolibarr.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-dolibarr.conf
+    log "INFO" "Web access logs detected. Enabling Dolibarr ERP Guard."
+
+    # Create Filter for Dolibarr Authentication Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-dolibarr.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-dolibarr.conf
 [Definition]
 # [DEVSECOPS FIX] Bounded the URI parsing to strictly prevent query string ReDoS.
 failregex = ^<HOST> \S+ \S+ \[[^\]]+\] "POST [^"]*?(?:/htdocs/index\.php|/index\.php|/api/index\.php/login)[^"]*?" (?:200|401|403)
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-dolibarr.conf
+    # Write directly to jail.d
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-dolibarr.conf
 [syswarden-dolibarr]
 enabled  = true
 port     = http,https
@@ -22,5 +27,4 @@ backend  = auto
 maxretry = 5
 bantime  = 24h
 EOF
-    fi
 }

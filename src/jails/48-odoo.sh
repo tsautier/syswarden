@@ -1,26 +1,39 @@
 syswarden_jail_odoo() {
+    # 1. Fail-Fast: Verify native daemon or process execution at the absolute top
+    if ! systemctl is-active --quiet odoo 2>/dev/null &&
+        ! systemctl is-active --quiet odoo-server 2>/dev/null &&
+        ! pgrep -x "odoo" >/dev/null 2>&1 &&
+        ! pgrep -x "odoo-bin" >/dev/null 2>&1; then
+        return 0
+    fi
+
     local ODOO_LOG=""
 
-    # Search for standard Odoo log files
+    # 2. Dynamic log path discovery
     if [[ -f "/var/log/odoo/odoo-server.log" ]]; then
         ODOO_LOG="/var/log/odoo/odoo-server.log"
     elif [[ -f "/var/log/odoo/odoo.log" ]]; then
         ODOO_LOG="/var/log/odoo/odoo.log"
     fi
 
-    if [[ -n "$ODOO_LOG" ]]; then
-        log "INFO" "Odoo ERP logs detected. Enabling Odoo Guard."
+    # 3. Fail-Fast: Ensure logs exist to prevent Fail2ban crash on startup
+    if [[ -z "$ODOO_LOG" ]]; then
+        return 0
+    fi
 
-        # Create Filter for Odoo Authentication Failures
-        if [[ ! -f "/etc/fail2ban/filter.d/syswarden-odoo.conf" ]]; then
-            cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-odoo.conf
+    log "INFO" "Odoo ERP daemon and logs detected. Enabling Odoo Guard."
+
+    # Create Filter for Odoo Authentication Failures
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-odoo.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-odoo.conf
 [Definition]
 failregex = ^.*? \d+ INFO \S+ odoo\.addons\.base\.models\.res_users: Login failed for db:.*? login:.*? from <HOST>.*$
 ignoreregex = 
 EOF
-        fi
+    fi
 
-        cat <<EOF >/etc/fail2ban/jail.d/syswarden-odoo.conf
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-odoo.conf
 [syswarden-odoo]
 enabled  = true
 port     = http,https,8069
@@ -30,5 +43,4 @@ backend  = auto
 maxretry = 4
 bantime  = 24h
 EOF
-    fi
 }
