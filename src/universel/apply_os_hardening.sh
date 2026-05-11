@@ -57,4 +57,41 @@ apply_os_hardening() {
             done
         fi
     done
+
+    # 4. Log Anti-Forging & CRLF Mitigation (Rsyslog & Journald)
+    log "INFO" "Applying strict anti-forging rules to system logging daemons..."
+
+    # Rsyslog Hardening: Escape control characters to block CRLF injection
+    # This prevents attackers from injecting \n to forge fake "cron" or "syslog" entries
+    if [[ -d "/etc/rsyslog.d" ]]; then
+        local RSYSLOG_SEC_CONF="/etc/rsyslog.d/99-syswarden-antiforging.conf"
+
+        cat <<'EOF' >"$RSYSLOG_SEC_CONF"
+# --- SysWarden: Anti Log Forging & CRLF Mitigation ---
+# Explicitly enforce escaping of control characters (including \n, \r)
+# This converts malicious newlines into safe escape sequences (e.g., #012)
+$EscapeControlCharactersOnReceive on
+
+# Drop trailing line feeds to maintain log integrity
+$DropTrailingLFOnReception on
+EOF
+
+        # Validate and restart rsyslog silently
+        if rsyslogd -N1 >/dev/null 2>&1; then
+            systemctl restart rsyslog 2>/dev/null || true
+            log "SUCCESS" "Rsyslog anti-forging module deployed."
+        else
+            log "ERROR" "Rsyslog configuration validation failed. Reverting."
+            rm -f "$RSYSLOG_SEC_CONF"
+        fi
+    fi
+
+    # Systemd Journald Hardening (Defense in Depth)
+    # Ensure ForwardToSyslog doesn't pass raw unescaped payloads if manipulated
+    if [[ -f "/etc/systemd/journald.conf" ]]; then
+        if ! grep -q "^ForwardToSyslog=yes" "/etc/systemd/journald.conf"; then
+            sed -i 's/.*ForwardToSyslog.*/ForwardToSyslog=yes/' "/etc/systemd/journald.conf" 2>/dev/null || true
+            systemctl restart systemd-journald 2>/dev/null || true
+        fi
+    fi
 }

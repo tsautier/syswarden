@@ -161,7 +161,7 @@ EOF
                 if (c == 0) printf "add element netdev syswarden_hw_drop %s { %s", set_name, $1
                 else printf ", %s", $1
                 c++
-                if (c >= 2500) { printf " }\n"; c=0 }
+                if (c >= 500) { printf " }\n"; c=0 } # Chunk reduced to 500 to prevent Netlink 64KB payload limits in LXC
             }
             END { if (c > 0) printf " }\n" }' "$FINAL_LIST" >>"$TMP_DIR/syswarden.nft"
         fi
@@ -174,7 +174,7 @@ EOF
                 if (c == 0) printf "add element netdev syswarden_hw_drop %s { %s", set_name, $1
                 else printf ", %s", $1
                 c++
-                if (c >= 2500) { printf " }\n"; c=0 }
+                if (c >= 500) { printf " }\n"; c=0 } # Chunk reduced to 500 to prevent Netlink 64KB payload limits in LXC
             }
             END { if (c > 0) printf " }\n" }' "$GEOIP_FILE" >>"$TMP_DIR/syswarden.nft"
         fi
@@ -187,7 +187,7 @@ EOF
                 if (c == 0) printf "add element netdev syswarden_hw_drop %s { %s", set_name, $1
                 else printf ", %s", $1
                 c++
-                if (c >= 2500) { printf " }\n"; c=0 }
+                if (c >= 500) { printf " }\n"; c=0 } # Chunk reduced to 500 to prevent Netlink 64KB payload limits in LXC
             }
             END { if (c > 0) printf " }\n" }' "$ASN_FILE" >>"$TMP_DIR/syswarden.nft"
         fi

@@ -124,7 +124,7 @@ generate_dashboard() {
             <svg style="color: var(--sw-brand-icon);" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <div class="d-none d-md-flex align-items-baseline gap-2">
                 <h5 class="mb-0 fw-bold text-uppercase" style="letter-spacing: 0.5px; font-size: 1rem; color: var(--sw-text);">SYSWARDEN</h5>
-                <span class="font-mono text-muted" style="font-size: 0.80rem;">v0.33.0</span>
+                <span class="font-mono text-muted" style="font-size: 0.80rem;">v0.33.1</span>
             </div>
         </div>
         
@@ -674,6 +674,7 @@ $(echo -e "$APACHE_ALLOW_RULES")
     Header always set Content-Security-Policy "default-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://api.github.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com;"
     Header always set X-Frame-Options "DENY"
     Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "0"
     Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
@@ -722,6 +723,7 @@ $(echo -e "$NGINX_ALLOW_RULES")
     add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://api.github.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com;" always;
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "0" always;
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
