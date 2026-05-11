@@ -1,6 +1,22 @@
 syswarden_jail_aibots() {
-    # 1. Fail-Fast: Check against discovery engine results (Zero I/O overhead)
+    # 1. Fail-Fast: Check against discovery engine results
     if [[ -z "${SYSW_RCE_LOGS:-}" ]]; then
+        return 0
+    fi
+
+    # 2. Strict Log Sanitization: Remove commas and verify physical existence
+    local CLEAN_LOGS="${SYSW_RCE_LOGS//,/ }"
+    local HAS_LOGS=false
+
+    for log_pattern in $CLEAN_LOGS; do
+        if ls $log_pattern >/dev/null 2>&1; then
+            HAS_LOGS=true
+            break
+        fi
+    done
+
+    # Abort if no log files match the wildcards yet to prevent Fail2ban crash
+    if [[ "$HAS_LOGS" != "true" ]]; then
         return 0
     fi
 
@@ -16,14 +32,14 @@ ignoreregex =
 EOF
     fi
 
-    # Write directly to jail.d
+    # Write directly to jail.d using the sanitized log path
     # maxretry = 1 for aggressive blocking of data scrapers
     cat <<EOF >/etc/fail2ban/jail.d/syswarden-aibots.conf
 [syswarden-aibots]
 enabled  = true
 port     = http,https
 filter   = syswarden-aibots
-logpath  = $SYSW_RCE_LOGS
+logpath  = $CLEAN_LOGS
 backend  = auto
 maxretry = 1
 bantime  = 48h
