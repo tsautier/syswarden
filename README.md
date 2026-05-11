@@ -1,20 +1,20 @@
 <!-- Location: Top of README.md -->
 <!-- Replace the existing <p align="center"> block with this updated version -->
 <p align="center">
-  <!-- GitHub Actions Workflows -->
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml">
     <img src="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml/badge.svg" alt="SysWarden Security Audit">
+  </a>
+  <a href="https://github.com/duggytuxy/syswarden/actions/workflows/scorecard.yml">
+    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/scorecard.yml/badge.svg" alt="OSSF Scorecard Supply Chain Security">
   </a>
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/dependabot/dependabot-updates">
     <img src="https://github.com/duggytuxy/syswarden/actions/workflows/dependabot/dependabot-updates/badge.svg" alt="Dependabot Updates">
   </a>
 
-  <!-- Dynamic GitHub License -->
   <a href="https://github.com/duggytuxy/syswarden/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/duggytuxy/syswarden?logo=license" alt="GitHub License">
   </a>
 
-  <!-- Custom Project Badges (Classic Style) -->
   <img src="https://img.shields.io/badge/Open%20Source-100%25-brightgreen?logo=opensourceinitiative" alt="Open Source">
   <img src="https://img.shields.io/badge/Status-Production_Ready-blue?logo=status" alt="Production Ready">
   <img src="https://img.shields.io/badge/Security-Zero_Trust-darkred?logo=security" alt="Zero Trust">
