@@ -12,49 +12,33 @@ discover_web_apps() {
     export SYSW_HAS_LARAVEL=false
 
     local web_conf_dirs=""
-    local raw_web_patterns=""
+    local web_logs=""
 
-    # 1. Native detection of active Web Servers
+    # PYTHON CONFIGPARSER FIX: Multi-line indentation for multiple log files
+    # This ensures Fail2ban parses each log path strictly as a file, avoiding the 'head/tail' ValueError
+    local nl=$'\n          '
+
+    # 1. Native detection of active Web Servers (Multi-line formatted)
     if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then
-        # Standard patterns for Nginx
-        raw_web_patterns="/var/log/nginx/*access.log /var/log/nginx/*error.log"
+        web_logs="/var/log/nginx/*access.log${nl}/var/log/nginx/*error.log"
         web_conf_dirs="/etc/nginx"
+        touch /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null || true
     fi
 
     if command -v apache2 >/dev/null 2>&1 && systemctl is-active --quiet apache2 2>/dev/null; then
-        raw_web_patterns="${raw_web_patterns:+$raw_web_patterns }/var/log/apache2/*access.log /var/log/apache2/*error.log"
+        web_logs="${web_logs:+$web_logs$nl}/var/log/apache2/*access.log${nl}/var/log/apache2/*error.log"
         web_conf_dirs="${web_conf_dirs:+$web_conf_dirs }/etc/apache2"
+        touch /var/log/apache2/access.log /var/log/apache2/error.log 2>/dev/null || true
     elif command -v httpd >/dev/null 2>&1 && systemctl is-active --quiet httpd 2>/dev/null; then
-        raw_web_patterns="${raw_web_patterns:+$raw_web_patterns }/var/log/httpd/*access.log /var/log/httpd/*error_log"
+        web_logs="${web_logs:+$web_logs$nl}/var/log/httpd/*access.log${nl}/var/log/httpd/*error_log"
         web_conf_dirs="${web_conf_dirs:+$web_conf_dirs }/etc/httpd"
+        touch /var/log/httpd/access_log /var/log/httpd/error_log 2>/dev/null || true
     fi
 
-    # --- LOG ASSURANCE ENGINE (v0.32.5 - ShellCheck Compliance) ---
-    local verified_patterns=""
-    if [[ -n "$raw_web_patterns" ]]; then
-        for pattern in $raw_web_patterns; do
-            # SC2155 FIX: Declare and assign separately to avoid masking return values
-            local log_dir base_name
-            log_dir=$(dirname "$pattern")
-            base_name=$(basename "$pattern" | sed 's/^\*//')
-
-            if [[ -d "$log_dir" ]]; then
-                # PURPLE TEAM FIX: Ensure at least one file exists to prevent Fail2ban crash
-                # shellcheck disable=SC2086
-                if ! ls $pattern >/dev/null 2>&1; then
-                    touch "$log_dir/$base_name" 2>/dev/null || true
-                fi
-                verified_patterns="${verified_patterns:+$verified_patterns }$pattern"
-            fi
-        done
-    fi
-    # Export the space-separated patterns containing wildcards
-    export SYSW_RCE_LOGS="${verified_patterns}"
-    # ---------------------------------------------------------------
+    export SYSW_RCE_LOGS="${web_logs}"
 
     # 2. Application Heuristic Discovery (Only if a Web Server runs)
     if [[ -n "$web_conf_dirs" ]]; then
-        # Fast configuration parsing (Reverse lookup)
         grep -riEq 'dolibarr' $web_conf_dirs 2>/dev/null && SYSW_HAS_DOLIBARR=true || true
         grep -riEq 'prestashop' $web_conf_dirs 2>/dev/null && SYSW_HAS_PRESTASHOP=true || true
         grep -riEq 'wp-config|wordpress' $web_conf_dirs 2>/dev/null && SYSW_HAS_WORDPRESS=true || true
@@ -63,7 +47,7 @@ discover_web_apps() {
         grep -riEq 'phpmyadmin' $web_conf_dirs 2>/dev/null && SYSW_HAS_PHPMYADMIN=true || true
         grep -riEq 'laravel|artisan' $web_conf_dirs 2>/dev/null && SYSW_HAS_LARAVEL=true || true
 
-        # Shallow filesystem probing
+        # Shallow filesystem probing (Depth 4 max for strict I/O optimization)
         for root in /var/www /usr/share/nginx/html /opt; do
             if [[ -d "$root" ]]; then
                 find "$root" -maxdepth 4 -type f -name "wp-config.php" 2>/dev/null | head -n 1 | grep -q . && SYSW_HAS_WORDPRESS=true || true
