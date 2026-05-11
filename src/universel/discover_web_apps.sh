@@ -32,25 +32,22 @@ discover_web_apps() {
     local verified_logs=""
     if [[ -n "$raw_web_logs" ]]; then
         for pattern in $raw_web_logs; do
-            # Use a local array to force shell globbing expansion (e.g., *.log -> access.log error.log)
-            # This ensures Fail2ban receives absolute file paths instead of literal wildcards
-            # shellcheck disable=SC2086
+            # We explicitly allow word splitting and globbing here to expand wildcards.
+            # shellcheck disable=SC2206
             local files=($pattern)
 
-            # Check if the first element of the expanded array physically exists on the disk
-            # If the wildcard doesn't match anything, the first element remains the literal pattern
+            # Check if the first element of the expanded array physically exists
             if [[ -e "${files[0]}" ]]; then
-                # Iterate through all expanded file paths and append them to the verified list
+                # Iterate through all expanded file paths and append them
                 for file in "${files[@]}"; do
-                    # Add to the string with a space separator to comply with Fail2ban's logpath syntax
+                    # Add to the string with a space separator for Fail2ban compatibility
                     verified_logs="${verified_logs:+$verified_logs }$file"
                 done
             fi
         done
     fi
 
-    # Export a clean, space-separated list of REAL existing files to the global environment
-    # This prevents Fail2ban from crashing (Exit 255) due to missing log targets or invalid commas
+    # Export a clean, space-separated list of REAL existing files
     export SYSW_RCE_LOGS="${verified_logs}"
     # -------------------------------------------------------------
 
