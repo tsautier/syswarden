@@ -29,17 +29,17 @@ discover_web_apps() {
         web_conf_dirs="${web_conf_dirs:+$web_conf_dirs }/etc/httpd"
     fi
 
-    # --- LOG ASSURANCE ENGINE (Witness Strategy) ---
+    # --- LOG ASSURANCE ENGINE (v0.32.5 - ShellCheck Compliance) ---
     local verified_patterns=""
     if [[ -n "$raw_web_patterns" ]]; then
         for pattern in $raw_web_patterns; do
-            local log_dir=$(dirname "$pattern")
-            # Extract base name without leading wildcard (e.g., *access.log -> access.log)
-            local base_name=$(basename "$pattern" | sed 's/^\*//')
+            # SC2155 FIX: Declare and assign separately to avoid masking return values
+            local log_dir base_name
+            log_dir=$(dirname "$pattern")
+            base_name=$(basename "$pattern" | sed 's/^\*//')
 
             if [[ -d "$log_dir" ]]; then
-                # PURPLE TEAM FIX: Ensure at least one file exists to prevent Fail2ban crash (Exit 255)
-                # If no file matches the wildcard, create a witness file.
+                # PURPLE TEAM FIX: Ensure at least one file exists to prevent Fail2ban crash
                 # shellcheck disable=SC2086
                 if ! ls $pattern >/dev/null 2>&1; then
                     touch "$log_dir/$base_name" 2>/dev/null || true
@@ -50,7 +50,7 @@ discover_web_apps() {
     fi
     # Export the space-separated patterns containing wildcards
     export SYSW_RCE_LOGS="${verified_patterns}"
-    # ---------------------------------------------------------
+    # ---------------------------------------------------------------
 
     # 2. Application Heuristic Discovery (Only if a Web Server runs)
     if [[ -n "$web_conf_dirs" ]]; then
