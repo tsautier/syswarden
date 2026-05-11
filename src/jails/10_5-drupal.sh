@@ -1,27 +1,11 @@
 syswarden_jail_drupal() {
     # 1. Fail-Fast: Surgical check against discovery engine state
+    # Aborts instantly if Drupal was not found OR if no web logs exist
     if [[ "${SYSW_HAS_DRUPAL:-false}" != "true" ]] || [[ -z "${SYSW_RCE_LOGS:-}" ]]; then
         return 0
     fi
 
-    # 2. Strict Log Sanitization: Remove commas and verify physical existence
-    local CLEAN_LOGS="${SYSW_RCE_LOGS//,/ }"
-    local HAS_LOGS=false
-
-    for log_pattern in $CLEAN_LOGS; do
-        # Evaluate wildcard safely without triggering set -e on failure
-        if ls $log_pattern >/dev/null 2>&1; then
-            HAS_LOGS=true
-            break
-        fi
-    done
-
-    # Abort if no log files match the wildcards yet
-    if [[ "$HAS_LOGS" != "true" ]]; then
-        return 0
-    fi
-
-    log "INFO" "Drupal CMS detected and logs verified. Enabling specific protections."
+    log "INFO" "Drupal CMS detected. Enabling specific protections."
 
     # Create Filter for Drupal Authentication Failures
     if [[ ! -f "/etc/fail2ban/filter.d/drupal-auth.conf" ]]; then
@@ -32,13 +16,13 @@ ignoreregex =
 EOF
     fi
 
-    # Write directly to jail.d using the sanitized space-separated log path
+    # Write directly to jail.d using the dynamic centralized log path
     cat <<EOF >/etc/fail2ban/jail.d/drupal.conf
 [drupal-auth]
 enabled  = true
 port     = http,https
 filter   = drupal-auth
-logpath  = $CLEAN_LOGS
+logpath  = $SYSW_RCE_LOGS
 backend  = auto
 maxretry = 3
 bantime  = 24h
