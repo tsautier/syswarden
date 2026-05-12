@@ -19,14 +19,15 @@ syswarden_jail_portscan() {
 
     log "INFO" "Kernel logs detected. Enabling Port Scanner Guard."
 
-    # Create Filter for SysWarden-BLOCK iptables/nftables prefix
+    # Create Filter for SysWarden kernel drop prefixes (BLOCK, GEO, ASN)
     if [[ ! -f "/etc/fail2ban/filter.d/syswarden-portscan.conf" ]]; then
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-portscan.conf
 [INCLUDES]
 before = common.conf
 
 [Definition]
-failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-BLOCK\].*?SRC=<HOST> 
+# Matches standard blocks, geoblocking drops, and ASN drops
+failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-(?:BLOCK|GEO|ASN)\].*?SRC=<HOST>
 ignoreregex = 
 EOF
     fi
