@@ -15,6 +15,7 @@
     <img src="https://img.shields.io/github/license/duggytuxy/syswarden?logo=license" alt="GitHub License">
   </a>
 
+  <img src="https://img.shields.io/badge/Compliance-EU_CRA_Ready-003399?logo=shield&logoColor=white" alt="EU CRA Ready">
   <img src="https://img.shields.io/badge/Open%20Source-100%25-brightgreen?logo=opensourceinitiative" alt="Open Source">
   <img src="https://img.shields.io/badge/Status-Production_Ready-blue?logo=status" alt="Production Ready">
   <img src="https://img.shields.io/badge/Security-Zero_Trust-darkred?logo=security" alt="Zero Trust">
