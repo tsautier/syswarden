@@ -60,12 +60,6 @@ EOF
             if [[ -n "$dns_ips" ]]; then f2b_ignoreip="$f2b_ignoreip $dns_ips"; fi
         fi
 
-        if [[ -s "$WHITELIST_FILE" ]]; then
-            local wl_ips
-            wl_ips=$(grep -vE '^\s*#|^\s*$' "$WHITELIST_FILE" | tr '\n' ' ' || true)
-            f2b_ignoreip="$f2b_ignoreip $wl_ips"
-        fi
-
         # 4. Generate Core jail.local (Defaults & SSH)
         cat <<EOF >/etc/fail2ban/jail.local
 [DEFAULT]

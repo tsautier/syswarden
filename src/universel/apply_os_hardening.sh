@@ -102,4 +102,14 @@ EOF
             systemctl restart systemd-journald 2>/dev/null || true
         fi
     fi
+
+    # 5. Restrict Auth Log Permissions (F-008)
+    if [[ -f "/var/log/auth.log" ]]; then
+        chmod 0640 /var/log/auth.log
+        chown root:adm /var/log/auth.log 2>/dev/null || chown root:root /var/log/auth.log
+    fi
+    # Protect logrotate
+    if [[ -f "/etc/logrotate.d/rsyslog" ]]; then
+        sed -i 's/create 644 root adm/create 640 root adm/g' /etc/logrotate.d/rsyslog 2>/dev/null || true
+    fi
 }
