@@ -11,8 +11,8 @@ syswarden_jail_proxy_abuse() {
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-proxy-abuse.conf
 [Definition]
 # Detects exotic HTTP methods (WebDAV/Tunneling) and absolute URIs used in proxy probing
-failregex = ^<HOST> \S+ \S+ \[[^\]]+\] "(?:CONNECT|TRACE|TRACK|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK) [^"]*?" \d{3}
-            ^<HOST> \S+ \S+ \[[^\]]+\] "(?:GET|POST|HEAD) (?:http|https)(?:\x253A|:)//[^"]*?" \d{3}
+failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:CONNECT|TRACE|TRACK|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK) [^"]*?" \d{3}
+            ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD) (?:http|https)(?:\x253A|:)//[^"]*?" \d{3}
 ignoreregex = 
 EOF
     fi

@@ -11,7 +11,7 @@ syswarden_jail_revshell() {
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-revshell.conf
 [Definition]
 # Detects common RCE patterns, shell invocations, and encoded payloads in URI/Requests
-failregex = ^<HOST> \S+ \S+ \[.*?\] "(?:GET|POST|HEAD|PUT|DELETE|PATCH|OPTIONS) [^"]*?(?:/bin/bash|\x252Fbin\x252Fbash|/bin/sh|\x252Fbin\x252Fsh|nc(?:\s+|\x2520|\x2509|\+)+(?:-e|-c)|(?:curl|wget)(?:\s+|\x2520|\x2509|\+)+(?:-q|-s|-O|http)|python(?:\s+|\x2520|\x2509|\+)+-c|php(?:\s+|\x2520|\x2509|\+)+-r|(?:\x253B|;|\x257C|\||`|\x2560|\$|\x2524)(?:\s+|\x2520|\x2509|\+)*(?:bash|sh|nc|curl|wget|chmod)).*?" .*$
+failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD|PUT|DELETE|PATCH|OPTIONS) [^"]*?(?:/bin/bash|\x252Fbin\x252Fbash|/bin/sh|\x252Fbin\x252Fsh|nc(?:\s+|\x2520|\x2509|\+)+(?:-e|-c)|(?:curl|wget)(?:\s+|\x2520|\x2509|\+)+(?:-q|-s|-O|http)|(?:python|perl|ruby|php|node|lua|awk)(?:\s+|\x2520|\x2509|\+)+-(?:c|e|r)|(?:\x253B|;|\x257C|\||`|\x2560|\$|\x2524)(?:\s+|\x2520|\x2509|\+)*(?:bash|sh|nc|curl|wget|chmod)).*?" .*$
 ignoreregex = 
 EOF
     fi

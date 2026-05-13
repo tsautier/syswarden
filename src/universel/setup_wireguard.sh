@@ -1,5 +1,11 @@
 setup_wireguard() {
     if [[ "${USE_WIREGUARD:-n}" != "y" ]]; then
+        if command -v systemctl >/dev/null && systemctl is-active --quiet wg-quick@wg0; then
+            log "INFO" "Disabling WireGuard VPN as per configuration..."
+            wg-quick down wg0 2>/dev/null || true
+            systemctl disable --now wg-quick@wg0 >/dev/null 2>&1 || true
+            rm -f /etc/wireguard/wg0.conf
+        fi
         return
     fi
 

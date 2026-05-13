@@ -93,8 +93,9 @@ EOF
         if [[ ! -f "/etc/fail2ban/filter.d/syswarden-recidive.conf" ]]; then
             cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-recidive.conf
 [Definition]
-failregex = ^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]+ fail2ban\.(?:actions|filter)\s+\[[a-zA-Z0-9_-]+\]\s+(?:Ban|Found)\s+<HOST>\s*$
-ignoreregex = ^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]+ fail2ban\.(?:actions|filter)\s+\[[a-zA-Z0-9_-]+\]\s+(?:Restore )?(?:Unban|unban)\s+<HOST>\s*$
+# Matches fail2ban logs including PID and NOTICE tags for correct recidive escalation
+failregex = fail2ban\.actions.*NOTICE\s+\[[^\]]+\]\s+(?:Ban|Found)\s+<HOST>
+ignoreregex = fail2ban\.actions.*NOTICE\s+\[[^\]]+\]\s+(?:Restore )?(?:Unban|unban)\s+<HOST>
 EOF
         fi
 
