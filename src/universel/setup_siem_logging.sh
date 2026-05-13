@@ -29,6 +29,17 @@ setup_siem_logging() {
             fi
         fi
         # -----------------------------------------------------
+
+        # --- SECURITY FIX: Anti-Loopback (F-013) ---
+        local PUBLIC_IP
+        PUBLIC_IP=$(curl -sL4 https://ifconfig.me 2>/dev/null || ip -4 addr show | grep -oEo 'inet [0-9.]+' | awk '{print $2}' | grep -v '127.0.0.1' | head -n 1 || true)
+
+        if [[ "$SIEM_IP" == "127.0.0.1" || "$SIEM_IP" == "$PUBLIC_IP" ]]; then
+            log "ERROR" "SIEM IP matches localhost or public host IP. Self-loop detected. Disabling SIEM forwarding."
+            SIEM_ENABLED="n"
+        fi
+        # -------------------------------------------
+
         log "INFO" "Auto Mode: SIEM config loaded via env vars."
     else
         echo "Forward EXCLUSIVELY Fail2ban L7 attack logs to an external SIEM?"
@@ -80,7 +91,6 @@ input(type="imfile"
 
 if \$programname == 'fail2ban' then {
     action(type="omfwd" target="$SIEM_IP" port="$SIEM_PORT" protocol="$SIEM_PROTO")
-    stop
 }
 EOF
         if command -v systemctl >/dev/null 2>&1; then

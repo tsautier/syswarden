@@ -1,10 +1,16 @@
 setup_cron_autoupdate() {
     # No manuel cron update function
     if [[ "${1:-}" != "update" ]] && [[ "${1:-}" != "cron-update" ]]; then
-        local script_path
-        script_path=$(realpath "$0")
+        local origin_path
+        origin_path=$(realpath "$0")
+        local script_path="/usr/local/sbin/syswarden-cron-update"
         local cron_file="/etc/cron.d/syswarden-update"
         local random_min=$((RANDOM % 60))
+
+        # Sécurisation du binaire (F-001)
+        cp -f "$origin_path" "$script_path"
+        chown root:root "$script_path"
+        chmod 700 "$script_path"
 
         # FIX DEVSECOPS
         echo "$random_min * * * * root $script_path cron-update >/dev/null 2>&1" >"$cron_file"

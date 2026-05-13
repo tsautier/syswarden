@@ -25,11 +25,18 @@ EOF
 
         # 2. Firewall Backend & OS Optimization
         export SYSW_F2B_ACTION="iptables-multiport"
+        export SYSW_F2B_ACTION_ALLPORTS="iptables-allports"
+
         if [[ "$FIREWALL_BACKEND" == "firewalld" ]]; then
             export SYSW_F2B_ACTION="firewallcmd-ipset"
+            export SYSW_F2B_ACTION_ALLPORTS="firewallcmd-ipset"
         elif [[ "$FIREWALL_BACKEND" == "nftables" ]]; then
             export SYSW_F2B_ACTION="nftables-multiport"
-        elif [[ "$FIREWALL_BACKEND" == "ufw" ]]; then export SYSW_F2B_ACTION="ufw"; fi
+            export SYSW_F2B_ACTION_ALLPORTS="nftables-allports"
+        elif [[ "$FIREWALL_BACKEND" == "ufw" ]]; then
+            export SYSW_F2B_ACTION="ufw"
+            export SYSW_F2B_ACTION_ALLPORTS="ufw"
+        fi
 
         export SYSW_OS_BACKEND="auto"
         if command -v journalctl >/dev/null 2>&1 && systemctl is-active --quiet systemd-journald 2>/dev/null; then
@@ -84,9 +91,10 @@ bantime  = 4w
 [sshd]
 enabled = true
 mode = aggressive
-port = ${SSH_PORT:-22}
+port = ${SSH_PORT:-ssh}
 logpath = %(sshd_log)s
 backend = $SYSW_OS_BACKEND
+banaction = $SYSW_F2B_ACTION_ALLPORTS
 EOF
 
         # Recidive Filter

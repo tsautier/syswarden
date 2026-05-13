@@ -124,7 +124,7 @@ generate_dashboard() {
             <svg style="color: var(--sw-brand-icon);" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             <div class="d-none d-md-flex align-items-baseline gap-2">
                 <h5 class="mb-0 fw-bold text-uppercase" style="letter-spacing: 0.5px; font-size: 1rem; color: var(--sw-text);">SYSWARDEN</h5>
-                <span class="font-mono text-muted" style="font-size: 0.80rem;">v0.33.6</span>
+                <span class="font-mono text-muted" style="font-size: 0.80rem;">v0.34.0</span>
             </div>
         </div>
         
@@ -543,24 +543,60 @@ generate_dashboard() {
                 } else { jailsEl.innerHTML = `<tr><td colspan="3" class="text-center text-muted small py-4">No active jails loaded.</td></tr>`; }
 
                 const bannedEl = document.getElementById('banned-ips-list');
+                bannedEl.innerHTML = ''; // Clear
                 if(data.layer7.banned_ips.length > 0) {
-                    bannedEl.innerHTML = [...data.layer7.banned_ips].reverse().map(entry => {
+                    [...data.layer7.banned_ips].reverse().forEach(entry => {
                         const mitreId = entry.mitre ? entry.mitre.split(':')[0] : 'T1499';
                         const mitreLabel = entry.mitre || 'Unknown';
                         
-                        // Removed the Timestamp column entirely as requested
-                        return `
-                        <tr>
-                            <td class="align-middle py-3 ps-4 font-mono"><a href="https://www.abuseipdb.com/check/${entry.ip}" target="_blank" rel="noopener noreferrer" class="text-decoration-none ip-font" style="color: var(--sw-text);">${entry.ip}</a></td>
-                            <td class="align-middle py-3 font-mono"><span class="badge rounded-pill" style="${getJailBadgeStyle(entry.jail)}">${entry.jail}</span></td>
-                            <td class="align-middle py-3 ps-3 font-mono">
-                                <a href="https://attack.mitre.org/techniques/${mitreId}/" target="_blank" rel="noopener noreferrer" class="text-decoration-none badge rounded-pill" style="${getJailBadgeStyle(entry.jail)} font-size: 0.70rem;">
-                                    ${mitreLabel}
-                                </a>
-                            </td>
-                            <td class="align-middle py-3 ps-4 pe-4 font-mono text-muted small text-nowrap" style="font-size: 0.75rem;">${entry.payload || 'N/A'}</td>
-                        </tr>`
-                    }).join('');
+                        const tr = document.createElement('tr');
+                        
+                        // IP
+                        const tdIp = document.createElement('td');
+                        tdIp.className = "align-middle py-3 ps-4 font-mono";
+                        const aIp = document.createElement('a');
+                        aIp.href = `https://www.abuseipdb.com/check/${entry.ip}`;
+                        aIp.target = "_blank";
+                        aIp.rel = "noopener noreferrer";
+                        aIp.className = "text-decoration-none ip-font";
+                        aIp.style.color = "var(--sw-text)";
+                        aIp.textContent = entry.ip;
+                        tdIp.appendChild(aIp);
+                        
+                        // Jail
+                        const tdJail = document.createElement('td');
+                        tdJail.className = "align-middle py-3 font-mono";
+                        const spanJail = document.createElement('span');
+                        spanJail.className = "badge rounded-pill";
+                        spanJail.setAttribute("style", getJailBadgeStyle(entry.jail));
+                        spanJail.textContent = entry.jail;
+                        tdJail.appendChild(spanJail);
+                        
+                        // Mitre
+                        const tdMitre = document.createElement('td');
+                        tdMitre.className = "align-middle py-3 ps-3 font-mono";
+                        const aMitre = document.createElement('a');
+                        aMitre.href = `https://attack.mitre.org/techniques/${mitreId}/`;
+                        aMitre.target = "_blank";
+                        aMitre.rel = "noopener noreferrer";
+                        aMitre.className = "text-decoration-none badge rounded-pill";
+                        aMitre.setAttribute("style", getJailBadgeStyle(entry.jail) + " font-size: 0.70rem;");
+                        aMitre.textContent = mitreLabel;
+                        tdMitre.appendChild(aMitre);
+                        
+                        // Payload 
+                        const tdPayload = document.createElement('td');
+                        tdPayload.className = "align-middle py-3 ps-4 pe-4 font-mono text-muted small text-nowrap";
+                        tdPayload.style.fontSize = "0.75rem";
+                        tdPayload.textContent = entry.payload || 'N/A';
+                        
+                        tr.appendChild(tdIp);
+                        tr.appendChild(tdJail);
+                        tr.appendChild(tdMitre);
+                        tr.appendChild(tdPayload);
+                        
+                        bannedEl.appendChild(tr);
+                    });
                 } else { 
                     bannedEl.innerHTML = `<tr><td colspan="4" class="text-center text-muted small py-5">Registry is empty. Architecture is secure.</td></tr>`; 
                 }
@@ -641,6 +677,9 @@ EOF
     fi
 
     # --- 5. WEB SERVER VHOST CONFIGURATION (Apache or Nginx) ---
+    local SERVER_IP
+    SERVER_IP=$(curl -sL4 https://ifconfig.me 2>/dev/null || wget -qO- https://ifconfig.me 2>/dev/null || ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1; i<=NF; i++) if ($i == "src") print $(i+1)}' | head -n 1 || echo "127.0.0.1")
+
     if command -v apache2 >/dev/null 2>&1 || command -v httpd >/dev/null 2>&1; then
         log "INFO" "Apache detected. Configuring Apache VHost for port 9999..."
         local APACHE_CONF_DIR="/etc/apache2/sites-available"
@@ -703,7 +742,16 @@ EOF
         cat <<EOF >"$NGINX_CONF_DIR/syswarden-ui.conf"
 server {
     $NGINX_HTTP2_DIRECTIVE
-    server_name _;
+    server_name ${SERVER_IP} localhost;
+
+    # Anti DNS-Rebinding Guard (F-011)
+    if (\$host !~* ^(${SERVER_IP}|localhost)$) {
+        return 444;
+    }
+
+    # Anti-SSRF / Cloud Metadata Guard (F-005)
+    if (\$uri ~* "^/metadata") { return 444; }
+    if (\$args ~* "(169\.254\.169\.254|2852039166|0xa9fea9fe|metadata\.google\.internal)") { return 444; }
 
     ssl_certificate $SSL_DIR/syswarden.crt;
     ssl_certificate_key $SSL_DIR/syswarden.key;
@@ -797,9 +845,6 @@ EOF
             systemctl restart nginx >/dev/null 2>&1 || true
         fi
     fi
-
-    local SERVER_IP
-    SERVER_IP=$(curl -sL4 https://ifconfig.me 2>/dev/null || wget -qO- https://ifconfig.me 2>/dev/null || ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i=1; i<=NF; i++) if ($i == "src") print $(i+1)}' | head -n 1 || echo "<YOUR_IP>")
 
     log "INFO" "Dashboard UI secured by Web Server at https://${SERVER_IP}:9999"
 }

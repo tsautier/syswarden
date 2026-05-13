@@ -740,4 +740,17 @@ EOF
             systemctl enable syswarden-ipset.service 2>/dev/null || true
         fi
     fi
+
+    # --- SECURITY FIX: Anti-IMDS Cloud Leak (F-015) ---
+    log "INFO" "Applying Egress filter for Cloud IMDS (169.254.169.254) to non-root users..."
+    if command -v iptables >/dev/null 2>&1; then
+        while iptables -D OUTPUT -d 169.254.169.254 -m owner ! --uid-owner 0 -j DROP 2>/dev/null; do :; done
+        iptables -I OUTPUT 1 -d 169.254.169.254 -m owner ! --uid-owner 0 -j DROP 2>/dev/null || true
+    fi
+    if command -v nft >/dev/null 2>&1; then
+        if nft list table inet filter >/dev/null 2>&1; then
+            nft add rule inet filter output ip daddr 169.254.169.254 skuid != 0 drop 2>/dev/null || true
+        fi
+    fi
+    # --------------------------------------------------
 }

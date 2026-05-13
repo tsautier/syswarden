@@ -24,9 +24,8 @@ auto_whitelist_admin() {
 
     # Ultimate fallback via SSHD sockets if no TTY is detected (e.g. CI/CD Pipeline)
     if [[ -z "$admin_ip" || ! "$admin_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        if command -v ss >/dev/null; then
-            admin_ip=$(ss -tnp 2>/dev/null | grep -i 'estab' | grep -i 'sshd' | awk '{print $5}' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
-        fi
+        log "WARN" "Could not safely determine Admin IP from environment. Skipping fallback to prevent hijacking."
+        return 0
     fi
 
     # Process the IP
@@ -49,6 +48,9 @@ auto_whitelist_admin() {
             if ! grep -q "^${admin_ip}$" "$WHITELIST_FILE" 2>/dev/null; then
                 log "INFO" "Auto-whitelisting current admin SSH session IP: $admin_ip"
                 echo "$admin_ip" >>"$WHITELIST_FILE"
+
+                # --- SECURITY FIX: Piste d'audit (F-007) ---
+                logger -p auth.notice -t syswarden "auto_whitelist_admin: authorized IP $admin_ip to nginx whitelist"
             fi
         fi
     else
