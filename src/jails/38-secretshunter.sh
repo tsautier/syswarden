@@ -11,7 +11,7 @@ syswarden_jail_secretshunter() {
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-secretshunter.conf
 [Definition]
 # Detects access attempts to critical configuration files, private keys, and DB backups
-failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD|PUT) .*(?:/(?:\.|%2e)env[^ ]*|/(?:\.|%2e)git/?.*|/(?:\.|%2e)aws/?.*|/(?:\.|%2e)ssh/?.*|/id_rsa[^ ]*|/id_ed25519[^ ]*|/[^ ]*\.(?:sql|bak|swp|db|sqlite3?)(?:\.gz|\.zip)?|/docker-compose\.ya?ml|/wp-config\.php\.(?:bak|save|old|txt|zip)) HTTP/.*" \d{3} .*$
+failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD|PUT) .*(?:/(?:\.|\x252e)env[^ ]*|/(?:\.|\x252e)git/?.*|/(?:\.|\x252e)aws/?.*|/(?:\.|\x252e)ssh/?.*|/id_rsa[^ ]*|/id_ed25519[^ ]*|/[^ ]*\.(?:sql|bak|swp|db|sqlite3?)(?:\.gz|\.zip)?|/docker-compose\.ya?ml|/wp-config\.php\.(?:bak|save|old|txt|zip)) HTTP/.*" \d{3} .*$
 ignoreregex = 
 EOF
     fi
