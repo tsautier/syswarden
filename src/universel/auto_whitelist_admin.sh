@@ -49,7 +49,7 @@ auto_whitelist_admin() {
                 log "INFO" "Auto-whitelisting current admin SSH session IP: $admin_ip"
                 echo "$admin_ip" >>"$WHITELIST_FILE"
 
-                # --- SECURITY FIX: Piste d'audit (F-007) ---
+                # --- SECURITY FIX: (F-007) ---
                 logger -p auth.notice -t syswarden "auto_whitelist_admin: authorized IP $admin_ip to nginx whitelist"
             fi
         fi
