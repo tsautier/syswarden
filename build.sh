@@ -51,7 +51,7 @@ for file in src/universel/*.sh; do
 done
 
 # ==========================================
-# 3.5. INJECT MODULAR FAIL2BAN JAILS
+# 4. INJECT MODULAR FAIL2BAN JAILS
 # ==========================================
 echo "[*] Injecting modular Fail2ban jails..."
 if [[ -d "src/jails" ]]; then
@@ -67,7 +67,7 @@ else
 fi
 
 # ==========================================
-# 4. INJECT MAIN ORCHESTRATOR
+# 5. INJECT MAIN ORCHESTRATOR
 # ==========================================
 echo "[*] Injecting main orchestrator..."
 if [[ -f "src/main.sh" ]]; then
