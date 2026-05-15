@@ -92,7 +92,7 @@ Two installation methods are supported: a standard interactive mode, and an "Ent
 ```bash
 # Clone the repository and enter the directory (as root)
 cd /usr/local/bin
-git clone [https://github.com/duggytuxy/syswarden.git](https://github.com/duggytuxy/syswarden.git)
+git clone https://github.com/duggytuxy/syswarden.git
 cd syswarden || exit
 
 # Make the builder executable and compile the artifact
