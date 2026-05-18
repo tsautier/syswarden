@@ -44,6 +44,9 @@ generate_dashboard() {
 # SysWarden Enterprise TUI Dashboard
 set -euo pipefail
 
+# --- VERSION CONFIGURATION ---
+SYSWARDEN_VERSION="v0.36.1"
+
 DATA_FILE="/etc/syswarden/ui/data.json"
 
 # --- THEME & COLORS ---
@@ -215,7 +218,7 @@ while true; do
 
         # --- TOP BRANDING NAVBAR ---
         add_line "${C_B}${SEP}${C_0}"
-        add_line "${C_W} SYSWARDEN v0.35.5 ${C_0}| Noise: ${C_G}${NOISE_PCT}${C_0} | Signal: ${C_R}${SIGNAL_PCT}${C_0} | Stars: ${C_Y}${GH_STARS}${C_0} | Release: ${C_C}${GH_RELEASE}${C_0} | Node: ${C_G}${SYS_HOST}${C_0}"
+        add_line "${C_W} SYSWARDEN ${SYSWARDEN_VERSION} ${C_0}| Noise: ${C_G}${NOISE_PCT}${C_0} | Signal: ${C_R}${SIGNAL_PCT}${C_0} | Stars: ${C_Y}${GH_STARS}${C_0} | Release: ${C_C}${GH_RELEASE}${C_0} | Node: ${C_G}${SYS_HOST}${C_0}"
         add_line "${C_B}${SEP_D}${C_0}"
         
         # --- HARDWARE SPECS HEADER PANEL ---
