@@ -1,13 +1,3 @@
-#!/bin/bash
-# ==============================================================================
-# SysWarden - CIS Benchmark Level 2 Hardening
-# Component: Advanced OS & Kernel Hardening (Defense-in-Depth)
-# OS Support: Ubuntu, Debian, CentOS, AlmaLinux, Rocky Linux, RHEL
-# ==============================================================================
-
-# ==============================================================================
-# --- SECURE DEPENDENCY MANAGER FOR CIS TOOLS ---
-# ==============================================================================
 install_cis_dependencies() {
     log "INFO" "Checking CIS Level 2 specific dependencies..."
     local missing_cis=()

@@ -176,7 +176,7 @@ if [[ "$MODE" != "update" ]] && [[ "$MODE" != "uninstall" ]]; then
     echo -e "${RED}███████║   ██║   ███████║╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║${NC}"
     echo -e "${RED}╚══════╝   ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝${NC}"
     echo -e "${BLUE}===================================================================================${NC}"
-    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.35.1                  ${NC}"
+    echo -e "${GREEN}               Host-based Security Orchestrator for Linux. | v0.35.2                  ${NC}"
     echo -e "${BLUE}===================================================================================${NC}\n"
 fi
 
@@ -215,7 +215,7 @@ if [[ "$MODE" != "update" ]]; then
         CYAN='\033[0;36m'
         clear
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
-        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.35.1 - PRE-FLIGHT CHECKLIST                     ${NC}"
+        echo -e "${GREEN}${BOLD}                   SYSWARDEN v0.35.2 - PRE-FLIGHT CHECKLIST                     ${NC}"
         echo -e "${BLUE}${BOLD}==============================================================================${NC}"
         echo -e "Before proceeding with the deployment, please ensure you have the following"
         echo -e "information ready. If you lack any required data, press [Ctrl+C] to abort,"
@@ -237,30 +237,33 @@ if [[ "$MODE" != "update" ]]; then
         echo -e "\n${BOLD}5. OS HARDENING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Strict restrictions for privileged groups (Sudo/Wheel) & Cron. Recommended for NEW servers only."
 
-        echo -e "\n${BOLD}6. GEOIP BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}6. CIS BENCHMARK LEVEL 2${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "   Advanced Defense-in-Depth (Filesystem, Kernel, Network). Recommended for production."
+
+        echo -e "\n${BOLD}7. GEOIP BLOCKING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   ISO country codes to drop instantly (e.g., RU,CN,KP)."
         echo -e "   Reference: ${CYAN}https://www.ipdeny.com/ipblocks/${NC}"
 
-        echo -e "\n${BOLD}7. ASN BLOCKING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}8. ASN BLOCKING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Target Autonomous System Numbers to drop (e.g., AS1234, AS5678)."
         echo -e "   Reference: ${CYAN}https://www.spamhaus.org/drop/asndrop.json${NC}"
 
-        echo -e "\n${BOLD}8. HA CLUSTER SYNC${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}9. HA CLUSTER SYNC${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Standby Node IP for automatic threat intelligence replication."
 
-        echo -e "\n${BOLD}9. THREAT INTEL BLOCKLISTS${NC}"
+        echo -e "\n${BOLD}10. THREAT INTEL BLOCKLISTS${NC}"
         echo -e "   [1] Standard (Web Servers)      [2] Critical (High Security)"
         echo -e "   [3] Custom (Plaintext URL .txt) [4] Disabled"
 
-        echo -e "\n${BOLD}10. SIEM LOG FORWARDING${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}11. SIEM LOG FORWARDING${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   External SIEM IP, Port (Default: 6514), and Protocol for central log auditing."
         echo -e "   Required for strict ISO 27001 / NIS2 compliance."
 
-        echo -e "\n${BOLD}11. ABUSEIPDB INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}12. ABUSEIPDB INTEGRATION${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Requires a valid API Key to automatically report Layer 7 attackers."
         echo -e "   Get one at: ${CYAN}https://www.abuseipdb.com/account/api${NC}"
 
-        echo -e "\n${BOLD}12. WAZUH SIEM AGENT${NC} ${YELLOW}(Optional)${NC}"
+        echo -e "\n${BOLD}13. WAZUH SIEM AGENT${NC} ${YELLOW}(Optional)${NC}"
         echo -e "   Required: Manager IP, Enrollment Port (1515), Listen Port (1514)."
         echo -e "   If unsure about your SIEM architecture, consult your Security Admin."
 
@@ -276,6 +279,7 @@ if [[ "$MODE" != "update" ]]; then
     define_wireguard "$MODE"
     define_docker_integration "$MODE"
     define_os_hardening "$MODE"
+    define_cis_hardening "$MODE"
     define_geoblocking "$MODE"
     define_asnblocking "$MODE"
     define_ha_cluster "$MODE"
