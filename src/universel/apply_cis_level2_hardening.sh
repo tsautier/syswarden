@@ -172,6 +172,59 @@ EOF
 }
 
 # ==============================================================================
+# --- CIS 5.2: ADVANCED SSH HARDENING ---
+# Restricts SSH features to limit attack surface without breaking modern access.
+# Synergy with define_ssh_port.sh (which handles TCP Forwarding).
+# ==============================================================================
+apply_cis_ssh_hardening() {
+    log "INFO" "Applying CIS Level 2 SSH Hardening (CIS 5.2)..."
+    local SSHD_CONF="/etc/ssh/sshd_config"
+
+    if [[ -f "$SSHD_CONF" ]]; then
+        # CIS 5.2.6: Disable X11 Forwarding
+        sed -i 's/^[[:space:]]*X11Forwarding.*/X11Forwarding no/' "$SSHD_CONF"
+        if ! grep -q "^X11Forwarding" "$SSHD_CONF"; then echo "X11Forwarding no" >>"$SSHD_CONF"; fi
+
+        # CIS 5.2.7: Set MaxAuthTries to 4 or less
+        sed -i 's/^[[:space:]]*MaxAuthTries.*/MaxAuthTries 4/' "$SSHD_CONF"
+        if ! grep -q "^MaxAuthTries" "$SSHD_CONF"; then echo "MaxAuthTries 4" >>"$SSHD_CONF"; fi
+
+        # CIS 5.2.16 & 5.2.17: Set ClientAlive parameters (Timeout idle sessions)
+        sed -i 's/^[[:space:]]*ClientAliveInterval.*/ClientAliveInterval 300/' "$SSHD_CONF"
+        if ! grep -q "^ClientAliveInterval" "$SSHD_CONF"; then echo "ClientAliveInterval 300" >>"$SSHD_CONF"; fi
+
+        sed -i 's/^[[:space:]]*ClientAliveCountMax.*/ClientAliveCountMax 3/' "$SSHD_CONF"
+        if ! grep -q "^ClientAliveCountMax" "$SSHD_CONF"; then echo "ClientAliveCountMax 3" >>"$SSHD_CONF"; fi
+
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+        fi
+    fi
+}
+
+# ==============================================================================
+# --- CIS 5.1: SECURE CRON PERMISSIONS ---
+# Enforces strict ownership and permissions on cron directories.
+# Synergy with apply_os_hardening.sh (which manages cron.allow).
+# ==============================================================================
+secure_cron_permissions() {
+    log "INFO" "Securing cron directories permissions (CIS 5.1)..."
+    local cron_dirs=("/etc/cron.d" "/etc/cron.daily" "/etc/cron.hourly" "/etc/cron.weekly" "/etc/cron.monthly")
+
+    for dir in "${cron_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            chown root:root "$dir"
+            chmod 700 "$dir"
+        fi
+    done
+
+    if [[ -f "/etc/crontab" ]]; then
+        chown root:root "/etc/crontab"
+        chmod 600 "/etc/crontab"
+    fi
+}
+
+# ==============================================================================
 # --- MAIN EXECUTOR ---
 # ==============================================================================
 apply_cis_level2_hardening() {
@@ -187,6 +240,8 @@ apply_cis_level2_hardening() {
     disable_uncommon_protocols
     apply_cis_sysctl
     restrict_core_dumps
+    apply_cis_ssh_hardening
+    secure_cron_permissions
 
     log "SUCCESS" "CIS Benchmark Level 2 Hardening successfully applied."
 }
