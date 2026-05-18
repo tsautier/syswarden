@@ -56,7 +56,7 @@ install_cis_dependencies() {
 disable_obscure_filesystems() {
     log "INFO" "Disabling obscure filesystems (CIS 1.1.1.1 - 1.1.1.8)..."
     local FS_CONF="/etc/modprobe.d/syswarden-cis-fs.conf"
-    
+
     cat <<'EOF' >"$FS_CONF"
 # --- SysWarden: CIS Level 2 Filesystem Hardening ---
 install cramfs /bin/true
@@ -68,7 +68,7 @@ install squashfs /bin/true
 install udf /bin/true
 EOF
     chmod 644 "$FS_CONF"
-    
+
     # Unload modules if currently loaded
     for fs in cramfs freevxfs jffs2 hfs hfsplus squashfs udf; do
         if lsmod | grep -q "^$fs"; then
@@ -84,7 +84,7 @@ EOF
 disable_uncommon_protocols() {
     log "INFO" "Disabling uncommon network protocols (CIS 3.3.1 - 3.3.4)..."
     local NET_CONF="/etc/modprobe.d/syswarden-cis-net.conf"
-    
+
     cat <<'EOF' >"$NET_CONF"
 # --- SysWarden: CIS Level 2 Network Protocol Hardening ---
 install dccp /bin/true
@@ -166,13 +166,13 @@ restrict_core_dumps() {
     log "INFO" "Enforcing hard limits on core dumps (CIS 1.5.1)..."
     local LIMITS_CONF="/etc/security/limits.d/99-syswarden-cis.conf"
     mkdir -p /etc/security/limits.d/
-    
+
     cat <<'EOF' >"$LIMITS_CONF"
 # --- SysWarden: CIS Level 2 Limits ---
 * hard core 0
 EOF
     chmod 644 "$LIMITS_CONF"
-    
+
     # Systemd override for core dumps
     if [[ -f "/etc/systemd/coredump.conf" ]]; then
         sed -i 's/.*Storage=.*/Storage=none/' /etc/systemd/coredump.conf 2>/dev/null || true
@@ -191,12 +191,12 @@ apply_cis_level2_hardening() {
     fi
 
     log "INFO" "Starting CIS Benchmark Level 2 compliance routines..."
-    
+
     install_cis_dependencies
     disable_obscure_filesystems
     disable_uncommon_protocols
     apply_cis_sysctl
     restrict_core_dumps
-    
+
     log "SUCCESS" "CIS Benchmark Level 2 Hardening successfully applied."
 }
