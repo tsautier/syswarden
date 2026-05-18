@@ -427,6 +427,50 @@ EOF
         done <"$SYSWARDEN_DIR/group_backup.txt"
     fi
 
+    # --- REVERT CIS BENCHMARK LEVEL 2 HARDENING ---
+    log "INFO" "Reverting CIS Benchmark Level 2 configurations..."
+
+    # 1. Remove Modprobe blacklists
+    rm -f "/etc/modprobe.d/syswarden-cis-fs.conf" 2>/dev/null || true
+    rm -f "/etc/modprobe.d/syswarden-cis-net.conf" 2>/dev/null || true
+
+    # 2. Remove Sysctl configuration and reload kernel runtime
+    if [[ -f "/etc/sysctl.d/99-syswarden-cis-level2.conf" ]]; then
+        rm -f "/etc/sysctl.d/99-syswarden-cis-level2.conf"
+        sysctl --system >/dev/null 2>&1 || true
+    fi
+
+    # 3. Remove Core Dump limits and restore systemd defaults
+    rm -f "/etc/security/limits.d/99-syswarden-cis.conf" 2>/dev/null || true
+    if [[ -f "/etc/systemd/coredump.conf" ]]; then
+        sed -i 's/Storage=none/#Storage=external/' /etc/systemd/coredump.conf 2>/dev/null || true
+        sed -i 's/ProcessSizeMax=0/#ProcessSizeMax=2G/' /etc/systemd/coredump.conf 2>/dev/null || true
+        systemctl daemon-reload 2>/dev/null || true
+    fi
+
+    # 4. Revert Advanced SSH Hardening rules to standard defaults
+    if [[ -f "/etc/ssh/sshd_config" ]]; then
+        sed -i 's/^[[:space:]]*X11Forwarding.*/X11Forwarding yes/' /etc/ssh/sshd_config 2>/dev/null || true
+        sed -i 's/^[[:space:]]*MaxAuthTries.*/MaxAuthTries 6/' /etc/ssh/sshd_config 2>/dev/null || true
+        sed -i 's/^[[:space:]]*ClientAliveInterval.*/ClientAliveInterval 0/' /etc/ssh/sshd_config 2>/dev/null || true
+        sed -i 's/^[[:space:]]*ClientAliveCountMax.*/ClientAliveCountMax 3/' /etc/ssh/sshd_config 2>/dev/null || true
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true
+        fi
+    fi
+
+    # 5. Restore standard system permissions for Cron directories (CIS 5.1 reversal)
+    local cis_cron_dirs=("/etc/cron.d" "/etc/cron.daily" "/etc/cron.hourly" "/etc/cron.weekly" "/etc/cron.monthly")
+    for dir in "${cis_cron_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            chmod 755 "$dir" 2>/dev/null || true
+        fi
+    done
+    if [[ -f "/etc/crontab" ]]; then
+        chmod 644 "/etc/crontab" 2>/dev/null || true
+    fi
+    # -----------------------------------------------
+
     # --- HOTFIX: ABSOLUTE FILE SYSTEM SCORCHED EARTH ---
     rm -rf "$SYSWARDEN_DIR" # This automatically removes /etc/syswarden/ssl (Self-signed certs)
     rm -f "$LOG_FILE"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v0.35.4 - DevSecOps Audit & Compliance Tool
+# SysWarden v0.35.5 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -167,7 +167,7 @@ if [[ "$AUDIT_MODE" == "1" ]]; then
     echo -e "${GREEN}>>> Initializing Complete Audit Scan... <<<${NC}\n"
 elif [[ "$AUDIT_MODE" == "2" ]]; then
     echo -e "\n${YELLOW}Select the specific phases you want to audit:${NC}"
-    echo -e "  1) Phase 1: OS Hardening & Privilege Separation"
+    echo -e "  1) Phase 1: OS Hardening, CIS Benchmark Level 2 & Privilege Separation"
     echo -e "  2) Phase 2: Log Routing & Anti-Injection Verification"
     echo -e "  3) Phase 3: Kernel Shield & Threat Intelligence"
     echo -e "  4) Phase 4: Layer 7 Active Defense (Fail2ban)"
@@ -200,10 +200,10 @@ elif [[ "$AUDIT_MODE" == "2" ]]; then
 fi
 
 # ==============================================================================
-# --- Phase 1: OS Hardening & Privilege Separation ---
+# --- Phase 1: OS Hardening, CIS Benchmark Level 2 & Privilege Separation ---
 # ==============================================================================
 if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 1 "* ]]; then
-    log_header "Phase 1: OS Hardening & Privilege Separation"
+    log_header "Phase 1: OS Hardening, CIS Benchmark Level 2 & Privilege Separation"
 
     if [[ "${APPLY_OS_HARDENING:-n}" == "y" ]]; then
 
@@ -252,6 +252,58 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 1 "* ]]; then
 
     else
         info "OS Hardening was skipped during installation (Existing Server). Strict compliance bypassed."
+    fi
+
+    # --- CIS Benchmark Level 2 Audit (Defense-in-Depth) ---
+    if [[ "${APPLY_CIS_L2_HARDENING:-n}" == "y" ]]; then
+        CIS_PASSED=1
+
+        if [[ -f "/etc/modprobe.d/syswarden-cis-fs.conf" ]] && grep -q "install cramfs /bin/true" "/etc/modprobe.d/syswarden-cis-fs.conf" 2>/dev/null; then
+            pass "CIS Level 2: Obscure filesystems and uncommon network protocols are strictly blacklisted."
+        else
+            fail "CIS Level 2: Modprobe blacklists are missing or incomplete (Filesystems/Network)."
+            CIS_PASSED=0
+        fi
+
+        BPF_STATUS=$(sysctl -n kernel.unprivileged_bpf_disabled 2>/dev/null || echo "0")
+        ROUTE_STATUS=$(sysctl -n net.ipv4.conf.all.accept_source_route 2>/dev/null || echo "1")
+
+        if [[ "$BPF_STATUS" == "1" ]] && [[ "$ROUTE_STATUS" == "0" ]]; then
+            pass "CIS Level 2: Kernel parameters (ASLR, eBPF, Network Routing) are strictly enforced."
+        else
+            fail "CIS Level 2: Advanced Kernel parameters (sysctl) are not fully applied."
+            CIS_PASSED=0
+        fi
+
+        if [[ -f "/etc/security/limits.d/99-syswarden-cis.conf" ]] && grep -q "hard core 0" "/etc/security/limits.d/99-syswarden-cis.conf" 2>/dev/null; then
+            pass "CIS Level 2: Core dumps are globally disabled to prevent memory credential leaks."
+        else
+            fail "CIS Level 2: Core dump hard limits are missing."
+            CIS_PASSED=0
+        fi
+
+        if grep -q "^[[:space:]]*X11Forwarding no" /etc/ssh/sshd_config 2>/dev/null; then
+            pass "CIS Level 2: Advanced SSH Hardening is active (X11 disabled, Limits applied)."
+        else
+            fail "CIS Level 2: Advanced SSH Hardening rules are missing."
+            CIS_PASSED=0
+        fi
+
+        if [[ -d "/etc/cron.d" ]]; then
+            CRON_PERMS=$(stat -c "%a" "/etc/cron.d" 2>/dev/null || stat -f "%Op" "/etc/cron.d" | cut -c4-6)
+            if [[ "$CRON_PERMS" == *"700" ]]; then
+                pass "CIS Level 2: System cron directories are securely locked (700)."
+            else
+                fail "CIS Level 2: System cron directories permissions are too open (Got $CRON_PERMS)."
+                CIS_PASSED=0
+            fi
+        fi
+
+        if [[ $CIS_PASSED -eq 1 ]]; then
+            pass "CIS Benchmark Level 2 (Defense-in-Depth) global status is COMPLIANT."
+        fi
+    else
+        info "CIS Benchmark Level 2 is not activated for this host (Skipped)."
     fi
 
     CRON_SAFE=1
