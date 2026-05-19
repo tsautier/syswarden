@@ -66,18 +66,18 @@ SysWarden doesn't just stack firewall rules; it orchestrates the Linux network s
 SysWarden is built to run natively across modern Linux infrastructures:
 * **Universal (systemd):** Debian 13+, Ubuntu 24.04+, AlmaLinux, Rocky Linux, CentOS Stream, Fedora.
 
-## The "Fortress" Dashboard (Web & CLI)
+## The "Fortress" Dashboard (TUI & CLI)
 
-SysWarden provides dual-layer observability, ensuring total situational awareness without the bloat of a complex database (like ELK or InfluxDB).
+SysWarden provides unified terminal-based observability, ensuring total situational awareness without the bloat of a complex database (like ELK or InfluxDB) or exposing vulnerable web ports.
 
-**Secure Web Interface**
-* **Live Threat Telemetry:** Track L7 behavioral bans in real time.
-* **Attacker Profiling:** Visualize top OSINT offenders, blocked ASNs, and GeoIP interception stats.
+**Interactive TUI Dashboard**
+* **Live Threat Telemetry:** Track L7 behavioral bans in real time directly from your console.
+* **Attacker Profiling:** Visualize top OSINT offenders, blocked ASNs, and GeoIP interception stats, leveraging a secure, localized `data.json` engine.
 * **Resource Monitoring:** Monitor the near-zero memory footprint of the underlying firewall engine.
-* *(Self-hosted and securely accessible via `https://<YOUR_SERVER_IP>:9999` post-installation).*
+* *(Fully integrated within the terminal to maintain a strict zero-trust attack surface without exposing port 9999).*
 
 **Orchestration & Interactive CLI**
-* **Terminal Dashboard:** Manage your infrastructure directly from the shell via `syswarden-manager` (instant visibility into blocks, whitelists, and rule idempotency).
+* **Terminal Management:** Manage your infrastructure directly from the shell via `syswarden-manager` (instant visibility into blocks, whitelists, and rule idempotency).
 * **Structured Installation Logs:** The deployment process provides precise, color-coded visual feedback on OS hardening, SIEM integration, and the successful application of Default-Deny policies.
 
 ## Installation Guide
