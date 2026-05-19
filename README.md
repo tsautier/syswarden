@@ -96,8 +96,8 @@ The development lifecycle of SysWarden follows a strict DevSecOps pipeline aimed
 
 | Version | Milestone Target | Status |
 | :---: | :--- | :---: |
-| **v0.36.0** | Attack Surface Reduction: Migration from Dashboard UI to isolated Terminal UI (TUI) via `install-syswarden tui`. | `[ Completed ]` |
-| **v0.37.0** | Enterprise SIEM Integration: Syslog output standardization for deterministic log ingestion. | `[ In Progr. ]` |
+| **v0.36.0** | Attack Surface Reduction: Migration from Dashboard UI to isolated Terminal UI (TUI) via `install-syswarden tui`. | `[ Done ]` |
+| **v0.37.0** | Enterprise SIEM Integration: Syslog output standardization for deterministic log ingestion. | `[ Planned ]` |
 | **v0.38.0** | Automated Incident Response: Native Webhook integration for L7 threat notifications (Discord / Teams). | `[ Planned ]` |
 
 ## Installation Guide
