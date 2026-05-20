@@ -34,8 +34,6 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 
 ## Enterprise-Grade Features
 
-## Enterprise-Grade Features
-
 **Core Network Defense (Hardware & Layer 2/3)**
 * **L2/L3 Ingress Acceleration:** Injects Threat Intelligence directly into the `netdev` table under `nftables` (or `raw PREROUTING` under `iptables`). Malicious packets are destroyed right at the Network Interface Card (NIC), entirely bypassing kernel routing and the `conntrack` module to guarantee zero CPU impact during volumetric DDoS attacks.
 * **Global Threat Intelligence:** Automatically blocks hostile countries (GeoIP), known cybercrime hosters, and rogue Autonomous System Numbers (ASN), instantly eliminating 97% of unwanted traffic.
