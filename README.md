@@ -125,7 +125,35 @@ cd dist/ || exit
 ./install-syswarden.sh
 ```
 
-### 2. Enterprise Installation (Default-Deny / SLSA Level 3)
+### 2. Quick Installation (Packeage .deb & .rpm)
+
+```bash
+# Download the appropriate package for your distribution and its associated checksum file from the assets below
+wget https://github.com/duggytuxy/syswarden/releases/download/<version>/*.deb
+or
+wget https://github.com/duggytuxy/syswarden/releases/download/<version>/*.rpm
+and
+wget https://github.com/duggytuxy/syswarden/releases/download/<version>/*.txt (SHA256SUMS)
+
+# Verify Integrity
+sha256sum -c SHA256SUMS.txt --ignore-missing
+
+# For Debian/Ubuntu systems
+apt-get install -y ./syswarden_<version>_all.deb
+
+## Review or modify the auto-configuration file if needed before execution and install the solution
+nano /opt/syswarden/syswarden-auto.conf
+syswarden /opt/syswarden/syswarden-auto.conf
+
+# For RHEL/AlmaLinux/Rocky systems
+dnf install -y ./syswarden-<version>-1.noarch.rpm
+
+## Review or modify the auto-configuration file if needed before execution and install the solution
+nano /opt/syswarden/syswarden-auto.conf
+syswarden /opt/syswarden/syswarden-auto.conf
+```
+
+### 3. Enterprise Installation (Default-Deny / SLSA Level 3)
 
 SysWarden releases are cryptographically signed using GitHub Artifact Attestations to guarantee supply chain integrity. For environments compliant with ISO 27001 or NIS2, it is imperative to verify the script's provenance before execution.
 
@@ -143,7 +171,7 @@ chmod +x install-syswarden.sh
 ./install-syswarden.sh
 ```
 
-### 3. Automated / Headless Deployment (CI/CD)
+### 4. Automated / Headless Deployment (CI/CD)
 
 SysWarden can be deployed without any human interaction using a configuration file, ideal for Ansible, Terraform, or Cloud-init pipelines.
 
@@ -161,7 +189,7 @@ chmod 600 syswarden-auto.conf (modify if needed)
 ./install-syswarden.sh syswarden-auto.conf
 ```
 
-### 4.Quick uninstall (root)
+### 5.Quick uninstall (root)
 
 Properly uninstalls SysWarden while preserving your original, legitimate network settings.
 
