@@ -1,4 +1,7 @@
 <p align="center">
+  <a href="https://github.com/duggytuxy/syswarden/actions/workflows/package.yml">
+    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/package.yml/badge.svg" alt="SysWarden Builder and Packager">
+  </a>
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml">
     <img src="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml/badge.svg" alt="SysWarden Security Audit">
   </a>
