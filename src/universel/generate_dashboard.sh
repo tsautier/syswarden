@@ -45,7 +45,7 @@ generate_dashboard() {
 set -euo pipefail
 
 # --- VERSION CONFIGURATION ---
-SYSWARDEN_VERSION="v0.36.7"
+SYSWARDEN_VERSION="v0.36.8"
 
 DATA_FILE="/etc/syswarden/ui/data.json"
 
@@ -287,7 +287,7 @@ while true; do
             fi
             if [[ ${#TOP_LIST[@]} -gt $i ]]; then
                 IFS='|' read -r t_ip t_port t_country t_asn t_isp <<< "${TOP_LIST[$i]}"
-                T_LINE=$(printf "  %-19s %-9s %-9s %-9s %s" "${t_ip:0:18}" "${t_port:0:8}" "${t_country:0:8}" "${t_asn:0:8}" "${t_isp:0:14}")
+                T_LINE=$(printf "  %-19s %-9s %-9s %-9s %s" "${t_ip:0:18}" "${t_port:0:8}" "${t_country:0:8}" "${t_asn:0:8}" "${t_isp:0:30}")
             fi
             add_line "${C_C}${J_LINE}${C_0}$(pad "$J_LINE" $HALF_WIDTH)${C_R}${T_LINE}${C_0}"
         done
