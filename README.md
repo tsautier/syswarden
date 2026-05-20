@@ -76,7 +76,8 @@ SysWarden dynamically adapts to the native firewall orchestration engines of mod
 
 ## The "Fortress" Dashboard (TUI & CLI)
 
-SysWarden provides unified terminal-based observability, ensuring total situational awareness without the bloat of a complex database (like ELK or InfluxDB) or exposing vulnerable web ports.
+> [!NOTE]
+> SysWarden provides unified terminal-based observability, ensuring total situational awareness without the bloat of a complex database (like ELK or InfluxDB) or exposing vulnerable web ports.
 
 **Interactive TUI Dashboard**
 * **Live Threat Telemetry:** Track L7 behavioral bans in real time directly from your console.
@@ -107,6 +108,7 @@ Two installation methods are supported: a standard interactive mode, and an "Ent
 
 ### 1. Quick Installation (Standard)
 
+> [!IMPORTANT]
 > Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
 
 ```bash
