@@ -26,8 +26,9 @@ syswarden_jail_portscan() {
 before = common.conf
 
 [Definition]
-# Matches standard blocks, geoblocking drops, and ASN drops
-failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-(?:BLOCK|GEO|ASN)\].*?SRC=<HOST>
+# Matches ONLY the Catch-All drops to detect actual probing on closed ports.
+# Prevents double-punishment for IPs already dropped by HW/Kernel sets (GEO/ASN).
+failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-BLOCK\] \[Catch-All\].*?SRC=<HOST>
 ignoreregex = 
 EOF
     fi
@@ -40,7 +41,7 @@ port     = 0:65535
 filter   = syswarden-portscan
 logpath  = $FIREWALL_LOG
 backend  = ${SYSW_OS_BACKEND:-auto}
-maxretry = 3
+maxretry = 10
 findtime = 10m
 bantime  = 24h
 EOF
