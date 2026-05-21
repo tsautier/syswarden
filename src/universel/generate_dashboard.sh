@@ -45,7 +45,7 @@ generate_dashboard() {
 set -euo pipefail
 
 # --- VERSION CONFIGURATION ---
-SYSWARDEN_VERSION="v0.36.9"
+SYSWARDEN_VERSION="v0.36.10"
 
 DATA_FILE="/etc/syswarden/ui/data.json"
 
@@ -267,13 +267,13 @@ while true; do
 
         # --- JAILS LOAD DISTRIBUTION & TOP ATTACKERS SPLIT MATRICES ---
         HALF_WIDTH=$(( (COLS - 4) / 2 - 2 ))
-        [[ $HALF_WIDTH -lt 48 ]] && HALF_WIDTH=48
+        [[ $HALF_WIDTH -lt 58 ]] && HALF_WIDTH=58
 
         TITLE_L="  ❖ JAILS LOAD DISTRIBUTION"
         TITLE_R="  ❖ TOP ATTACKERS (OSINT HISTORY)"
         add_line "${C_W}${TITLE_L}$(pad "$TITLE_L" $HALF_WIDTH)${TITLE_R}${C_0}"
         
-        HEAD_L="  TARGET JAIL             MITRE ATT&CK       LOAD"
+        HEAD_L="  TARGET JAIL                       MITRE ATT&CK       LOAD"
         HEAD_R="  IP ADDRESS          PORT      COUNTRY   ASN       ISP"
         add_line "${C_D}${HEAD_L}$(pad "$HEAD_L" $HALF_WIDTH)${HEAD_R}${C_0}"
 
@@ -283,7 +283,7 @@ while true; do
             if [[ ${#JAILS_LIST[@]} -gt $i ]]; then
                 IFS='|' read -r j_name j_mitre j_count <<< "${JAILS_LIST[$i]}"
                 j_mitre_short=$(echo "$j_mitre" | cut -d':' -f1)
-                J_LINE=$(printf "  %-23s %-18s %-8s" "${j_name:0:22}" "${j_mitre_short:0:17}" "$j_count")
+                J_LINE=$(printf "  %-33s %-18s %-8s" "${j_name:0:32}" "${j_mitre_short:0:17}" "$j_count")
             fi
             if [[ ${#TOP_LIST[@]} -gt $i ]]; then
                 IFS='|' read -r t_ip t_port t_country t_asn t_isp <<< "${TOP_LIST[$i]}"
@@ -389,5 +389,5 @@ EOF
     chmod +x "$TUI_BIN"
     ln -sf "$TUI_BIN" "/usr/local/bin/syswarden-dashboard" 2>/dev/null || true
 
-    log "INFO" "TUI Engine successfully deployed. Run 'syswarden-tui' to view the full-screen terminal dashboard."
+    log "INFO" "TUI Engine successfully deployed."
 }
