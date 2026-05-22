@@ -277,24 +277,31 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                                 *grafana*) LOG_TARGETS="/var/log/grafana/grafana.log /var/log/syslog" ;;
                             esac
 
-                            # HOTFIX: Filter out Hardware L2/L3 drops (GEO, ASN, and raw BLOCK without Catch-All).
-                            # This guarantees the telemetry extracts the true L7 application log or the explicit L4 Catch-All trigger.
-                            L7_PAYLOAD=$(timeout 1 grep -h -F "$IP" $LOG_TARGETS 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                            # --- DEVSECOPS FIX: LOG PARSING TIMEOUT RESOLUTION (O(1) COMPLEXITY) ---
+                            # On heavy instances with massive log files, a standard 'grep' scanning from
+                            # top to bottom gets killed by the 'timeout 1' safety trigger before it reaches the end of the file.
+                            # Using 'tail -q -n 10000' forces the pointer to read only the most recent entries, extracting the payload instantly.
+                            L7_PAYLOAD=$(timeout 1 tail -q -n 10000 $LOG_TARGETS 2>/dev/null | grep -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                            
+                            # Fallback to systemd-journald (fast reverse parsing) if flat files are missing or rotated
+                            if [[ -z "$L7_PAYLOAD" ]] && command -v journalctl >/dev/null 2>&1; then
+                                L7_PAYLOAD=$(timeout 1 journalctl -q --no-pager -r -n 10000 2>/dev/null | grep -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
+                            fi
                         fi
                         
                         L7_PAYLOAD=$(echo "$L7_PAYLOAD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
                         
-                        # --- DEVSECOPS FIX: SILENT DROP OF ORPHANED IPS ---
-                        # If no logs exist (log rotated or flushed), we do NOT inject the IP into the JSON registry.
-                        # This prevents UI pollution and maintains a high Signal-to-Noise Ratio.
-                        if [[ -n "$L7_PAYLOAD" ]]; then
-                            # --- REQUIREMENT 1: RAW LOGS RETENTION (0.0% CPU) ---
-                            # Le prompt demande explicitement de conserver le log brut complet sans altération.
-                            P_CLEAN="$L7_PAYLOAD"
-                            
-                            BANNED_IPS_JSON=$(echo "$BANNED_IPS_JSON" | jq --arg ip "$IP" --arg j "$JAIL" --arg p "$P_CLEAN" --arg ttp "$MITRE_PAYLOAD" '. + [{"ip": $ip, "jail": $j, "payload": $p, "mitre": $ttp}]')
-                            ACTIVE_BANNED_IPS+="${IP} "
+                        # --- DEVSECOPS FIX: PREVENT ORPHANED IPS DESYNC ---
+                        # If logs are fully purged, rotated, or missing, we MUST STILL inject the IP to avoid UI desync.
+                        if [[ -z "$L7_PAYLOAD" ]]; then
+                            L7_PAYLOAD="Payload context unavailable (Log rotated, flushed, or manual ban)"
                         fi
+                        
+                        # --- REQUIREMENT 1: RAW LOGS RETENTION (0.0% CPU) ---
+                        P_CLEAN="$L7_PAYLOAD"
+                        
+                        BANNED_IPS_JSON=$(echo "$BANNED_IPS_JSON" | jq --arg ip "$IP" --arg j "$JAIL" --arg p "$P_CLEAN" --arg ttp "$MITRE_PAYLOAD" '. + [{"ip": $ip, "jail": $j, "payload": $p, "mitre": $ttp}]')
+                        ACTIVE_BANNED_IPS+="${IP} "
                     fi
                 done
             fi
