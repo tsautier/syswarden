@@ -58,7 +58,7 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 * **"Scorched Earth" Surgical Rollback:** The uninstallation routine performs a deep cleanup. It safely reverts all CIS Level 2 configurations (sysctl, modprobe, cron permissions), eradicates custom `netdev` and `raw` tables, and instantly restores the OS to its pristine original state without requiring a reboot.
 
 > [!NOTE]
-> **For CISOs and CIOs (Strategic Impact):** This architecture translates zero-trust policies into strict technical controls. By offloading volumetric mitigation to the network edge (L2/L3) and forwarding only high-fidelity Layer 7 behavioral data, SysWarden drastically reduces SIEM ingestion costs, prevents kernel resource exhaustion, and guarantees operational continuity under hostile conditions.
+> **For CISOs and CIOs (Strategic Impact):** This architecture translates zero-trust policies into strict technical controls. By offloading volumetric mitigation to the network edge (L2/L3/L4) and forwarding only high-fidelity Layer 7 behavioral data, SysWarden drastically reduces SIEM ingestion costs, prevents kernel resource exhaustion, and guarantees operational continuity under hostile conditions.
 
 ## Hardware-Aware Default-Deny Architecture
 
