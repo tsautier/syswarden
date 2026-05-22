@@ -26,7 +26,8 @@ show_alerts_dashboard() {
     (
         P1=""
         if command -v journalctl >/dev/null 2>&1; then
-            journalctl -k -f --no-pager 2>/dev/null &
+            # --- DEVSECOPS FIX: PREVENT HISTORICAL LOG SPAM ON STARTUP ---
+            journalctl -k -f -n 0 --no-pager 2>/dev/null &
             P1=$!
         fi
 
@@ -41,7 +42,8 @@ show_alerts_dashboard() {
         [[ -f /var/log/messages ]] && LOGS+=(/var/log/messages)
 
         if [[ ${#LOGS[@]} -gt 0 ]]; then
-            tail -F -q "${LOGS[@]}" 2>/dev/null &
+            # --- DEVSECOPS FIX: PREVENT HISTORICAL LOG SPAM ON STARTUP ---
+            tail -F -n 0 -q "${LOGS[@]}" 2>/dev/null &
             P2=$!
         fi
 
