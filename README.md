@@ -38,6 +38,10 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 * **L2/L3 Ingress Acceleration:** Injects Threat Intelligence directly into the `netdev` table under `nftables` (or `raw PREROUTING` under `iptables`). Malicious packets are destroyed right at the Network Interface Card (NIC), entirely bypassing kernel routing and the `conntrack` module to guarantee zero CPU impact during volumetric DDoS attacks.
 * **Global Threat Intelligence:** Automatically blocks hostile countries (GeoIP), known cybercrime hosters, and rogue Autonomous System Numbers (ASN), instantly eliminating 97% of unwanted traffic.
 
+**Stateful & Protocol Optimization (Layer 3/4)**
+* **CGNAT & TCP State Purification:** Implements UFW-grade stateful enforcement by silently destroying late `FIN-ACK`/`RST` packets on expired `conntrack` sessions, and strictly blocking `NEW` connections lacking the `SYN` flag. This absolutely eradicates log pollution and false-positive portscan detections on active service ports, crucial for highly federated and mobile-heavy environments.
+* **Dynamic QUIC / HTTP3 Provisioning:** Modern web protocols are natively supported. SysWarden automatically binds and provisions `UDP/443` whenever `TCP/443` is permitted, preventing aggressive QUIC handshake drops at the Zero-Trust Catch-All layer and ensuring seamless HTTP/3 operation behind the firewall.
+
 **Application Security & Active Response (Layer 7)**
 * **Dynamic L7 HIPS / WAF:** Protects 50+ vital services (Docker, Nginx, Databases, CMS) using deeply restructured and hardened Fail2ban "jails", ensuring a near-zero memory footprint and deadly accuracy (payload escaping, bypass prevention).
 * **Standalone ModSecurity:** Seamlessly integrates [OWASP ModSecurity (v3.0.15)](https://github.com/owasp-modsecurity/ModSecurity) via the `syswarden-waf.sh` component, providing deep HTTP traffic inspection.
