@@ -77,10 +77,10 @@ setup_siem_logging() {
         echo "SIEM_PORT='$SIEM_PORT'" >>"$CONF_FILE"
         echo "SIEM_PROTO='$SIEM_PROTO'" >>"$CONF_FILE"
 
-        log "INFO" "Configuring Rsyslog to forward ONLY Fail2ban logs to SIEM..."
+        log "INFO" "Configuring Rsyslog to forward ONLY Fail2ban block logs to SIEM in JSON format..."
 
         cat <<EOF >/etc/rsyslog.d/99-syswarden-siem.conf
-# SysWarden SIEM Forwarder - Exclusive Fail2ban Routing
+# SysWarden SIEM Forwarder - Exclusive Fail2ban Routing (Blocks Only)
 module(load="imfile")
 
 input(type="imfile"
@@ -89,8 +89,12 @@ input(type="imfile"
       Severity="warning"
       Facility="local7")
 
-if \$programname == 'fail2ban' then {
-    action(type="omfwd" target="$SIEM_IP" port="$SIEM_PORT" protocol="$SIEM_PROTO")
+# Standardized JSON template for native ingestion in Graylog, Splunk, Wazuh, and ELK
+template(name="SysWardenJSON" type="string" string="{\\"timestamp\\":\\"%timereported:::date-rfc3339%\\",\\"hostname\\":\\"%hostname%\\",\\"app\\":\\"syswarden-fail2ban\\",\\"action\\":\\"block\\",\\"raw_message\\":\\"%msg:::json%\\"}\n")
+
+# Forward ONLY explicit "Ban" actions to ensure clean signals and reduce SIEM ingestion noise
+if \$programname == 'fail2ban' and \$msg contains ' Ban ' then {
+    action(type="omfwd" target="$SIEM_IP" port="$SIEM_PORT" protocol="$SIEM_PROTO" template="SysWardenJSON")
 }
 EOF
         if command -v systemctl >/dev/null 2>&1; then
