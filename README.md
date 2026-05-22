@@ -120,7 +120,7 @@ Two installation methods are supported: a standard interactive mode, and an "Ent
 ### 1. Quick Installation (Standard)
 
 > [!IMPORTANT]
-> Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
+> Supported OS: *Debian 12+, Ubuntu 24.04+, RHEL 9+, Oracle Linux 10+, Fedora 43+, CentOS Stream, AlmaLinux 10+ & Rocky Linux 9+*.
 
 ```bash
 # Clone the repository and enter the directory (as root)
