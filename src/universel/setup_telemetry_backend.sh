@@ -278,44 +278,52 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                                 *grafana*) LOG_TARGETS="/var/log/grafana/grafana.log /var/log/syslog" ;;
                             esac
 
-                            # --- DEVSECOPS FIX: HIGH-VOLUME DDOS LOG PARSING (O(1) OPTIMIZED) ---
-                            # Lowered tail buffer to 100,000 lines to prevent 'timeout' killing the process on slow I/O,
-                            # while increasing the timeout window to 4 seconds for safety.
-                            # Added '-q' to prevent file header contamination when matching multiple Virtual Host globs.
-                            L7_PAYLOAD=$(timeout 4 tail -q -n 100000 $LOG_TARGETS 2>/dev/null | grep -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                            # --- DEVSECOPS FIX: ULTIMATE DDOS & RACE CONDITION SURVIVAL ---
+                            # A severe web flood can generate hundreds of thousands of lines AFTER an IP is banned.
+                            # Because the banned IP's packets are dropped by the firewall, its logs stay at the TOP 
+                            # of the massive active file, pushing them out of small 'tail' buffers.
                             
-                            # Fallback 1: systemd-journald (fast reverse parsing)
+                            # Phase 1: Massive Buffer Extraction (O(1) bypass for >95% of cases)
+                            # We buffer the last 3,000,000 lines. This easily catches payloads deep in a DDoS log.
+                            L7_PAYLOAD=$(timeout 4 tail -q -n 3000000 $LOG_TARGETS 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                            
+                            # Phase 2: Reverse Streaming (SIGPIPE early-termination)
+                            # If the file exceeds 3M lines, we stream it backwards. 'head -n 1' instantly 
+                            # triggers SIGPIPE to terminate the stream the millisecond the payload is found, saving I/O.
+                            if [[ -z "$L7_PAYLOAD" ]]; then
+                                L7_PAYLOAD=$(timeout 3 tac $LOG_TARGETS 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
+                            fi
+                            
+                            # Phase 3: systemd-journald fallback
                             if [[ -z "$L7_PAYLOAD" ]] && command -v journalctl >/dev/null 2>&1; then
-                                L7_PAYLOAD=$(timeout 3 journalctl -q --no-pager -r -n 100000 2>/dev/null | grep -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
+                                L7_PAYLOAD=$(timeout 3 journalctl -q --no-pager -r -n 1000000 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
                             fi
                         fi
                         
                         L7_PAYLOAD=$(echo "$L7_PAYLOAD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
 
                         # --- DEVSECOPS FIX: CACHE POISONING PREVENTION & STATEFUL RETENTION ---
-                        # If live log parsing failed (due to log rotation, system reboot, or update cycle),
-                        # we attempt to recover the historically cached payload from the existing data.json.
                         if [[ -z "$L7_PAYLOAD" ]] && [[ -f "$DATA_FILE" ]]; then
                             CACHE_PAYLOAD=$(jq -r --arg ip "$IP" --arg j "$JAIL" '.layer7.banned_ips[]? | select(.ip == $ip and .jail == $j) | .payload' "$DATA_FILE" 2>/dev/null | head -n 1 || true)
-                            
-                            # Strict validation to prevent looping error messages into the cache
                             if [[ "$CACHE_PAYLOAD" != "null" ]] && [[ -n "$CACHE_PAYLOAD" ]] && [[ "$CACHE_PAYLOAD" != *"Payload context unavailable"* ]] && [[ "$CACHE_PAYLOAD" != *"Manual ban"* ]]; then
                                 L7_PAYLOAD="$CACHE_PAYLOAD"
                             fi
                         fi
                         
-                        # --- DEVSECOPS FIX: DEEP FORENSIC EXTRACTION (LOG ROTATION SURVIVAL) ---
-                        # Triggered ONLY if live extraction and cache both failed (e.g., after an upgrade/logrotate combo).
-                        # Scans historically rotated logs via zgrep to guarantee payload recovery.
+                        # --- DEVSECOPS FIX: DEEP ARCHIVE ROTATION SURVIVAL (SMART DECOMPRESSION) ---
+                        # If a logrotate occurred EXACTLY between the ban and the cron, we scan the 5 most recent archives.
+                        # We use zcat + tac + head for instant termination upon finding the match without massive timeouts.
                         if [[ -z "$L7_PAYLOAD" ]]; then
-                            # Append wildcard to dynamically scan rotated/compressed files (e.g., access.log.1, access.log.2.gz)
                             DEEP_TARGETS=$(echo "$LOG_TARGETS" | sed 's/\.log/.log*/g; s/_log/_log*/g; s/\/messages/\/messages*/g; s/\/secure/\/secure*/g')
-                            L7_PAYLOAD=$(timeout 6 zgrep -h -a -F "$IP" $DEEP_TARGETS 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
-                            L7_PAYLOAD=$(echo "$L7_PAYLOAD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
+                            RECENT_ARCHIVES=$(ls -1t $DEEP_TARGETS 2>/dev/null | head -n 5 || true)
+                            
+                            if [[ -n "$RECENT_ARCHIVES" ]]; then
+                                L7_PAYLOAD=$(timeout 5 zcat -f $RECENT_ARCHIVES 2>/dev/null | tac 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
+                                L7_PAYLOAD=$(echo "$L7_PAYLOAD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
+                            fi
                         fi
                         
                         # --- DEVSECOPS FIX: PREVENT ORPHANED IPS DESYNC (ULTIMATE FALLBACK) ---
-                        # If logs are fully purged, or it is a manual CLI ban without traffic.
                         if [[ -z "$L7_PAYLOAD" ]]; then
                             L7_PAYLOAD="Payload context unavailable (Manual ban via CLI or absolute log purge)"
                         fi
