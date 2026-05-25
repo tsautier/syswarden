@@ -375,11 +375,6 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                             L7_PAYLOAD=$(echo "$L7_PAYLOAD" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
                         fi
                         
-                        # --- DEVSECOPS FIX: PREVENT ORPHANED IPS DESYNC (ULTIMATE FALLBACK) ---
-                        if [[ -z "$L7_PAYLOAD" ]]; then
-                            L7_PAYLOAD="Payload context unavailable (Manual ban via CLI or absolute log purge)"
-                        fi
-                        
                         # --- REQUIREMENT 1: RAW LOGS RETENTION (0.0% CPU) ---
                         P_CLEAN="$L7_PAYLOAD"
                         
