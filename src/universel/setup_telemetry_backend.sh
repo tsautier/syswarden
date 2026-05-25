@@ -259,80 +259,42 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                         if [[ "$JAIL" =~ (recidive) ]]; then
                             L7_PAYLOAD="Repeat Offender (Recidive Module)"
                         else
-                            # --- DEVSECOPS FIX: CONTEXT-AWARE LOG TARGETING & PRIORITY SORTING ---
-                            # Global fallback (used if no case matches)
-                            LOG_TARGETS="/var/log/nginx/*error*.log /var/log/apache2/*error*.log /var/log/httpd/*error*.log /var/log/nginx/*access*.log /var/log/apache2/*access*.log /var/log/httpd/*access*.log /var/log/auth.log /var/log/secure /var/log/auth-syswarden.log /var/log/kern-firewall.log /var/log/kern.log /var/log/daemon.log /var/log/syslog /var/log/messages /var/log/maillog /var/log/mail.log /var/log/audit/audit.log"
+                            # --- DEVSECOPS FIX: CONTEXT-AWARE LOG TARGETING & WILDARD EXPANSION ---
+                            LOG_TARGETS="/var/log/kern-firewall.log* /var/log/kern.log* /var/log/messages* /var/log/syslog* /var/log/nginx/*.log* /var/log/apache2/*.log* /var/log/httpd/*log* /var/log/auth-syswarden.log* /var/log/secure* /var/log/auth.log* /var/log/maillog* /var/log/mail.log* /var/log/daemon.log* /var/log/audit/audit.log*"
                             
-                            # PRIORITY SORTING: We place application-specific ERROR logs FIRST, 
-                            # then ACCESS logs, and kernel drops LAST. The atomic extraction 
-                            # will stop instantly at the first match, preventing normal HTTP traffic
-                            # from hiding critical TLS or WAF drops.
                             case "${JAIL,,}" in
-                                *ssh*|*auth*|*telnet*|*cockpit*|*privesc*) 
-                                    LOG_TARGETS="/var/log/auth.log /var/log/secure /var/log/auth-syswarden.log /var/log/daemon.log /var/log/syslog /var/log/messages /var/log/kern.log" ;;
-                                *portscan*|*flood*|*dos*|*wireguard*|*openvpn*) 
-                                    LOG_TARGETS="/var/log/kern-firewall.log /var/log/kern.log /var/log/syslog /var/log/messages /var/log/openvpn/openvpn.log /var/log/openvpn.log /var/log/daemon.log" ;;
-                                *nginx*|*apache*|*web*|*http*|*sqli*|*xss*|*lfi*|*ssti*|*jndi*|*modsec*|*hunter*|*proxy*|*scan*|*enum*|*bot*|*prestashop*|*atlassian*|*webshell*|*homoglyph*|*tls*|*dolibarr*|*phpmyadmin*|*apimapper*|*drupal*|*wordpress*) 
-                                    LOG_TARGETS="/var/log/nginx/*error*.log /var/log/apache2/*error*.log /var/log/httpd/*error*.log /var/log/nginx/*access*.log /var/log/apache2/*access*.log /var/log/httpd/*access*.log /var/log/syslog /var/log/messages /var/log/daemon.log /var/log/kern-firewall.log /var/log/kern.log" ;;
-                                *mail*|*postfix*|*dovecot*|*exim*|*sendmail*) 
-                                    LOG_TARGETS="/var/log/maillog /var/log/mail.log /var/log/syslog /var/log/messages /var/log/daemon.log" ;;
-                                *mysql*|*mariadb*|*redis*|*mongodb*|*rabbitmq*) 
-                                    LOG_TARGETS="/var/log/mysql/*error*.log /var/log/mysql/*.log /var/log/mariadb/*.log /var/log/redis/*.log /var/log/mongodb/*.log /var/log/rabbitmq/*.log /var/log/syslog /var/log/messages /var/log/daemon.log" ;;
-                                *vsftpd*|*ftp*) 
-                                    LOG_TARGETS="/var/log/vsftpd.log /var/log/auth.log /var/log/secure /var/log/messages /var/log/syslog" ;;
-                                *auditd*) 
-                                    LOG_TARGETS="/var/log/audit/audit.log /var/log/auth.log /var/log/syslog /var/log/daemon.log" ;;
-                                *proxmox*) 
-                                    LOG_TARGETS="/var/log/daemon.log /var/log/syslog /var/log/auth.log /var/log/messages" ;;
-                                *asterisk*) 
-                                    LOG_TARGETS="/var/log/asterisk/messages /var/log/asterisk/full /var/log/syslog /var/log/messages" ;;
-                                *zabbix*) 
-                                    LOG_TARGETS="/var/log/zabbix/zabbix_server.log /var/log/syslog /var/log/messages" ;;
-                                *haproxy*) 
-                                    LOG_TARGETS="/var/log/haproxy.log /var/log/syslog /var/log/messages /var/log/daemon.log" ;;
-                                *squid*) 
-                                    LOG_TARGETS="/var/log/squid/*error*.log /var/log/squid/*access*.log /var/log/squid/*.log /var/log/syslog /var/log/messages" ;;
-                                *gitea*|*forgejo*) 
-                                    LOG_TARGETS="/var/log/gitea/gitea.log /var/log/forgejo/forgejo.log /var/log/syslog /var/log/daemon.log" ;;
-                                *jenkins*) 
-                                    LOG_TARGETS="/var/log/jenkins/jenkins.log /var/log/syslog /var/log/daemon.log" ;;
-                                *gitlab*) 
-                                    LOG_TARGETS="/var/log/gitlab/gitlab-rails/application.log /var/log/gitlab/gitlab-rails/auth.log /var/log/syslog /var/log/daemon.log" ;;
-                                *vaultwarden*) 
-                                    LOG_TARGETS="/var/log/vaultwarden/vaultwarden.log /vw-data/vaultwarden.log /opt/vaultwarden/vaultwarden.log /var/log/syslog /var/log/daemon.log" ;;
-                                *sso*|*authelia*|*authentik*) 
-                                    LOG_TARGETS="/var/log/authelia/authelia.log /var/log/authentik/authentik.log /opt/authelia/authelia.log /opt/authentik/authentik.log /var/log/syslog /var/log/daemon.log" ;;
-                                *odoo*) 
-                                    LOG_TARGETS="/var/log/odoo/odoo-server.log /var/log/odoo/odoo.log /var/log/syslog" ;;
-                                *nextcloud*) 
-                                    LOG_TARGETS="/var/www/nextcloud/data/nextcloud.log /var/www/html/nextcloud/data/nextcloud.log /var/www/html/data/nextcloud.log /var/log/syslog" ;;
-                                *laravel*) 
-                                    LOG_TARGETS="/var/www/html/storage/logs/laravel.log /var/www/storage/logs/laravel.log /var/log/syslog" ;;
-                                *grafana*) 
-                                    LOG_TARGETS="/var/log/grafana/grafana.log /var/log/syslog /var/log/daemon.log" ;;
+                                *ssh*|*auth*|*telnet*|*cockpit*|*privesc*) LOG_TARGETS="/var/log/auth.log* /var/log/secure* /var/log/auth-syswarden.log* /var/log/daemon.log* /var/log/syslog* /var/log/messages* /var/log/kern.log*" ;;
+                                *portscan*|*flood*|*dos*|*wireguard*|*openvpn*) LOG_TARGETS="/var/log/kern-firewall.log* /var/log/kern.log* /var/log/syslog* /var/log/messages* /var/log/openvpn/openvpn.log* /var/log/openvpn.log* /var/log/daemon.log*" ;;
+                                *nginx*|*apache*|*web*|*http*|*sqli*|*xss*|*lfi*|*ssti*|*jndi*|*modsec*|*hunter*|*proxy*|*scan*|*enum*|*bot*|*prestashop*|*atlassian*|*webshell*|*homoglyph*|*tls*|*dolibarr*|*phpmyadmin*|*apimapper*|*drupal*|*wordpress*) LOG_TARGETS="/var/log/nginx/*.log* /var/log/apache2/*.log* /var/log/httpd/*log* /var/log/syslog* /var/log/messages* /var/log/daemon.log* /var/log/kern-firewall.log* /var/log/kern.log*" ;;
+                                *mail*|*postfix*|*dovecot*|*exim*|*sendmail*) LOG_TARGETS="/var/log/maillog* /var/log/mail.log* /var/log/syslog* /var/log/messages* /var/log/daemon.log*" ;;
+                                *mysql*|*mariadb*|*redis*|*mongodb*|*rabbitmq*) LOG_TARGETS="/var/log/mysql/*.log* /var/log/mariadb/*.log* /var/log/redis/*.log* /var/log/mongodb/*.log* /var/log/rabbitmq/*.log* /var/log/syslog* /var/log/messages* /var/log/daemon.log*" ;;
+                                *vsftpd*|*ftp*) LOG_TARGETS="/var/log/vsftpd.log* /var/log/auth.log* /var/log/secure* /var/log/messages* /var/log/syslog*" ;;
+                                *auditd*) LOG_TARGETS="/var/log/audit/audit.log* /var/log/auth.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *proxmox*) LOG_TARGETS="/var/log/daemon.log* /var/log/syslog* /var/log/auth.log* /var/log/messages*" ;;
+                                *asterisk*) LOG_TARGETS="/var/log/asterisk/messages* /var/log/asterisk/full* /var/log/syslog* /var/log/messages*" ;;
+                                *zabbix*) LOG_TARGETS="/var/log/zabbix/zabbix_server.log* /var/log/syslog* /var/log/messages*" ;;
+                                *haproxy*) LOG_TARGETS="/var/log/haproxy.log* /var/log/syslog* /var/log/messages* /var/log/daemon.log*" ;;
+                                *squid*) LOG_TARGETS="/var/log/squid/*.log* /var/log/syslog* /var/log/messages*" ;;
+                                *gitea*|*forgejo*) LOG_TARGETS="/var/log/gitea/gitea.log* /var/log/forgejo/forgejo.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *jenkins*) LOG_TARGETS="/var/log/jenkins/jenkins.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *gitlab*) LOG_TARGETS="/var/log/gitlab/gitlab-rails/application.log* /var/log/gitlab/gitlab-rails/auth.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *vaultwarden*) LOG_TARGETS="/var/log/vaultwarden/vaultwarden.log* /vw-data/vaultwarden.log* /opt/vaultwarden/vaultwarden.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *sso*|*authelia*|*authentik*) LOG_TARGETS="/var/log/authelia/authelia.log* /var/log/authentik/authentik.log* /opt/authelia/authelia.log* /opt/authentik/authentik.log* /var/log/syslog* /var/log/daemon.log*" ;;
+                                *odoo*) LOG_TARGETS="/var/log/odoo/odoo-server.log* /var/log/odoo/odoo.log* /var/log/syslog*" ;;
+                                *nextcloud*) LOG_TARGETS="/var/www/nextcloud/data/nextcloud.log* /var/www/html/nextcloud/data/nextcloud.log* /var/www/html/data/nextcloud.log* /var/log/syslog*" ;;
+                                *laravel*) LOG_TARGETS="/var/www/html/storage/logs/laravel.log* /var/www/storage/logs/laravel.log* /var/log/syslog*" ;;
+                                *grafana*) LOG_TARGETS="/var/log/grafana/grafana.log* /var/log/syslog* /var/log/daemon.log*" ;;
                             esac
 
-                            # --- DEVSECOPS FIX: O(1) PRIORITIZED FORWARD EXTRACTION ---
-                            L7_PAYLOAD=""
-                            
-                            # Loop securely over defined targets (Error logs ALWAYS evaluated first)
-                            for target in $LOG_TARGETS; do
-                                # ls -1t expands the wildcards (like *error*.log) dynamically.
-                                # '|| true' prevents set -e from crashing if the glob matches no files.
-                                for log_file in $(ls -1t ${target} ${target}.* ${target}-* 2>/dev/null || true); do
-                                    # Double-check ensures we only read actual existing files
-                                    [[ ! -f "$log_file" ]] && continue
-                                    
-                                    # Native C-mapped forward zgrep. 'grep -m 1' STOPS INSTANTLY at the very first payload match.
-                                    # Zero memory exhaustion, zero timeout kills, catches the correct context.
-                                    MATCH=$(timeout 2 zgrep -a -m 1 -F "$IP" "$log_file" 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
-                                    
-                                    if [[ -n "$MATCH" ]]; then
-                                        L7_PAYLOAD="$MATCH"
-                                        break 2 # Exits BOTH loops instantly at the exact correct priority payload
-                                    fi
-                                done
-                            done
+                            # --- DEVSECOPS FIX: THE 0.37.2 IFS GHOST BUG REVEALED ---
+                            # In v0.37.2, the global IFS=$'\n\t' prevented $LOG_TARGETS from splitting on spaces.
+                            # Multi-file targets failed silently, returning an empty payload. The old UI simply 
+                            # HID these IPs entirely. We revert to the highly stable 0.37.2 pipeline, but we 
+                            # strictly restore the IFS space beforehand so zgrep can natively glob multiple paths.
+                            OIFS="$IFS"
+                            IFS=$' \n\t'
+                            L7_PAYLOAD=$(timeout 3 zgrep -h -a -F "$IP" $LOG_TARGETS 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                            IFS="$OIFS"
                             
                             # Phase 2: systemd-journald fallback (if native flat files are missing)
                             if [[ -z "$L7_PAYLOAD" ]] && command -v journalctl >/dev/null 2>&1; then
