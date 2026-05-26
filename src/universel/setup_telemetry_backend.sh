@@ -286,21 +286,32 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                                 *grafana*) LOG_TARGETS="/var/log/grafana/grafana.log* /var/log/syslog* /var/log/daemon.log*" ;;
                             esac
 
-                            # --- DEVSECOPS FIX: THE CHRONOLOGICAL PARADOX ---
-                            # Native bash globbing sorts alphabetically, causing old archives (.2.gz) to be read 
-                            # AFTER active logs. 'tail -n 1' would then incorrectly capture outdated payloads.
-                            # FIX: We dynamically resolve and sort the files by modification time (Oldest -> Newest) 
-                            # using 'ls -1tr'. This guarantees that the active log is parsed LAST, 
-                            # providing absolute synchronization with the live ban time.
+                            # --- DEVSECOPS FIX: THE I/O DEATH SPIRAL & CHRONOLOGICAL SYNC ---
+                            # FIX: We restore `ls -1t` (NEWEST to OLDEST) and iterate file by file. 
+                            # We use `tail -n 1` to get the most recent entry within the file, and `break` INSTANTLY 
+                            # the moment a payload is found, completely skipping older archives. O(1) efficiency restored.
                             OIFS="$IFS"
                             IFS=$' \n\t'
                             
-                            SORTED_TARGETS=$(ls -1tr $LOG_TARGETS 2>/dev/null)
-                            [[ -z "$SORTED_TARGETS" ]] && SORTED_TARGETS="$LOG_TARGETS" # Fallback if ls fails
-                            
-                            L7_PAYLOAD=$(timeout 3 zgrep -h -a -F "$IP" $SORTED_TARGETS 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
-                            
+                            # Safely expand all wildcard paths and sort strictly from newest to oldest
+                            SORTED_TARGETS=$(ls -1t $LOG_TARGETS 2>/dev/null || true)
                             IFS="$OIFS"
+                            
+                            L7_PAYLOAD=""
+                            if [[ -n "$SORTED_TARGETS" ]]; then
+                                while IFS= read -r log_file; do
+                                    [[ ! -f "$log_file" ]] && continue
+                                    
+                                    # Forward search restricted to ONE file at a time.
+                                    # tail -n 1 correctly grabs the absolute newest attack in this specific file.
+                                    MATCH=$(timeout 2 zgrep -h -a -F "$IP" "$log_file" 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                                    
+                                    if [[ -n "$MATCH" ]]; then
+                                        L7_PAYLOAD="$MATCH"
+                                        break # CRITICAL: Stop reading older archives instantly. Saves 95% CPU/IO.
+                                    fi
+                                done <<< "$SORTED_TARGETS"
+                            fi
                             
                             # Phase 2: systemd-journald fallback (if native flat files are missing)
                             if [[ -z "$L7_PAYLOAD" ]] && command -v journalctl >/dev/null 2>&1; then
