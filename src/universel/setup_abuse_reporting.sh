@@ -246,7 +246,7 @@ def monitor_logs():
                     cats = []
                     
                     # 1. Web Vulnerability Scanners & Pentest Tools
-                    if any(x in jail for x in ["badbot", "scanner", "apimapper", "secretshunter", "idor"]): cats.extend(["14", "15", "19", "21"])
+                    if any(x in jail for x in ["badbot", "scanner", "apimapper", "secretshunter", "idor", "honeypot"]): cats.extend(["14", "15", "19", "21"])
                     # 2. SQLi & XSS
                     elif "sqli" in jail or "xss" in jail: cats.extend(["15", "16", "21"])
                     # 3. RCE, WebShells, LFI/RFI, SSRF, JNDI, ModSecurity, Obfuscation

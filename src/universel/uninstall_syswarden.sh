@@ -292,7 +292,7 @@ uninstall_syswarden() {
         syswarden-revshell syswarden-aibots syswarden-badbots syswarden-httpflood syswarden-webshell \
         syswarden-sqli-xss syswarden-secretshunter syswarden-ssrf syswarden-jndi-ssti syswarden-apimapper \
         syswarden-modsec syswarden-tls-guard syswarden-apache-tls \
-        syswarden-lfi-advanced syswarden-vaultwarden syswarden-sso syswarden-silent-scanner syswarden-recidive syswarden-generic-auth \
+        syswarden-lfi-advanced syswarden-vaultwarden syswarden-sso syswarden-silent-scanner syswarden-cms-honeypot syswarden-recidive syswarden-generic-auth \
         syswarden-proxy-abuse syswarden-jenkins syswarden-gitlab syswarden-redis syswarden-rabbitmq \
         syswarden-idor-enum syswarden-odoo syswarden-prestashop syswarden-atlassian \
         wordpress-auth drupal-auth nextcloud openvpn-custom gitea-custom cockpit-custom proxmox-custom \
