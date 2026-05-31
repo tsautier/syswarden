@@ -305,7 +305,8 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                                     
                                     # Forward search restricted to ONE file at a time.
                                     # tail -n 1 correctly grabs the absolute newest attack in this specific file.
-                                    MATCH=$(timeout 2 zgrep -h -a -F "$IP" "$log_file" 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
+                                    # [DEVSECOPS FIX] Excluded benign daemon noise (like 'closed keepalive connection') to prevent false-payload extraction from error.log
+                                    MATCH=$(timeout 2 zgrep -h -a -F "$IP" "$log_file" 2>/dev/null | grep -vE '(syswarden_reporter|fail2ban-server|closed keepalive connection)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | tail -n 1 || true)
                                     
                                     if [[ -n "$MATCH" ]]; then
                                         L7_PAYLOAD="$MATCH"
@@ -316,7 +317,8 @@ if command -v fail2ban-client >/dev/null && timeout 2 fail2ban-client ping >/dev
                             
                             # Phase 2: systemd-journald fallback (if native flat files are missing)
                             if [[ -z "$L7_PAYLOAD" ]] && command -v journalctl >/dev/null 2>&1; then
-                                L7_PAYLOAD=$(timeout 2 journalctl -q --no-pager -r -n 500000 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
+                                # [DEVSECOPS FIX] Synchronized exclusion of benign daemon noise in the systemd journal
+                                L7_PAYLOAD=$(timeout 2 journalctl -q --no-pager -r -n 500000 2>/dev/null | grep -a -F "$IP" | grep -vE '(syswarden_reporter|fail2ban-server|closed keepalive connection)' | awk '!/\[SysWarden-(GEO|ASN)\]/ && !(/\[SysWarden-BLOCK\]/ && !/\[Catch-All\]/)' | head -n 1 || true)
                             fi
                         fi
                         
@@ -499,8 +501,9 @@ jq -n \
 }' > "$TMP_FILE"
 
 mv -f "$TMP_FILE" "$DATA_FILE"
-chown www-data:www-data "$DATA_FILE" 2>/dev/null || chown nginx:nginx "$DATA_FILE" 2>/dev/null || true
-chmod 640 "$DATA_FILE"
+# [DEVSECOPS FIX] TUI Architecture: data.json is strictly owned by root, no web-server permissions needed
+chown root:root "$DATA_FILE" 2>/dev/null || true
+chmod 600 "$DATA_FILE"
 EOF
 
     # 2. Make executable
