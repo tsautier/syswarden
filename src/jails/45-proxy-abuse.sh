@@ -11,9 +11,12 @@ syswarden_jail_proxy_abuse() {
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-proxy-abuse.conf
 [Definition]
 # [DEVSECOPS FIX] Detects exotic methods (SSTP, WebDAV), proxy probes, and buffer overflow fuzzing in URIs
+# [HOTFIX] Extends native daemon log monitoring to catch 'invalid method' binary payloads logged at the [info] level
 failregex = ^<HOST> \S+ \S+ \[[^\]]*\] "(?:CONNECT|TRACE|TRACK|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK|SSTP_DUPLEX_POST) [^"]*?" \d{3}
             ^<HOST> \S+ \S+ \[[^\]]*\] "(?:GET|POST|HEAD) (?:http|https)(?:\x253A|:)//[^"]*?" \d{3}
-            ^.* \[error\] \d+#\d+: \*\d+ .* client: <HOST>, .* request: "(?:SSTP_DUPLEX_POST|[^"]*\\x[0-9a-fA-F]{2})
+            ^<HOST> \S+ \S+ \[[^\]]*\] "\\x[0-9a-fA-F]{2}[^"]*?" (?:400|444)
+            ^.* \[(?:info|error)\] \d+#\d+: \*\d+ .* client: <HOST>, .* request: "(?:SSTP_DUPLEX_POST|[^"]*\\x[0-9a-fA-F]{2})
+            ^.* \[(?:info|error)\] \d+#\d+: \*\d+ client sent invalid method while reading client request line, client: <HOST>, .*
 ignoreregex = 
 EOF
     fi
