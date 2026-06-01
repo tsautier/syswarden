@@ -21,6 +21,7 @@ syswarden_jail_portscan() {
 
     # Create Filter for SysWarden kernel drop prefixes (BLOCK, GEO, ASN)
     if [[ ! -f "/etc/fail2ban/filter.d/syswarden-portscan.conf" ]]; then
+        # Safe Heredoc with literal parsing
         cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-portscan.conf
 [INCLUDES]
 before = common.conf
@@ -28,9 +29,20 @@ before = common.conf
 [Definition]
 # Matches ONLY the Catch-All drops to detect actual probing on closed ports.
 # Prevents double-punishment for IPs already dropped by HW/Kernel sets (GEO/ASN).
-failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-BLOCK\] \[Catch-All\].*?SRC=<HOST>
-ignoreregex = 
+failregex = ^%(__prefix_line)s(?:kernel:\s+)?(?:\[\s*\d+\.\d+\]\s+)?\[SysWarden-BLOCK\] \[Catch-All\].*?SRC=<HOST> 
 EOF
+
+        # [DEVSECOPS FIX] Dynamic Whitelist Injection to bypass Fail2ban global ignoreip
+        local WL_REGEX=""
+        if [[ -f "/etc/syswarden/whitelist.txt" ]]; then
+            WL_REGEX=$(grep -vE '^\s*#|^\s*$' /etc/syswarden/whitelist.txt | awk '{print $1}' | sed 's/\./\\./g' | tr '\n' '|' | sed 's/|$//')
+        fi
+
+        if [[ -n "$WL_REGEX" ]]; then
+            echo "ignoreregex = SRC=($WL_REGEX) " >>/etc/fail2ban/filter.d/syswarden-portscan.conf
+        else
+            echo "ignoreregex =" >>/etc/fail2ban/filter.d/syswarden-portscan.conf
+        fi
     fi
 
     # Write directly to jail.d for clean segmentation
