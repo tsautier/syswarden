@@ -14,8 +14,21 @@ protect_docker_jail() {
 
     local action_file="/etc/fail2ban/action.d/syswarden-docker.conf"
     if [[ ! -f "$action_file" ]]; then
-        log "ERROR" "Docker banaction ($action_file) is missing. Cannot protect Docker jails."
-        exit 1
+        log "INFO" "Generating missing Docker banaction ($action_file)..."
+        # [DEVSECOPS FIX] Auto-generate Universal L3 Drop rule for DOCKER-USER
+        cat <<'EOF' >"$action_file"
+[Definition]
+actionstart = iptables -N f2b-<name> 2>/dev/null || true
+              iptables -A f2b-<name> -j RETURN 2>/dev/null || true
+              iptables -I DOCKER-USER -j f2b-<name> 2>/dev/null || true
+actionstop = iptables -D DOCKER-USER -j f2b-<name> 2>/dev/null || true
+             iptables -F f2b-<name> 2>/dev/null || true
+             iptables -X f2b-<name> 2>/dev/null || true
+actioncheck = iptables -n -L DOCKER-USER | grep -q 'f2b-<name>[ \t]'
+actionban = iptables -I f2b-<name> 1 -s <ip> -j DROP
+actionunban = iptables -D f2b-<name> -s <ip> -j DROP
+EOF
+        chmod 644 "$action_file"
     fi
     # ------------------------------------------------------
 

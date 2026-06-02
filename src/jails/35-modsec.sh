@@ -1,4 +1,11 @@
 syswarden_jail_modsec() {
+    # [DEVSECOPS FIX] Intercept Multi-Tenant Docker logs prior to native fail-fast evaluation.
+    # Expands wildcards dynamically to ensure at least one container log file exists.
+    if [[ -n "${SYSWARDEN_MODSEC_LOGS:-}" ]] && ls ${SYSWARDEN_MODSEC_LOGS} >/dev/null 2>&1; then
+        SYSW_MODSEC_ACTIVE=1
+        SYSW_MODSEC_LOGS="${SYSWARDEN_MODSEC_LOGS}"
+    fi
+
     # 1. Fail-Fast: Check against discovery engine results (Zero I/O overhead)
     if [[ "${SYSW_MODSEC_ACTIVE:-0}" -ne 1 ]] || [[ -z "${SYSW_MODSEC_LOGS:-}" ]]; then
         return 0
