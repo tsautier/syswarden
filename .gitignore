@@ -1,5 +1,5 @@
 # Local binaries & tools
-shfmt.exe
+*.exe
 *.ps1
 
 # SysWarden Build Artifacts (CI/CD & Local)
