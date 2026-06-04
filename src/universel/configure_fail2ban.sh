@@ -171,6 +171,9 @@ EOF_ACTION
 # ==============================================================================
 set -euo pipefail
 
+# Enforce explicit standard bin paths to prevent command failures inside daemon environment
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 ACTION="${1:-}"
 IP_ADDRESS="${2:-}"
 JAIL_NAME="${3:-Unknown}"
@@ -180,8 +183,9 @@ if [[ -z "$ACTION" ]] || [[ -z "$IP_ADDRESS" ]]; then
 fi
 
 CONF_FILE="/etc/syswarden.conf"
-F2B_BLOCKLIST="/etc/syswarden/f2b_blocklist.txt"
-LOCK_FILE="/var/lock/syswarden-persistence.lock"
+# Relocate database and locking handles inside Fail2ban native storage to satisfy SELinux and Systemd restrictions
+F2B_BLOCKLIST="/var/lib/fail2ban/syswarden_f2b_blocklist.txt"
+LOCK_FILE="/var/lib/fail2ban/syswarden_persistence.lock"
 SET_NAME="syswarden_blacklist"
 
 # Default fallback engine

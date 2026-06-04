@@ -301,9 +301,10 @@ uninstall_syswarden() {
     done
     rm -f /etc/fail2ban/action.d/syswarden-docker.conf
     rm -f /etc/fail2ban/action.d/syswarden-webhook.conf
-    # Purge L7 persistence subsystem actions and synchronization locks
+    # Purge L7 persistence subsystem actions, state databases and synchronization locks
     rm -f /etc/fail2ban/action.d/syswarden-persistence.conf
-    rm -f /var/lock/syswarden-persistence.lock
+    rm -f /var/lib/fail2ban/syswarden_f2b_blocklist.txt
+    rm -f /var/lib/fail2ban/syswarden_persistence.lock
     rm -f /etc/fail2ban/jail.local
     rm -f /etc/fail2ban/fail2ban.local
 
