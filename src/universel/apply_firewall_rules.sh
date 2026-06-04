@@ -3,10 +3,14 @@ apply_firewall_rules() {
 
     # --- LOCAL PERSISTENCE INJECTION ---
     mkdir -p "$SYSWARDEN_DIR"
-    touch "$WHITELIST_FILE" "$BLOCKLIST_FILE"
+    touch "$WHITELIST_FILE" "$BLOCKLIST_FILE" "$F2B_BLOCKLIST_FILE"
+    chmod 600 "$F2B_BLOCKLIST_FILE"
 
-    # 1. Inject local blocklist into the global list
+    # 1. Inject local blocklist and Fail2ban persistent list into the global list
     cat "$BLOCKLIST_FILE" >>"$FINAL_LIST"
+    if [[ -s "$F2B_BLOCKLIST_FILE" ]]; then
+        cat "$F2B_BLOCKLIST_FILE" >>"$FINAL_LIST"
+    fi
 
     # 2. Clean duplicates to ensure firewall stability
     sort -u "$FINAL_LIST" -o "$FINAL_LIST"

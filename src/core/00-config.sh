@@ -14,11 +14,12 @@ SET_NAME="syswarden_blacklist"
 TMP_DIR=$(mktemp -d -t syswarden-install-XXXXXX)
 chmod 0700 "$TMP_DIR"
 
-VERSION="v0.43.4"
+VERSION="v0.50.0"
 ACTIVE_PORTS=""
 SYSWARDEN_DIR="/etc/syswarden"
 WHITELIST_FILE="$SYSWARDEN_DIR/whitelist.txt"
 BLOCKLIST_FILE="$SYSWARDEN_DIR/blocklist.txt"
+F2B_BLOCKLIST_FILE="$SYSWARDEN_DIR/f2b_blocklist.txt"
 GEOIP_SET_NAME="syswarden_geoip"
 GEOIP_FILE="$SYSWARDEN_DIR/geoip.txt"
 ASN_SET_NAME="syswarden_asn"

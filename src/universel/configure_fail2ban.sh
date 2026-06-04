@@ -160,14 +160,112 @@ actioncheck =
 actionban = /etc/syswarden/syswarden-webhook.sh <name> <ip> <failures>
 actionunban = 
 EOF_ACTION
-
-            # --- HOTFIX: FAIL2BAN PYTHON CONFIGPARSER MULTILINE INJECTION ---
-            # Using Bash ANSI C-quoted strings ($'') to force a physical newline.
-            # Python's ConfigParser requires subsequent action lines to be indented.
-            SYSW_DEFAULT_ACTION=$'%(banaction)s\n          syswarden-webhook'
-        else
-            SYSW_DEFAULT_ACTION="%(banaction)s"
         fi
+
+        # --- L7 PERSISTENCE SCRIPT DEPLOYMENT ---
+        log "INFO" "Deploying secure L7 behavioral persistence subsystem..."
+        cat <<'EOF_PERSIST' >/etc/syswarden/syswarden-persistence.sh
+#!/usr/bin/env bash
+# ==============================================================================
+# SYSWARDEN L7 BEHAVIORAL BANS PERSISTENCE DISPATCHER
+# ==============================================================================
+set -euo pipefail
+
+ACTION="${1:-}"
+IP_ADDRESS="${2:-}"
+JAIL_NAME="${3:-Unknown}"
+
+if [[ -z "$ACTION" ]] || [[ -z "$IP_ADDRESS" ]]; then
+    exit 1
+fi
+
+CONF_FILE="/etc/syswarden.conf"
+F2B_BLOCKLIST="/etc/syswarden/f2b_blocklist.txt"
+LOCK_FILE="/var/lock/syswarden-persistence.lock"
+SET_NAME="syswarden_blacklist"
+
+# Default fallback engine
+FIREWALL_BACKEND="nftables"
+if [[ -f "$CONF_FILE" ]]; then
+    # Secure regex extraction avoiding execution vectors
+    if grep -q 'FIREWALL_BACKEND="\(.*\)"' "$CONF_FILE"; then
+        FIREWALL_BACKEND=$(grep 'FIREWALL_BACKEND=' "$CONF_FILE" | cut -d'"' -f2)
+    fi
+fi
+
+exec_with_lock() {
+    # Open lock file descriptor for exclusive atomic multithreaded operations (CWE-362)
+    exec 9>"$LOCK_FILE"
+    flock -x 9
+    "$@"
+    exec 9>&-
+}
+
+handle_ban() {
+    if [[ ! -f "$F2B_BLOCKLIST" ]]; then
+        touch "$F2B_BLOCKLIST"
+        chmod 600 "$F2B_BLOCKLIST"
+    fi
+    # Append target IP surgically without causing internal layout duplication
+    if ! grep -qFx "$IP_ADDRESS" "$F2B_BLOCKLIST"; then
+        echo "$IP_ADDRESS" >> "$F2B_BLOCKLIST"
+    fi
+}
+
+handle_unban() {
+    if [[ -f "$F2B_BLOCKLIST" ]]; then
+        local tmp_clean
+        tmp_clean=$(mktemp)
+        grep -vFx "$IP_ADDRESS" "$F2B_BLOCKLIST" > "$tmp_clean" || true
+        mv "$tmp_clean" "$F2B_BLOCKLIST"
+        chmod 600 "$F2B_BLOCKLIST"
+    fi
+
+    # Real-time Kernel synchronization to instantly bypass next cron interval delay
+    case "$FIREWALL_BACKEND" in
+        nftables)
+            nft delete element netdev syswarden_hw_drop "$SET_NAME" { "$IP_ADDRESS" } 2>/dev/null || true
+            ;;
+        firewalld)
+            firewall-cmd --ipset="$SET_NAME" --remove-entry="$IP_ADDRESS" >/dev/null 2>&1 || true
+            ;;
+        ufw|iptables)
+            ipset del "$SET_NAME" "$IP_ADDRESS" >/dev/null 2>&1 || true
+            ;;
+    esac
+}
+
+case "$ACTION" in
+    ban)
+        exec_with_lock handle_ban
+        ;;
+    unban)
+        exec_with_lock handle_unban
+        ;;
+esac
+
+exit 0
+EOF_PERSIST
+        chmod 700 /etc/syswarden/syswarden-persistence.sh
+        chown root:root /etc/syswarden/syswarden-persistence.sh
+
+        # Define the Fail2ban action mapped to the persistence manager
+        cat <<'EOF_PERSIST_ACTION' >/etc/fail2ban/action.d/syswarden-persistence.conf
+[Definition]
+actionstart = 
+actionstop = 
+actioncheck = 
+actionban = /etc/syswarden/syswarden-persistence.sh ban <ip> <name>
+actionunban = /etc/syswarden/syswarden-persistence.sh unban <ip> <name>
+EOF_PERSIST_ACTION
+
+        # --- HOTFIX: FAIL2BAN PYTHON CONFIGPARSER MULTILINE ALIGNMENT ---
+        # Seamlessly construct the default multi-action list sequence
+        SYSW_DEFAULT_ACTION="%(banaction)s"
+        if [[ "${SYSWARDEN_ENABLE_WEBHOOK:-n}" == "y" ]]; then
+            SYSW_DEFAULT_ACTION+=$'\n          syswarden-webhook'
+        fi
+        SYSW_DEFAULT_ACTION+=$'\n          syswarden-persistence'
 
         # 4. Generate Core jail.local (Defaults & SSH)
         cat <<EOF >/etc/fail2ban/jail.local
