@@ -30,9 +30,9 @@ syswarden_jail_cockpit() {
     if [[ ! -f "/etc/fail2ban/filter.d/cockpit-custom.conf" ]]; then
         cat <<'EOF' >/etc/fail2ban/filter.d/cockpit-custom.conf
 [Definition]
-# Matches both standard console logs (cockpit-ws) and direct PAM authentication failures (cockpit-session)
-failregex = ^.*?cockpit-ws.*?(?:authentication failed|invalid user).*?from <HOST>.*$
-            ^.*?cockpit-session.*?pam_unix\(cockpit:auth\): authentication failure;.*?rhost=(?:::ffff:)?<HOST>.*$
+# Universal deterministic patterns matching both raw syslog files and stripped systemd journal streams
+failregex = ^(?:.*?cockpit-ws.*?:\s)?(?:authentication failed|invalid user).*?from <HOST>.*$
+            ^(?:.*?cockpit-session.*?:\s)?pam_unix\(cockpit:auth\): authentication failure;.*?rhost=(?:::ffff:)?<HOST>.*$
 ignoreregex = 
 EOF
     fi
