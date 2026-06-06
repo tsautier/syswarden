@@ -45,6 +45,7 @@ port     = 9090
 filter   = cockpit-custom
 backend  = systemd
 maxretry = 3
+findtime = 10m
 bantime  = 24h
 EOF
     else
@@ -56,6 +57,7 @@ filter   = cockpit-custom
 logpath  = $COCKPIT_LOG
 backend  = $JAIL_BACKEND
 maxretry = 3
+findtime = 10m
 bantime  = 24h
 EOF
     fi

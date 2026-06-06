@@ -378,7 +378,7 @@ EOF
         # and replaces the space with an explicit newline and 10 spaces.
         # ==============================================================================
         log "INFO" "Sanitizing multi-line logpath arrays for strict ConfigParser alignment..."
-        sed -i -E 's|[[:space:]]+(/var/log/[^[:space:]]+)|\n          \1|g' /etc/fail2ban/jail.local /etc/fail2ban/jail.d/*.local 2>/dev/null || true
+        sed -i -E 's|[[:space:]]+(/var/log/[^[:space:]]+)|\n          \1|g' /etc/fail2ban/jail.local /etc/fail2ban/jail.d/*.conf /etc/fail2ban/jail.d/*.local 2>/dev/null || true
         # ==============================================================================
 
         # 7. SERVICE RESTART & SOCKET WAIT
@@ -388,10 +388,15 @@ EOF
             chown root:root /var/log/fail2ban.log 2>/dev/null || true
         fi
 
-        log "INFO" "Starting Fail2ban service..."
+        log "INFO" "Reloading/Starting Fail2ban service..."
         if command -v systemctl >/dev/null; then
-            systemctl enable --now fail2ban >/dev/null 2>&1 || true
-            systemctl restart fail2ban >/dev/null 2>&1 || true
+            systemctl enable fail2ban >/dev/null 2>&1 || true
+            if systemctl is-active --quiet fail2ban; then
+                # Graceful reload to prevent state amnesia and log rescanning on periodic executions
+                fail2ban-client reload >/dev/null 2>&1 || true
+            else
+                systemctl start fail2ban >/dev/null 2>&1 || true
+            fi
         else
             fail2ban-client reload >/dev/null 2>&1 || true
         fi
