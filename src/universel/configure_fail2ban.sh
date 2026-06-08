@@ -50,6 +50,11 @@ EOF
         public_ip=$(ip -4 addr show | grep -oEo 'inet [0-9.]+' | awk '{print $2}' | grep -v '127.0.0.1' | head -n 1 || true)
         if [[ -n "$public_ip" ]]; then f2b_ignoreip="$f2b_ignoreip $public_ip"; fi
 
+        # Short-circuit internal telemetry evaluation loops by forcing all local interfaces to be ignored
+        local all_local_ips
+        all_local_ips=$(ip -4 addr show | awk '/inet / {print $2}' | cut -d/ -f1 | tr '\n' ' ' || true)
+        if [[ -n "$all_local_ips" ]]; then f2b_ignoreip="$f2b_ignoreip $all_local_ips"; fi
+
         local local_subnets
         local_subnets=$(ip -4 route | grep -v default | awk '{print $1}' | tr '\n' ' ' || true)
         if [[ -n "$local_subnets" ]]; then f2b_ignoreip="$f2b_ignoreip $local_subnets"; fi
@@ -219,7 +224,8 @@ handle_ban() {
 handle_unban() {
     if [[ -f "$F2B_BLOCKLIST" ]]; then
         local tmp_clean
-        tmp_clean=$(mktemp)
+        # Create temporary file inside the same directory to preserve SELinux context and layout inheritance
+        tmp_clean=$(mktemp -p "$(dirname "$F2B_BLOCKLIST")")
         grep -vFx "$IP_ADDRESS" "$F2B_BLOCKLIST" > "$tmp_clean" || true
         mv "$tmp_clean" "$F2B_BLOCKLIST"
         chmod 600 "$F2B_BLOCKLIST"
@@ -253,6 +259,15 @@ EOF_PERSIST
         chmod 700 /etc/syswarden/syswarden-persistence.sh
         chown root:root /etc/syswarden/syswarden-persistence.sh
 
+        # Fix legacy SELinux security contexts for existing blocklist definitions
+        if [[ -f "/var/lib/fail2ban/syswarden_f2b_blocklist.txt" ]]; then
+            chmod 600 /var/lib/fail2ban/syswarden_f2b_blocklist.txt
+            chown root:root /var/lib/fail2ban/syswarden_f2b_blocklist.txt
+            if command -v restorecon >/dev/null 2>&1; then
+                restorecon -F /var/lib/fail2ban/syswarden_f2b_blocklist.txt 2>/dev/null || true
+            fi
+        fi
+
         # Define the Fail2ban action mapped to the persistence manager
         cat <<'EOF_PERSIST_ACTION' >/etc/fail2ban/action.d/syswarden-persistence.conf
 [Definition]
@@ -280,6 +295,8 @@ findtime = 10m
 maxretry = 3
 ignoreip = $f2b_ignoreip
 backend = auto
+# Disable reverse DNS lookups to prevent blocking overhead and optimize performance during floods
+usedns = no
 banaction = $SYSW_F2B_ACTION
 action = $SYSW_DEFAULT_ACTION
 
