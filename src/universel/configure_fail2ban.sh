@@ -190,6 +190,7 @@ fi
 CONF_FILE="/etc/syswarden.conf"
 # Relocate database and locking handles inside Fail2ban native storage to satisfy SELinux and Systemd restrictions
 F2B_BLOCKLIST="/var/lib/fail2ban/syswarden_f2b_blocklist.txt"
+F2B_EXPIRY="/var/lib/fail2ban/syswarden_f2b_expiry.txt"
 LOCK_FILE="/var/lib/fail2ban/syswarden_persistence.lock"
 SET_NAME="syswarden_blacklist"
 
@@ -210,6 +211,22 @@ exec_with_lock() {
     exec 9>&-
 }
 
+inject_into_kernel() {
+    local ip="$1"
+    # Hot-inject the persistent element into active kernel runtime structures to ensure zero-downtime protection
+    case "$FIREWALL_BACKEND" in
+        nftables)
+            nft add element netdev syswarden_hw_drop "$SET_NAME" { "$ip" } 2>/dev/null || true
+            ;;
+        firewalld)
+            firewall-cmd --ipset="$SET_NAME" --add-entry="$ip" >/dev/null 2>&1 || true
+            ;;
+        ufw | iptables)
+            ipset add "$SET_NAME" "$ip" -exist >/dev/null 2>&1 || true
+            ;;
+    esac
+}
+
 handle_ban() {
     if [[ ! -f "$F2B_BLOCKLIST" ]]; then
         touch "$F2B_BLOCKLIST"
@@ -219,37 +236,117 @@ handle_ban() {
     if ! grep -qFx "$IP_ADDRESS" "$F2B_BLOCKLIST"; then
         echo "$IP_ADDRESS" >> "$F2B_BLOCKLIST"
     fi
+
+    # Ensure frontline protection is immediately active at Tier 1 hardware driver level
+    inject_into_kernel "$IP_ADDRESS"
+
+    # Remove from scheduled expiries if the IP gets banned again before the 30-day window closes
+    if [[ -f "$F2B_EXPIRY" ]]; then
+        local tmp_exp
+        tmp_exp=$(mktemp -p "$(dirname "$F2B_EXPIRY")")
+        grep -v "^${IP_ADDRESS};" "$F2B_EXPIRY" > "$tmp_exp" || true
+        mv "$tmp_exp" "$F2B_EXPIRY"
+        chmod 600 "$F2B_EXPIRY"
+    fi
 }
 
 handle_unban() {
-    if [[ -f "$F2B_BLOCKLIST" ]]; then
-        local tmp_clean
-        # Create temporary file inside the same directory to preserve SELinux context and layout inheritance
-        tmp_clean=$(mktemp -p "$(dirname "$F2B_BLOCKLIST")")
-        grep -vFx "$IP_ADDRESS" "$F2B_BLOCKLIST" > "$tmp_clean" || true
-        mv "$tmp_clean" "$F2B_BLOCKLIST"
-        chmod 600 "$F2B_BLOCKLIST"
+    local expiry_time
+    expiry_time=$(( $(date +%s) + 2592000 )) # Current epoch + 30 days (30 * 86400 seconds)
+
+    if [[ ! -f "$F2B_EXPIRY" ]]; then
+        touch "$F2B_EXPIRY"
+        chmod 600 "$F2B_EXPIRY"
     fi
 
-    # Real-time Kernel synchronization to instantly bypass next cron interval delay
-    case "$FIREWALL_BACKEND" in
-        nftables)
-            nft delete element netdev syswarden_hw_drop "$SET_NAME" { "$IP_ADDRESS" } 2>/dev/null || true
-            ;;
-        firewalld)
-            firewall-cmd --ipset="$SET_NAME" --remove-entry="$IP_ADDRESS" >/dev/null 2>&1 || true
-            ;;
-        ufw|iptables)
-            ipset del "$SET_NAME" "$IP_ADDRESS" >/dev/null 2>&1 || true
-            ;;
-    esac
+    # Update or append the expiry timestamp for this unbanned IP
+    local tmp_exp
+    tmp_exp=$(mktemp -p "$(dirname "$F2B_EXPIRY")")
+    grep -v "^${IP_ADDRESS};" "$F2B_EXPIRY" > "$tmp_exp" || true
+    echo "${IP_ADDRESS};${expiry_time}" >> "$tmp_exp"
+    mv "$tmp_exp" "$F2B_EXPIRY"
+    chmod 600 "$F2B_EXPIRY"
+
+    # Retain the IP inside the main blocklist so it remains blocked across firewalls for 30 days
+    if [[ ! -f "$F2B_BLOCKLIST" ]]; then
+        touch "$F2B_BLOCKLIST"
+        chmod 600 "$F2B_BLOCKLIST"
+    fi
+    if ! grep -qFx "$IP_ADDRESS" "$F2B_BLOCKLIST"; then
+        echo "$IP_ADDRESS" >> "$F2B_BLOCKLIST"
+    fi
+
+    # Hard-override native unban deletions by forcing continuous kernel blocklist state survival
+    inject_into_kernel "$IP_ADDRESS"
+}
+
+purge_expired_bans() {
+    if [[ ! -f "$F2B_EXPIRY" ]] || [[ ! -s "$F2B_EXPIRY" ]]; then
+        return
+    fi
+
+    local current_time
+    current_time=$(date +%s)
+    local tmp_exp ip exp
+    
+    tmp_exp=$(mktemp -p "$(dirname "$F2B_EXPIRY")")
+    chmod 600 "$tmp_exp"
+    
+    # Instantiate array to batch blocklist disk mutations and avoid heavy nested disk writes
+    local expired_ips=()
+
+    while IFS=';' read -r ip exp || [[ -n "$ip" ]]; do
+        [[ -z "$ip" || -z "$exp" ]] && continue
+        if (( current_time >= exp )); then
+            expired_ips+=("$ip")
+            # Synchronize active kernel firewall structures instantly to release the 30-day quarantine
+            case "$FIREWALL_BACKEND" in
+                nftables)
+                    nft delete element netdev syswarden_hw_drop "$SET_NAME" { "$ip" } 2>/dev/null || true
+                    ;;
+                firewalld)
+                    firewall-cmd --ipset="$SET_NAME" --remove-entry="$ip" >/dev/null 2>&1 || true
+                    ;;
+                ufw | iptables)
+                    ipset del "$SET_NAME" "$ip" >/dev/null 2>&1 || true
+                    ;;
+            esac
+        else
+            # Line is still valid, retain inside expiry database tracking structure
+            echo "${ip};${exp}" >> "$tmp_exp"
+        fi
+    done < "$F2B_EXPIRY"
+    
+    mv "$tmp_exp" "$F2B_EXPIRY"
+    chmod 600 "$F2B_EXPIRY"
+
+    # Execute atomic single-pass batched file pruning to completely eliminate filesystem bottleneck
+    if (( ${#expired_ips[@]} > 0 )); then
+        if [[ -f "$F2B_BLOCKLIST" ]]; then
+            local tmp_bl tmp_expired_file
+            tmp_bl=$(mktemp -p "$(dirname "$F2B_BLOCKLIST")")
+            tmp_expired_file=$(mktemp -p "$(dirname "$F2B_BLOCKLIST")")
+            
+            for e_ip in "${expired_ips[@]}"; do
+                echo "$e_ip" >> "$tmp_expired_file"
+            done
+            
+            # Enforce exact line matching with -x to prevent substring collision vulnerabilities (CWE-185)
+            grep -vFxf "$tmp_expired_file" "$F2B_BLOCKLIST" > "$tmp_bl" || true
+            mv "$tmp_bl" "$F2B_BLOCKLIST"
+            chmod 600 "$F2B_BLOCKLIST"
+            rm -f "$tmp_expired_file"
+        fi
+    fi
 }
 
 case "$ACTION" in
     ban)
+        exec_with_lock purge_expired_bans
         exec_with_lock handle_ban
         ;;
     unban)
+        exec_with_lock purge_expired_bans
         exec_with_lock handle_unban
         ;;
 esac
@@ -265,6 +362,14 @@ EOF_PERSIST
             chown root:root /var/lib/fail2ban/syswarden_f2b_blocklist.txt
             if command -v restorecon >/dev/null 2>&1; then
                 restorecon -F /var/lib/fail2ban/syswarden_f2b_blocklist.txt 2>/dev/null || true
+            fi
+        fi
+
+        if [[ -f "/var/lib/fail2ban/syswarden_f2b_expiry.txt" ]]; then
+            chmod 600 /var/lib/fail2ban/syswarden_f2b_expiry.txt
+            chown root:root /var/lib/fail2ban/syswarden_f2b_expiry.txt
+            if command -v restorecon >/dev/null 2>&1; then
+                restorecon -F /var/lib/fail2ban/syswarden_f2b_expiry.txt 2>/dev/null || true
             fi
         fi
 
