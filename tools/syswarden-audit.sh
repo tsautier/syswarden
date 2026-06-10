@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# SysWarden v0.52.1 - DevSecOps Audit & Compliance Tool
+# SysWarden v0.52.2 - DevSecOps Audit & Compliance Tool
 # Copyright (C) 2026 duggytuxy - Laurent M.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -616,7 +616,7 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 5 "* ]]; then
     if [[ -f "/usr/local/bin/syswarden_reporter.py" ]]; then
         if is_service_active "syswarden-reporter"; then
             pass "AbuseIPDB Async Reporter is active."
-            check_file_perms "/usr/local/bin/syswarden_reporter.py" "750" "root"
+            check_file_perms "/usr/local/bin/syswarden_reporter.py" "700" "root"
         else
             warn "AbuseIPDB Reporter is installed but offline."
         fi
@@ -832,6 +832,8 @@ if [[ "$RUN_ALL" -eq 1 || "$USER_PHASES" == *" 7 "* ]]; then
                 info "Exposed Port: $PORT/TCP (Telnet Honeypot) - Guarded by Fail2ban Mirai/IoT jail."
             elif [[ "$PORT" -eq 111 ]]; then
                 info "Exposed Port: $PORT/TCP (rpcbind) - Internal RPC service, guarded by default OS Firewall."
+            elif [[ "$PORT" -eq 9090 ]]; then
+                info "Exposed Port: $PORT/TCP (Cockpit UI) - Guarded by Fail2ban cockpit jail."
             elif [[ "$PORT" -eq 9999 ]]; then
                 info "Exposed Port: $PORT/TCP (Nginx Enterprise UI) - Guarded by Zero Trust IP Restriction & TLS."
             elif [[ "$PORT" -eq 51820 || "$PORT" -eq "${WG_PORT:-51820}" ]]; then
