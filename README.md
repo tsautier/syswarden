@@ -116,12 +116,7 @@ SysWarden dynamically adapts to the native firewall orchestration engines of mod
 
 | Version | Milestone Target | Status |
 | :---: | :--- | :---: |
-| **v0.50.** | L7 - IPv4 Blocked to New Blocklist L2/L3 | ✅ |
-| **v0.60.** | ... | ❓ |
-| **v0.70.** | ... | ❓ |
-| **v0.80.** | ... | ❓ |
-| **v0.90.** | ... | ❓ |
-| **v1.00.** | ... | 🙈 |
+| **v1.00.** |  Official transition of SysWarden to HIDS/HIPS | 🙈 |
 
 ## Installation Guide
 
