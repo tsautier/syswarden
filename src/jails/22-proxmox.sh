@@ -21,8 +21,8 @@ syswarden_jail_proxmox() {
     log "INFO" "Proxmox VE hypervisor and logs detected. Enabling PVE Jail."
 
     # Filter for Proxmox Web GUI Auth Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/proxmox-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/proxmox-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-proxmox-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-proxmox-custom.conf
 [Definition]
 failregex = ^.*pvedaemon\[\d+\]: authentication failure; rhost=<HOST> user=.*$
 ignoreregex = 
@@ -30,11 +30,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/proxmox.conf
-[proxmox-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-proxmox.conf
+[syswarden-proxmox-custom]
 enabled  = true
 port     = https,8006
-filter   = proxmox-custom
+filter   = syswarden-proxmox-custom
 logpath  = $PVE_LOG
 backend  = auto
 maxretry = 3

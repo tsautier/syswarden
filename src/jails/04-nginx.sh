@@ -11,8 +11,8 @@ syswarden_jail_nginx() {
 
     log "INFO" "Nginx daemon and logs detected. Enabling Nginx Jails."
 
-    if [[ ! -f "/etc/fail2ban/filter.d/nginx-scanner.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/nginx-scanner.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-nginx-scanner.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-nginx-scanner.conf
 [Definition]
 # [DEVSECOPS FIX] Included HTTP 30x redirects and dynamic [A-Z]+ verbs to catch all evasive vulnerability scanners
 failregex = ^<HOST> \S+ \S+ (?:\[[^\]]*\]\s+)?"[A-Z]+ [^"]*?" (?:30[1278]|400|401|403|404|405|444)
@@ -21,17 +21,19 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/nginx.conf
-[nginx-http-auth]
+    # [DEVSECOPS FIX] Enforced 'syswarden-' namespace to prevent OS collisions and allow surgical updates
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-nginx.conf
+[syswarden-nginx-http-auth]
 enabled  = true
 port     = http,https
+filter   = nginx-http-auth
 logpath  = /var/log/nginx/error.log
 backend  = auto
 
-[nginx-scanner]
+[syswarden-nginx-scanner]
 enabled  = true
 port     = http,https
-filter   = nginx-scanner
+filter   = syswarden-nginx-scanner
 logpath  = /var/log/nginx/access.log
 backend  = auto
 maxretry = 15

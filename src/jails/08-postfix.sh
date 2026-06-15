@@ -21,17 +21,19 @@ syswarden_jail_postfix() {
     log "INFO" "Postfix daemon and logs detected. Enabling SMTP Jails."
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/postfix.conf
-[postfix]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-postfix.conf
+[syswarden-postfix]
 enabled  = true
 mode     = aggressive
 port     = smtp,465,submission
+filter   = postfix
 logpath  = $POSTFIX_LOG
 backend  = auto
 
-[postfix-sasl]
+[syswarden-postfix-sasl]
 enabled  = true
 port     = smtp,465,submission
+filter   = postfix-sasl
 logpath  = $POSTFIX_LOG
 backend  = auto
 maxretry = 3

@@ -23,8 +23,8 @@ syswarden_jail_openvpn() {
     log "INFO" "OpenVPN daemon and logs detected. Enabling OpenVPN Jail."
 
     # Filter for OpenVPN TLS Handshake & Verification Errors
-    if [[ ! -f "/etc/fail2ban/filter.d/openvpn-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/openvpn-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-openvpn-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-openvpn-custom.conf
 [Definition]
 failregex = ^.* <HOST>:[0-9]+ (?:TLS Error: TLS handshake failed|VERIFY ERROR:|TLS Auth Error:).*$
 ignoreregex = 
@@ -32,12 +32,12 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/openvpn.conf
-[openvpn-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-openvpn.conf
+[syswarden-openvpn-custom]
 enabled  = true
 port     = 1194
 protocol = udp
-filter   = openvpn-custom
+filter   = syswarden-openvpn-custom
 logpath  = $OVPN_LOG
 backend  = auto
 maxretry = 5

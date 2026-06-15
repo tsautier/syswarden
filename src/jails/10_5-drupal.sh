@@ -8,8 +8,8 @@ syswarden_jail_drupal() {
     log "INFO" "Drupal CMS detected. Enabling specific protections."
 
     # Create Filter for Drupal Authentication Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/drupal-auth.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/drupal-auth.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-drupal-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-drupal-auth.conf
 [Definition]
 failregex = ^<HOST> \S+ \S+ (?:\[[^\]]*\]\s+)?"POST [^"]*?(?:/user/login|\?q=user/login)[^"]*?" 200
 ignoreregex = 
@@ -17,11 +17,11 @@ EOF
     fi
 
     # Write directly to jail.d using the dynamic centralized log path
-    cat <<EOF >/etc/fail2ban/jail.d/drupal.conf
-[drupal-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-drupal.conf
+[syswarden-drupal-auth]
 enabled  = true
 port     = http,https
-filter   = drupal-auth
+filter   = syswarden-drupal-auth
 logpath  = $SYSW_RCE_LOGS
 backend  = auto
 maxretry = 3

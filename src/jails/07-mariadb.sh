@@ -21,19 +21,19 @@ syswarden_jail_mariadb() {
     log "INFO" "MariaDB/MySQL daemon and logs detected. Enabling MariaDB Jail."
 
     # Create Filter for Authentication Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/mariadb-auth.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/mariadb-auth.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/mysqld-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/mysqld-auth.conf
 [Definition]
 failregex = ^.*? \[?(?:Note|Warning|ERROR)\]? [Aa]ccess denied for user .*?@'<HOST>'(?: \(using password: (?:YES|NO)\))?
 ignoreregex = 
 EOF
     fi
 
-    cat <<EOF >/etc/fail2ban/jail.d/mariadb.conf
-[mariadb-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-mariadb.conf
+[syswarden-mariadb-auth]
 enabled  = true
 port     = 3306
-filter   = mariadb-auth
+filter   = mysqld-auth
 logpath  = $MARIADB_LOG
 backend  = auto
 maxretry = 3

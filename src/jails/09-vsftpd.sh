@@ -12,10 +12,11 @@ syswarden_jail_vsftpd() {
     log "INFO" "VSFTPD daemon and logs detected. Enabling FTP Jail."
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/vsftpd.conf
-[vsftpd]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-vsftpd.conf
+[syswarden-vsftpd]
 enabled  = true
 port     = ftp,ftp-data,ftps,20,21
+filter   = vsftpd
 logpath  = /var/log/vsftpd.log
 backend  = auto
 maxretry = 5

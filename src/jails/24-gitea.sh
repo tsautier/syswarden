@@ -21,8 +21,8 @@ syswarden_jail_gitea() {
     log "INFO" "Gitea/Forgejo daemon and logs detected. Enabling Git Server Jail."
 
     # Filter for Git Web UI Auth Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/gitea-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/gitea-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-gitea-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-gitea-custom.conf
 [Definition]
 failregex = ^.*?Failed authentication attempt for .*? from <HOST>:.*$
 ignoreregex = 
@@ -30,11 +30,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/gitea.conf
-[gitea-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-gitea.conf
+[syswarden-gitea-custom]
 enabled  = true
 port     = http,https,3000
-filter   = gitea-custom
+filter   = syswarden-gitea-custom
 logpath  = $GITEA_LOG
 backend  = auto
 maxretry = 5

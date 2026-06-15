@@ -22,19 +22,19 @@ syswarden_jail_nextcloud() {
     log "INFO" "Nextcloud instance and logs detected. Enabling Nextcloud Jail."
 
     # Create Filter (Supports both JSON and Legacy text logs)
-    if [[ ! -f "/etc/fail2ban/filter.d/nextcloud.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/nextcloud.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-nextcloud.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-nextcloud.conf
 [Definition]
 failregex = ^.*?Login failed: .*? \(Remote IP: '<HOST>'\).*$
 ignoreregex = 
 EOF
     fi
 
-    cat <<EOF >/etc/fail2ban/jail.d/nextcloud.conf
-[nextcloud]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-nextcloud.conf
+[syswarden-nextcloud]
 enabled  = true
 port     = http,https
-filter   = nextcloud
+filter   = syswarden-nextcloud
 logpath  = $NC_LOG
 backend  = auto
 maxretry = 3

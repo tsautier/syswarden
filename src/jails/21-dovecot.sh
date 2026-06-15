@@ -21,8 +21,8 @@ syswarden_jail_dovecot() {
     log "INFO" "Dovecot daemon and logs detected. Enabling IMAP/POP3 Jail."
 
     # Filter for Dovecot Auth Failures (catches standard rip=IP format)
-    if [[ ! -f "/etc/fail2ban/filter.d/dovecot-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/dovecot-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/dovecot.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/dovecot.conf
 [Definition]
 failregex = ^.*dovecot: .*(?:Authentication failure|Aborted login|auth failed).*rip=<HOST>,.*$
 ignoreregex = 
@@ -30,11 +30,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/dovecot.conf
-[dovecot-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-dovecot.conf
+[syswarden-dovecot]
 enabled  = true
-port     = pop3,pop3s,imap,imaps,submission,465,587
-filter   = dovecot-custom
+port     = pop3,pop3s,imap,imaps,submission,4190,sieve
+filter   = dovecot
 logpath  = $DOVECOT_LOG
 backend  = auto
 maxretry = 5

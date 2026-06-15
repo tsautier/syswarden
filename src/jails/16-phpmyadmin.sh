@@ -8,8 +8,8 @@ syswarden_jail_phpmyadmin() {
     log "INFO" "phpMyAdmin detected. Enabling specific protections."
 
     # Create Filter for POST requests to PMA
-    if [[ ! -f "/etc/fail2ban/filter.d/phpmyadmin-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/phpmyadmin-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-phpmyadmin-custom.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-phpmyadmin-custom.conf
 [Definition]
 failregex = ^<HOST> \S+ \S+ (?:\[[^\]]*\]\s+)?"POST [^"]*?phpmyadmin[^"]*? HTTP[^"]*?" 200
 ignoreregex = 
@@ -17,11 +17,11 @@ EOF
     fi
 
     # Write directly to jail.d using the dynamic centralized log path
-    cat <<EOF >/etc/fail2ban/jail.d/phpmyadmin.conf
-[phpmyadmin-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-phpmyadmin.conf
+[syswarden-phpmyadmin-custom]
 enabled  = true
 port     = http,https
-filter   = phpmyadmin-custom
+filter   = syswarden-phpmyadmin-custom
 logpath  = $SYSW_RCE_LOGS
 backend  = auto
 maxretry = 3

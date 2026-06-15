@@ -12,8 +12,8 @@ syswarden_jail_grafana() {
     log "INFO" "Grafana daemon and logs detected. Enabling Grafana Jail."
 
     # Create Filter for Grafana Auth Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/grafana-auth.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/grafana-auth.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-grafana-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-grafana-auth.conf
 [Definition]
 failregex = ^.*(?:msg="Invalid username or password"|status=401).*remote_addr=<HOST>.*$
 ignoreregex = 
@@ -21,11 +21,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/grafana.conf
-[grafana-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-grafana.conf
+[syswarden-grafana-auth]
 enabled  = true
 port     = 3000,http,https
-filter   = grafana-auth
+filter   = syswarden-grafana-auth
 logpath  = /var/log/grafana/grafana.log
 backend  = auto
 maxretry = 3

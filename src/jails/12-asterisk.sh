@@ -21,8 +21,8 @@ syswarden_jail_asterisk() {
     log "INFO" "Asterisk daemon and logs detected. Enabling VoIP Jail."
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/asterisk.conf
-[asterisk]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-asterisk.conf
+[syswarden-asterisk]
 enabled  = true
 filter   = asterisk
 port     = 5060,5061

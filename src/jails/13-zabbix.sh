@@ -12,8 +12,8 @@ syswarden_jail_zabbix() {
     log "INFO" "Zabbix daemon and logs detected. Enabling Zabbix Jail."
 
     # Create Filter for Zabbix Server Login Failures
-    if [[ ! -f "/etc/fail2ban/filter.d/zabbix-auth.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/zabbix-auth.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-zabbix-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-zabbix-auth.conf
 [Definition]
 failregex = ^.*?failed login of user .*? from <HOST>.*$
 ignoreregex = 
@@ -21,11 +21,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/zabbix.conf
-[zabbix-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-zabbix.conf
+[syswarden-zabbix-auth]
 enabled  = true
 port     = http,https,10050,10051
-filter   = zabbix-auth
+filter   = syswarden-zabbix-auth
 logpath  = /var/log/zabbix/zabbix_server.log
 backend  = auto
 maxretry = 3

@@ -28,8 +28,8 @@ syswarden_jail_laravel() {
     log "INFO" "Laravel framework and logs detected. Enabling Laravel Jail."
 
     # Create Filter (Matches: 'Failed login... ip: 1.2.3.4' or similar patterns)
-    if [[ ! -f "/etc/fail2ban/filter.d/laravel-auth.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/laravel-auth.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-laravel-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-laravel-auth.conf
 [Definition]
 failregex = ^\[.*\] .*: (?:Failed login|Authentication failed|Login failed).*<HOST>.*$
 ignoreregex = 
@@ -37,11 +37,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/laravel.conf
-[laravel-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-laravel.conf
+[syswarden-laravel-auth]
 enabled  = true
 port     = http,https
-filter   = laravel-auth
+filter   = syswarden-laravel-auth
 logpath  = $LARAVEL_LOG
 backend  = auto
 maxretry = 5

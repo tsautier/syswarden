@@ -3,14 +3,18 @@ configure_fail2ban() {
         log "INFO" "Generating Fail2ban configuration (Universal Mode)..."
 
         # --- SECURITY FIX: PURGE CONFLICTING DEFAULT JAILS & FILTERS ---
-        log "INFO" "Purging legacy definitions to prevent rule conflicts..."
-        if [[ -d /etc/fail2ban/jail.d ]]; then
-            rm -rf /etc/fail2ban/jail.d
+        log "INFO" "Purging legacy SysWarden definitions to prevent rule conflicts..."
+        if [[ ! -d /etc/fail2ban/jail.d ]]; then
+            mkdir -p /etc/fail2ban/jail.d
+            chmod 755 /etc/fail2ban/jail.d
+        else
+            # [DEVSECOPS FIX] Surgical cleanup to preserve third-party integrations (Traefik, Custom Jails, etc.)
+            # Instead of a scorched earth 'rm -rf' on the whole directory, we specifically target SysWarden files.
+            rm -f /etc/fail2ban/jail.d/syswarden-*.conf 2>/dev/null || true
+            rm -f /etc/fail2ban/jail.d/syswarden-*.local 2>/dev/null || true
         fi
-        mkdir -p /etc/fail2ban/jail.d
-        chmod 755 /etc/fail2ban/jail.d
         rm -f /etc/fail2ban/filter.d/syswarden-*.conf 2>/dev/null || true
-        log "INFO" "Purged fail2ban/jail.d/ and old filters entirely to enforce absolute Zero Trust."
+        log "INFO" "Purged legacy SysWarden rules while strictly preserving third-party administrator configurations."
 
         if [[ -f /etc/fail2ban/jail.local ]] && [[ ! -f /etc/fail2ban/jail.local.bak ]]; then
             cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.bak

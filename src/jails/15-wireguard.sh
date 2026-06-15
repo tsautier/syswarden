@@ -24,7 +24,7 @@ syswarden_jail_wireguard() {
 
     # Create Filter for Handshake Failures (Requires Kernel Logging)
     if [[ ! -f "/etc/fail2ban/filter.d/wireguard.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/wireguard.conf
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-wireguard.conf
 [Definition]
 failregex = ^.*?wireguard: .*? Handshake for peer .*? \(<HOST>:\d+\) did not complete.*$
 ignoreregex = 
@@ -32,12 +32,13 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/wireguard.conf
-[wireguard]
+    # [DEVSECOPS FIX] Enforced 'syswarden-' namespace to prevent OS collisions and allow surgical updates
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-wireguard.conf
+[syswarden-wireguard]
 enabled  = true
 port     = 51820
 protocol = udp
-filter   = wireguard
+filter   = syswarden-wireguard
 logpath  = $WG_LOG
 maxretry = 5
 bantime  = 24h

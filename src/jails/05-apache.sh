@@ -24,26 +24,58 @@ syswarden_jail_apache() {
     log "INFO" "Apache daemon and logs detected. Enabling Apache Jails."
 
     # Create Filter for 404/403 scanners (Apache specific)
-    if [[ ! -f "/etc/fail2ban/filter.d/apache-scanner.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/apache-scanner.conf
+    # [DEVSECOPS FIX] Enforced 'syswarden-' namespace for custom heuristic filter
+    if [[ ! -f "/etc/fail2ban/filter.d/syswarden-apache-scanner.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-apache-scanner.conf
 [Definition]
-# [DEVSECOPS FIX] Included HTTP 30x redirects and dynamic [A-Z]+ verbs to catch all evasive vulnerability scanners
+# Included HTTP 30x redirects and dynamic [A-Z]+ verbs to catch all evasive vulnerability scanners
 failregex = ^<HOST> \S+ \S+ (?:\[[^\]]*\]\s+)?"[A-Z]+ [^"]*?" (?:30[1278]|400|401|403|404|405)
 ignoreregex = 
 EOF
     fi
 
-    cat <<EOF >/etc/fail2ban/jail.d/apache.conf
-[apache-auth]
+    # Write directly to jail.d for clean segmentation
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-apache.conf
+[syswarden-apache-auth]
 enabled  = true
 port     = http,https
+filter   = apache-auth
 logpath  = $APACHE_LOG
 backend  = auto
+maxretry = 5
+bantime  = 24h
 
-[apache-scanner]
+[syswarden-apache-badbots]
 enabled  = true
 port     = http,https
-filter   = apache-scanner
+filter   = apache-badbots
+logpath  = $APACHE_ACCESS
+backend  = auto
+maxretry = 2
+bantime  = 24h
+
+[syswarden-apache-noscript]
+enabled  = true
+port     = http,https
+filter   = apache-noscript
+logpath  = $APACHE_LOG
+backend  = auto
+maxretry = 5
+bantime  = 24h
+
+[syswarden-apache-overflows]
+enabled  = true
+port     = http,https
+filter   = apache-overflows
+logpath  = $APACHE_LOG
+backend  = auto
+maxretry = 2
+bantime  = 24h
+
+[syswarden-apache-scanner]
+enabled  = true
+port     = http,https
+filter   = syswarden-apache-scanner
 logpath  = $APACHE_ACCESS
 backend  = auto
 maxretry = 15

@@ -12,8 +12,8 @@ syswarden_jail_haproxy() {
     log "INFO" "HAProxy daemon and logs detected. Enabling HAProxy Jail."
 
     # Create Filter for HTTP Errors (403 Forbidden, 404 Scan, 429 RateLimit)
-    if [[ ! -f "/etc/fail2ban/filter.d/haproxy-guard.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/haproxy-guard.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/haproxy-http-auth.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/haproxy-http-auth.conf
 [Definition]
 failregex = ^.*? <HOST>:\d+ .*? (?:400|403|404|429) .*$
 ignoreregex = 
@@ -21,11 +21,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/haproxy.conf
-[haproxy-guard]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-haproxy.conf
+[syswarden-haproxy-http-auth]
 enabled  = true
 port     = http,https,8080
-filter   = haproxy-guard
+filter   = haproxy-http-auth
 logpath  = /var/log/haproxy.log
 backend  = auto
 maxretry = 5

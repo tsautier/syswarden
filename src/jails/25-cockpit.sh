@@ -28,7 +28,7 @@ syswarden_jail_cockpit() {
     log "INFO" "Cockpit Web Console detected. Enabling Cockpit Jail."
 
     # Force overwrite on deployment to ensure filter updates are applied during upgrades
-    cat <<'EOF' >/etc/fail2ban/filter.d/cockpit-custom.conf
+    cat <<'EOF' >/etc/fail2ban/filter.d/syswarden-cockpit-custom.conf
 [Definition]
 # Purified ultra-compatible patterns matching both syslog files and systemd journal streams
 failregex = pam_unix\(cockpit:auth\): authentication failure;.* rhost=(?:::ffff:)?<HOST>
@@ -38,22 +38,22 @@ EOF
 
     # 4. Generate jail configuration depending on the selected backend engine
     if [[ "$JAIL_BACKEND" == "systemd" ]]; then
-        cat <<EOF >/etc/fail2ban/jail.d/cockpit.conf
-[cockpit-custom]
+        cat <<EOF >/etc/fail2ban/jail.d/syswarden-cockpit.conf
+[syswarden-cockpit-custom]
 enabled  = true
 port     = 9090
-filter   = cockpit-custom
+filter   = syswarden-cockpit-custom
 backend  = systemd
 maxretry = 3
 findtime = 10m
 bantime  = 24h
 EOF
     else
-        cat <<EOF >/etc/fail2ban/jail.d/cockpit.conf
-[cockpit-custom]
+        cat <<EOF >/etc/fail2ban/jail.d/syswarden-cockpit.conf
+[syswarden-cockpit-custom]
 enabled  = true
 port     = 9090
-filter   = cockpit-custom
+filter   = syswarden-cockpit-custom
 logpath  = $COCKPIT_LOG
 backend  = $JAIL_BACKEND
 maxretry = 3

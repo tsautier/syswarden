@@ -125,6 +125,34 @@ check_upgrade() {
             log "INFO" "Configuration file $CONF_FILE found. User settings will be strictly preserved."
         fi
 
+        # --- DEVSECOPS FIX: AUTO-MIGRATE DOCKER JAILS NAMESPACE ---
+        # Automatically prefix legacy jails in the user's config to match the new 'syswarden-*' strict namespace.
+        if [[ -f "/etc/syswarden.conf" ]] && grep -q "^DOCKER_JAILS=" "/etc/syswarden.conf"; then
+            log "INFO" "Migrating legacy DOCKER_JAILS names to strict syswarden namespace..."
+
+            local current_jails
+            current_jails=$(grep "^DOCKER_JAILS=" "/etc/syswarden.conf" | cut -d'"' -f2)
+
+            if [[ -n "$current_jails" ]]; then
+                local migrated_jails=""
+                IFS=',' read -r -a j_array <<<"$current_jails"
+                for j in "${j_array[@]}"; do
+                    local clean_j
+                    clean_j=$(echo "$j" | xargs)
+                    # Only add prefix if it's not already there
+                    if [[ ! "$clean_j" =~ ^syswarden- ]]; then
+                        clean_j="syswarden-${clean_j}"
+                    fi
+                    migrated_jails="${migrated_jails}${clean_j},"
+                done
+
+                # Remove trailing comma and update config
+                migrated_jails="${migrated_jails%,}"
+                sed -i "s/^DOCKER_JAILS=.*/DOCKER_JAILS=\"${migrated_jails}\"/" "/etc/syswarden.conf"
+                log "INFO" "DOCKER_JAILS successfully migrated to: $migrated_jails"
+            fi
+        fi
+
         # --- CLEANUP ---
         cd /
         rm -rf "$UPGRADE_DIR"

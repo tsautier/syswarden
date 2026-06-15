@@ -21,18 +21,20 @@ syswarden_jail_sendmail() {
     log "INFO" "Sendmail daemon and logs detected. Enabling Sendmail Jails."
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/sendmail.conf
-[sendmail-auth]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-sendmail.conf
+[syswarden-sendmail-auth]
 enabled  = true
 port     = smtp,465,submission
+filter   = sendmail-auth
 logpath  = $SM_LOG
 backend  = auto
 maxretry = 3
 bantime  = 24h
 
-[sendmail-reject]
+[syswarden-sendmail-reject]
 enabled  = true
 port     = smtp,465,submission
+filter   = sendmail-reject
 logpath  = $SM_LOG
 backend  = auto
 maxretry = 5

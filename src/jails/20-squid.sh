@@ -12,8 +12,8 @@ syswarden_jail_squid() {
     log "INFO" "Squid Proxy daemon and logs detected. Enabling Squid Jail."
 
     # Create Filter for Proxy Abuse (TCP_DENIED / 403 / 407)
-    if [[ ! -f "/etc/fail2ban/filter.d/squid-custom.conf" ]]; then
-        cat <<'EOF' >/etc/fail2ban/filter.d/squid-custom.conf
+    if [[ ! -f "/etc/fail2ban/filter.d/squid.conf" ]]; then
+        cat <<'EOF' >/etc/fail2ban/filter.d/squid.conf
 [Definition]
 failregex = ^\s*<HOST> .*(?:TCP_DENIED|ERR_ACCESS_DENIED).*$
 ignoreregex = 
@@ -21,11 +21,11 @@ EOF
     fi
 
     # Write directly to jail.d for clean segmentation
-    cat <<EOF >/etc/fail2ban/jail.d/squid.conf
-[squid-custom]
+    cat <<EOF >/etc/fail2ban/jail.d/syswarden-squid.conf
+[syswarden-squid]
 enabled  = true
 port     = 3128,8080
-filter   = squid-custom
+filter   = squid
 logpath  = /var/log/squid/access.log
 backend  = auto
 maxretry = 5
