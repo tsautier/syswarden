@@ -81,8 +81,8 @@ show_alerts_dashboard() {
             }
             
             src = "N/A"
-            # IPv4 Strict Matching
-            if (match($0, /SRC=[0-9.]+/)) {
+            # [DEVSECOPS FIX] Universal IPv4/IPv6 Extraction
+            if (match($0, /SRC=[0-9a-fA-F:.]+/)) {
                 src = substr($0, RSTART+4, RLENGTH-4)
             }
             
