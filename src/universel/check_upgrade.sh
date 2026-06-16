@@ -29,11 +29,22 @@ check_upgrade() {
     echo -e "Current Version : ${YELLOW}${VERSION}${NC}"
     echo -e "Latest Version  : ${GREEN}${latest_version}${NC}\n"
 
+    local proceed_to_build=0
     if [[ "$VERSION" == "$latest_version" ]]; then
         echo -e "${GREEN}You are already using the latest version of SysWarden!${NC}"
+        read -p "Do you want to reinstall the same version? (y/N): " proceed_reinstall
+        if [[ "$proceed_reinstall" =~ ^[Yy]$ ]]; then
+            proceed_to_build=1
+        else
+            echo -e "${YELLOW}Reinstallation aborted by user. System remains on $VERSION.${NC}"
+            return
+        fi
     else
         echo -e "${YELLOW}A new Enterprise version ($latest_version) is available!${NC}"
+        proceed_to_build=1
+    fi
 
+    if [[ "$proceed_to_build" -eq 1 ]]; then
         # --- DEVSECOPS: PREREQUISITE CHECK ---
         # Git is now mandatory for the local build process
         if ! command -v git >/dev/null 2>&1; then
@@ -42,11 +53,13 @@ check_upgrade() {
             return
         fi
 
-        # --- DEVSECOPS: INTERACTIVE CONFIRMATION ---
-        read -p "Do you want to proceed with the automated in-place upgrade now? (y/N): " proceed_upgrade
-        if [[ ! "$proceed_upgrade" =~ ^[Yy]$ ]]; then
-            echo -e "${YELLOW}Upgrade aborted by user. System remains on $VERSION.${NC}"
-            return
+        if [[ "$VERSION" != "$latest_version" ]]; then
+            # --- DEVSECOPS: INTERACTIVE CONFIRMATION ---
+            read -p "Do you want to proceed with the automated in-place upgrade now? (y/N): " proceed_upgrade
+            if [[ ! "$proceed_upgrade" =~ ^[Yy]$ ]]; then
+                echo -e "${YELLOW}Upgrade aborted by user. System remains on $VERSION.${NC}"
+                return
+            fi
         fi
 
         echo -e "${YELLOW}Cloning and compiling update securely...${NC}"
