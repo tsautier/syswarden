@@ -1,32 +1,32 @@
 <p align="center">
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/package.yml">
-    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/package.yml/badge.svg" alt="SysWarden Builder and Packager">
+    <img src="https://img.shields.io/github/actions/workflow/status/duggytuxy/syswarden/package.yml?style=for-the-badge&logo=githubactions&logoColor=white" alt="SysWarden Builder and Packager">
   </a>
   <a href="https://github.com/duggytuxy/syswarden/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/duggytuxy/syswarden?logo=license" alt="GitHub License">
+    <img src="https://img.shields.io/github/license/duggytuxy/syswarden?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="GitHub License">
   </a>
-  <img src="https://img.shields.io/badge/Platform-Linux_Universal-0052cc?logo=linux" alt="Linux Universal">
-  <img src="https://img.shields.io/badge/Open%20Source-100%25-brightgreen?logo=opensourceinitiative" alt="Open Source">
-  <img src="https://img.shields.io/badge/Compliance-EU_CRA_Ready-003399?logo=shield&logoColor=white" alt="EU CRA Ready">
-  <img src="https://img.shields.io/badge/Compliance-ISO27001_Ready-003399?logo=shield&logoColor=white" alt="ISO27001 Ready">
-  <img src="https://img.shields.io/badge/Compliance-NIS2_Ready-3DD407?logo=shield&logoColor=white" alt="NIS2 Ready">
+  <img src="https://img.shields.io/badge/Platform-Linux_Universal-0052cc?style=for-the-badge&logo=linux&logoColor=white" alt="Linux Universal">
+  <img src="https://img.shields.io/badge/Open%20Source-100%25-brightgreen?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="Open Source">
+  <img src="https://img.shields.io/badge/Compliance-EU_CRA_Ready-003399?style=for-the-badge&logo=shield&logoColor=white" alt="EU CRA Ready">
+  <img src="https://img.shields.io/badge/Compliance-ISO27001_Ready-003399?style=for-the-badge&logo=shield&logoColor=white" alt="ISO27001 Ready">
+  <img src="https://img.shields.io/badge/Compliance-NIS2_Ready-3DD407?style=for-the-badge&logo=shield&logoColor=white" alt="NIS2 Ready">
 
   <br>
 
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/compliance.yml">
-    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/compliance.yml/badge.svg" alt="Plumber Compliance">
+    <img src="https://img.shields.io/github/actions/workflow/status/duggytuxy/syswarden/compliance.yml?style=for-the-badge&logo=githubactions&logoColor=white" alt="Plumber Compliance">
   </a>
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/scorecard.yml">
-    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/scorecard.yml/badge.svg" alt="OSSF Scorecard Supply Chain Security">
+    <img src="https://img.shields.io/github/actions/workflow/status/duggytuxy/syswarden/scorecard.yml?style=for-the-badge&logo=githubactions&logoColor=white" alt="OSSF Scorecard Supply Chain Security">
   </a>
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml">
-    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/security-audit.yml/badge.svg" alt="SysWarden Security Audit">
+    <img src="https://img.shields.io/github/actions/workflow/status/duggytuxy/syswarden/security-audit.yml?style=for-the-badge&logo=githubactions&logoColor=white" alt="SysWarden Security Audit">
   </a>
   <a href="https://github.com/duggytuxy/syswarden/actions/workflows/dependabot/dependabot-updates">
-    <img src="https://github.com/duggytuxy/syswarden/actions/workflows/dependabot/dependabot-updates/badge.svg" alt="Dependabot Updates">
+    <img src="https://img.shields.io/badge/Dependabot-Active-025e8c?style=for-the-badge&logo=dependabot&logoColor=white" alt="Dependabot Updates">
   </a>
-  <img src="https://img.shields.io/badge/Security-Hardened-darkred?logo=security" alt="Hardened">
-  <img src="https://img.shields.io/badge/Status-Production_Ready-blue?logo=status" alt="Production Ready">
+  <img src="https://img.shields.io/badge/Security-Hardened-darkred?style=for-the-badge&logo=security&logoColor=white" alt="Hardened">
+  <img src="https://img.shields.io/badge/Status-Production_Ready-blue?style=for-the-badge&logo=status&logoColor=white" alt="Production Ready">
 </p>
 
 # SysWarden
