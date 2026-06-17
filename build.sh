@@ -46,7 +46,7 @@ done
 # 3. INJECT UNIVERSAL FUNCTIONS
 # ==========================================
 echo "[*] Injecting universal modules..."
-for file in src/universel/*.sh; do
+for file in src/functions/*.sh; do
     if [[ -f "$file" ]]; then
         echo "# --- SOURCE: $(basename "$file") ---" >>"${OUTPUT}"
         cat "$file" >>"${OUTPUT}"
