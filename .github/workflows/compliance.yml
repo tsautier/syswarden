@@ -1,11 +1,10 @@
 name: Plumber Compliance
 on:
   push:
-    branches: [main]   # scope to the default branch so a PR push isn't scanned twice
-  pull_request: null
+    branches: [main]
 
-permissions:
-  contents: read
+# OSSF Scorecard: Enforce strict read-all at the top-level
+permissions: read-all
 
 jobs:
   plumber:

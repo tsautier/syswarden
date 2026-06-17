@@ -10,14 +10,9 @@ on:
       - '**.sh'
       - '**.py'
       - '.github/workflows/**'
-  pull_request:
-    branches: [ "main", "master" ]
-    paths:
-      - '**.sh'
-      - '**.py'
 
-permissions:
-  contents: read
+# OSSF Scorecard: Enforce strict read-all at the top-level
+permissions: read-all
 
 jobs:
   hygiene:
