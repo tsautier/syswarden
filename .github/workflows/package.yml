@@ -5,9 +5,11 @@ on:
     branches:
       - main
       - master
-    paths:
-      - 'src/**'
-      - 'build.ps1'
+    tags:
+      - 'v*'
+    # paths removed to allow tags
+
+
   pull_request:
     branches:
       - main
