@@ -113,12 +113,12 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 
 # 3. Install the package
 # For Debian/Ubuntu
-apt-get install -y ./syswarden_<version>_all.deb
+sudo apt-get install -y ./syswarden_<version>_all.deb
 # For RHEL/AlmaLinux/Rocky
-dnf install -y ./syswarden-<version>-1.noarch.rpm
+sudo dnf install -y ./syswarden-<version>-1.noarch.rpm
 
 # 4. Review and tailor the embedded configuration to your infrastructure
-syswarden config
+sudo syswarden config
 
 # 5. Execute the Go Orchestrator to apply policies instantly
 sudo syswarden install
