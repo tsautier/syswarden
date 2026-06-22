@@ -38,7 +38,7 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 > [!IMPORTANT]
 > **Zero CWE Mitigation:** Re-architected entirely in Go, SysWarden v2.00.0 strongly mitigates risks of OS Command Injection (CWE-78), Memory Corruption (CWE-119), and Resource Exhaustion (CWE-400), seamlessly accelerating your **ISO 27001, NIS2, and CIS Benchmark** compliance.
 
-## Architectural Capabilities (CNAPP / XDR)
+## Architectural Capabilities (CNAPP / HIDS-HIPS)
 
 **1. A "Next-Gen HIPS" (Host Intrusion Prevention System)**
 At its core, SysWarden is a formidable HIPS. Unlike a traditional IDS (Intrusion Detection System) that merely alerts, SysWarden actively prevents attacks by severing connections at the hardware level (Layer 2 / Nftables `netdev`). It acts entirely autonomously on the host system without waiting for instructions from an external hardware firewall.
