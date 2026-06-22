@@ -44,7 +44,15 @@ jobs:
 
             for ((i = 1; i <= MAX_RETRIES; i++)); do
                 echo "Attempt ${i}: Downloading artifacts for commit ${COMMIT_SHA}..."
-                if gh run download -c "${COMMIT_SHA}" --dir /tmp/artifacts; then
+                RUN_IDS=$(gh run list --commit "${COMMIT_SHA}" --json databaseId --jq '.[].databaseId')
+                
+                # Fetch artifacts from all runs associated with this commit
+                for run_id in $RUN_IDS; do
+                    gh run download "$run_id" --dir /tmp/artifacts || true
+                done
+
+                # Check if the primary build artifact was successfully downloaded
+                if find /tmp/artifacts -type f -name "syswarden-release.tar.gz" | grep -q .; then
                     echo "Artifacts successfully pulled."
                     break
                 else
