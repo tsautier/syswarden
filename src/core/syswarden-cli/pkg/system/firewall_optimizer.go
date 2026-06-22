@@ -19,31 +19,32 @@ func OptimizeHostFirewall() error {
 		backend = "keep"
 	}
 
-	if backend == "nftables" {
+	switch backend {
+	case "nftables":
 		fmt.Println("[INFO] Auto-Deploy: Bypassing Firewalld for pure Nftables OS Services...")
-  _ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
+		_ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
 		
 		if _, err := exec.LookPath("nft"); err != nil {
 			if _, err := exec.LookPath("dnf"); err == nil {
-    _ = exec.Command("dnf", "install", "-y", "nftables").Run()
+				_ = exec.Command("dnf", "install", "-y", "nftables").Run()
 			} else if _, err := exec.LookPath("yum"); err == nil {
-    _ = exec.Command("yum", "install", "-y", "nftables").Run()
+				_ = exec.Command("yum", "install", "-y", "nftables").Run()
 			}
 		}
-  _ = exec.Command("systemctl", "enable", "--now", "nftables").Run()
+		_ = exec.Command("systemctl", "enable", "--now", "nftables").Run()
 
-	} else if backend == "iptables" {
+	case "iptables":
 		fmt.Println("[INFO] Auto-Deploy: Bypassing Firewalld for classic Iptables persistence...")
-  _ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
+		_ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
 		
 		if _, err := exec.LookPath("dnf"); err == nil {
-   _ = exec.Command("dnf", "install", "-y", "iptables-services").Run()
+			_ = exec.Command("dnf", "install", "-y", "iptables-services").Run()
 		} else if _, err := exec.LookPath("yum"); err == nil {
-   _ = exec.Command("yum", "install", "-y", "iptables-services").Run()
+			_ = exec.Command("yum", "install", "-y", "iptables-services").Run()
 		}
-  _ = exec.Command("systemctl", "enable", "--now", "iptables").Run()
+		_ = exec.Command("systemctl", "enable", "--now", "iptables").Run()
 
-	} else {
+	default:
 		fmt.Println("[INFO] Auto-Deploy: Keeping Firewalld active.")
 	}
 

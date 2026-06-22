@@ -33,7 +33,7 @@ func SecureDownloader(ctx context.Context, url string, destPath string) error {
 			break
 		}
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		time.Sleep(2 * time.Second) // Wait before retry
 	}
@@ -189,14 +189,14 @@ func DownloadOSINT(ctx context.Context, destFile string) error {
 				break
 			}
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			time.Sleep(2 * time.Second)
 		}
 		if resp != nil && resp.StatusCode == http.StatusOK {
 			_, _ = io.Copy(f, resp.Body)
 			_, _ = f.WriteString("\n")
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 	_ = f.Close() // Close before cleaning

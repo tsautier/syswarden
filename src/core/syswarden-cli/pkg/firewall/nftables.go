@@ -117,15 +117,15 @@ func ApplyNftables() error {
 	if config.GlobalConfig.EnableWG {
 	_, _ = nftRules.WriteString("\t\t# SSH Cloaking (Strict WG VPN Only)\n")
 		// Always allow explicitly whitelisted IPs
-	_, _ = nftRules.WriteString(fmt.Sprintf("\t\tip saddr @syswarden_whitelist tcp dport %s accept\n", sshPort))
-	_, _ = nftRules.WriteString(fmt.Sprintf("\t\tip6 saddr @syswarden_whitelist6 tcp dport %s accept\n", sshPort))
+	_, _ = fmt.Fprintf(&nftRules, "\t\tip saddr @syswarden_whitelist tcp dport %s accept\n", sshPort)
+	_, _ = fmt.Fprintf(&nftRules, "\t\tip6 saddr @syswarden_whitelist6 tcp dport %s accept\n", sshPort)
 		// Allow from the WireGuard Subnet
-	_, _ = nftRules.WriteString(fmt.Sprintf("\t\tip saddr %s tcp dport %s accept\n", config.GlobalConfig.WGSubnet, sshPort))
+	_, _ = fmt.Fprintf(&nftRules, "\t\tip saddr %s tcp dport %s accept\n", config.GlobalConfig.WGSubnet, sshPort)
 		// Drop from anywhere else
-	_, _ = nftRules.WriteString(fmt.Sprintf("\t\ttcp dport %s counter drop\n", sshPort))
+	_, _ = fmt.Fprintf(&nftRules, "\t\ttcp dport %s counter drop\n", sshPort)
 	} else {
 	_, _ = nftRules.WriteString("\t\t# Standard SSH Access\n")
-	_, _ = nftRules.WriteString(fmt.Sprintf("\t\tct state new tcp dport %s accept\n", sshPort))
+	_, _ = fmt.Fprintf(&nftRules, "\t\tct state new tcp dport %s accept\n", sshPort)
 	}
 	
 	// Catch-All Default Deny Logging
@@ -296,7 +296,7 @@ func populateSet(ctx context.Context, filepaths []string, setName string) {
 
 func applyChunk(ctx context.Context, setName string, chunk []string) {
 	var nftRules strings.Builder
-	_, _ = nftRules.WriteString(fmt.Sprintf("add element netdev syswarden_hw_drop %s { \n%s\n }\n", setName, strings.Join(chunk, ",\n")))
+	_, _ = fmt.Fprintf(&nftRules, "add element netdev syswarden_hw_drop %s { \n%s\n }\n", setName, strings.Join(chunk, ",\n"))
 	cmd := exec.Command("nft", "-f", "-")
 	cmd.Stdin = bytes.NewReader([]byte(nftRules.String()))
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -306,7 +306,7 @@ func applyChunk(ctx context.Context, setName string, chunk []string) {
 	nftRules.Reset()
 	
 	ipStr := strings.Join(chunk, ", ")
-	_, _ = nftRules.WriteString(fmt.Sprintf("add element inet syswarden %s { %s }\n", setName, ipStr))
+	_, _ = fmt.Fprintf(&nftRules, "add element inet syswarden %s { %s }\n", setName, ipStr)
 	
 	cmd2 := exec.Command("nft", "-f", "-")
 	cmd2.Stdin = bytes.NewReader([]byte(nftRules.String()))

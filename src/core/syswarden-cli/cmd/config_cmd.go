@@ -21,7 +21,7 @@ var configCmd = &cobra.Command{
 			fmt.Println("[*] Configuration file not found. Generating default...")
 			err := os.MkdirAll("/opt/syswarden", 0755)
 			if err == nil {
-				os.WriteFile(configPath, []byte(config.DefaultConfig), 0640)
+				_ = os.WriteFile(configPath, []byte(config.DefaultConfig), 0640)
 			}
 		}
 

@@ -66,7 +66,7 @@ func (s *UDSServer) readLoop() {
 	go func() {
 		<-s.ctx.Done()
 		if s.conn != nil {
-			s.conn.Close()
+			_ = s.conn.Close()
 		}
 	}()
 
@@ -109,7 +109,7 @@ func (s *UDSServer) readLoop() {
 func (s *UDSServer) Stop() {
 	s.cancel()
 	if s.conn != nil {
-		s.conn.Close()
+		_ = s.conn.Close()
 	}
 	s.wg.Wait()
 }

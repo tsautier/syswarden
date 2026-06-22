@@ -122,7 +122,7 @@ func RemoveFromWhitelist(ip string) error {
 			}
 		}
 		if found {
-			os.WriteFile(file, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
+			_ = os.WriteFile(file, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
 			fmt.Printf("[SUCCESS] IP %s removed from whitelist.\n", ip)
 			return ApplyNftables()
 		}
@@ -198,7 +198,7 @@ func RevokeSSH(ip string) error {
 			}
 		}
 		if found {
-			os.WriteFile(SSHBypass, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
+			_ = os.WriteFile(SSHBypass, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
 			fmt.Printf("[SUCCESS] SSH Bypass revoked for %s.\n", ip)
 			return ApplyNftables()
 		}

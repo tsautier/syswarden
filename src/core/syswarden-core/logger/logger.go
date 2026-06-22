@@ -115,6 +115,6 @@ func (l *Logger) LogAllowed(ip, service, payload string) {
 
 func (l *Logger) Close() {
 	if l.file != nil {
-		l.file.Close()
+		_ = l.file.Close()
 	}
 }
