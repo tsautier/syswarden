@@ -7,7 +7,6 @@
   </a>
   <img src="https://img.shields.io/badge/Platform-Linux_Universal-0052cc?style=for-the-badge&logo=linux&logoColor=white" alt="Linux Universal">
   <img src="https://img.shields.io/badge/Language-100%25_Go_Native-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="100% Go Native">
-  <img src="https://img.shields.io/badge/Security-Zero_CWE-darkred?style=for-the-badge&logo=security&logoColor=white" alt="Zero CWE">
   <img src="https://img.shields.io/badge/Compliance-EU_CRA_Ready-003399?style=for-the-badge&logo=shield&logoColor=white" alt="EU CRA Ready">
   <img src="https://img.shields.io/badge/Compliance-ISO27001_Ready-003399?style=for-the-badge&logo=shield&logoColor=white" alt="ISO27001 Ready">
   <img src="https://img.shields.io/badge/Compliance-NIS2_Ready-3DD407?style=for-the-badge&logo=shield&logoColor=white" alt="NIS2 Ready">
