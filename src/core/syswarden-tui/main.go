@@ -211,10 +211,10 @@ func main() {
 
 	if err := app.SetRoot(mainFlex, true).EnableMouse(true).Run(); err != nil {
 		cancel()
-  _ = wg.Wait()
+		wg.Wait()
 		panic(err)
 	}
- _ = wg.Wait()
+	wg.Wait()
 }
 
 func readDataAndUpdate() {

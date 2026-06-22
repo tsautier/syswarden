@@ -65,6 +65,6 @@ func main() {
 	log.Println("[SysWarden-Core] Shutting down gracefully...")
 	cancel()
 	udsServer.Stop()
- _ = wg.Wait()
- _ = telemetryLogger.Close()
+	wg.Wait()
+	telemetryLogger.Close()
 }

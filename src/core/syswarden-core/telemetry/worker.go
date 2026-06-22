@@ -289,9 +289,9 @@ func getSystemStats() SystemData {
 		var total, avail int
 		for _, line := range strings.Split(string(b), "\n") {
 			if strings.HasPrefix(line, "MemTotal:") {
-    _ = fmt.Sscanf(line, "MemTotal: %d kB", &total)
+		_, _ = fmt.Sscanf(line, "MemTotal: %d kB", &total)
 			} else if strings.HasPrefix(line, "MemAvailable:") {
-    _ = fmt.Sscanf(line, "MemAvailable: %d kB", &avail)
+		_, _ = fmt.Sscanf(line, "MemAvailable: %d kB", &avail)
 			}
 		}
 		if total > 0 {
