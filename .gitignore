@@ -1,6 +1,7 @@
 # Local binaries & tools
 *.exe
 *.ps1
+!build.ps1
 
 # Golang Local Compilation Artifacts
 src/core/syswarden-core/syswarden-core
