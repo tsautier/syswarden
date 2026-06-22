@@ -26,7 +26,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -115,7 +115,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version: '1.23'
 
       - name: Compile Modular Source Code
         run: pwsh -File ./build.ps1
