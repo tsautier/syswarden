@@ -7,8 +7,7 @@ on:
       - master
     paths:
       - 'src/**'
-      - 'build.sh'
-      - 'syswarden-auto.conf'
+      - 'build.ps1'
   pull_request:
     branches:
       - main
@@ -27,17 +26,19 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
       - name: Compile Universal Script
-        run: |
-          # Ensure script is executable and run the compiler
-          chmod +x build.sh
-          ./build.sh
+        run: pwsh -File ./build.ps1
 
       - name: Extract Version from Config
         id: version
         run: |
-          # Parse the version from syswarden-auto.conf securely
-          VERSION=$(grep -oP '^# Version=v\K[0-9\.]+' syswarden-auto.conf || echo "0.0.0")
+          # Parse the version dynamically from the native Go config
+          VERSION=$(grep -oP 'Version = "v\K[0-9\.]+' src/core/syswarden-cli/pkg/system/upgrade.go || echo "0.0.0")
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Set up Ruby for FPM
@@ -55,22 +56,52 @@ jobs:
       - name: Prepare Staging Environment
         run: |
           # Create standard Linux filesystem hierarchy for the deployment package
-          mkdir -p staging/opt/syswarden
+          mkdir -p staging/opt/syswarden/bin
           mkdir -p staging/usr/local/bin
 
-          # Copy the compiled artifact and the unattended configuration
-          cp dist/install-syswarden.sh staging/opt/syswarden/
-          cp syswarden-auto.conf staging/opt/syswarden/
+          # Copy the unattended configuration
+
+          # Copy syswarden-cli, syswarden-core and syswarden-tui binaries from dist/
+          mkdir -p staging/opt/syswarden/bin
+          if [ -f dist/bin/syswarden-cli ]; then
+            cp dist/bin/syswarden-cli staging/opt/syswarden/bin/
+            chmod 750 staging/opt/syswarden/bin/syswarden-cli
+          fi
+
+          if [ -f dist/bin/syswarden-core ]; then
+            cp dist/bin/syswarden-core staging/opt/syswarden/bin/
+            cp dist/signatures.json staging/opt/syswarden/
+            chmod 750 staging/opt/syswarden/bin/syswarden-core
+          fi
+          
+          if [ -f dist/bin/syswarden-tui ]; then
+            cp dist/bin/syswarden-tui staging/opt/syswarden/bin/
+            chmod 750 staging/opt/syswarden/bin/syswarden-tui
+          fi
 
           # Apply strict execution permissions (Root execution only)
-          chmod 750 staging/opt/syswarden/install-syswarden.sh
-          chmod 640 staging/opt/syswarden/syswarden-auto.conf
+          chmod 640 staging/opt/syswarden/signatures.json
 
-          # Create a symlink for global execution from the terminal
-          ln -s /opt/syswarden/install-syswarden.sh staging/usr/local/bin/syswarden
+          # Create a symlink for global execution from the terminal (Routing to Go CLI)
+          ln -s /opt/syswarden/bin/syswarden-cli staging/usr/local/bin/syswarden
+          ln -s /opt/syswarden/bin/syswarden-tui staging/usr/local/bin/syswarden-tui
 
       - name: Build Debian Package (.deb)
         run: |
+          cat << 'EOF' > prerm.sh
+          #!/bin/sh
+          systemctl stop syswarden-core.service || true
+          systemctl disable syswarden-core.service || true
+          systemctl stop syswarden-firewall.service || true
+          systemctl disable syswarden-firewall.service || true
+          nft delete table netdev syswarden_hw_drop || true
+          nft delete table inet syswarden || true
+          crontab -l | grep -v 'syswarden-cli' | crontab - || true
+          rm -f /etc/rsyslog.d/99-syswarden-waf-bridge.conf || true
+          systemctl restart rsyslog || true
+          EOF
+          chmod +x prerm.sh
+
           fpm -s dir -t deb \
             -n syswarden \
             -v ${{ env.VERSION }} \
@@ -78,7 +109,9 @@ jobs:
             --maintainer "SysWarden Engineering" \
             --description "SysWarden Host-based Security Orchestrator for Linux" \
             --url "https://github.com/${{ github.repository }}" \
-            --architecture all \
+            --architecture amd64 \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" \
+            --before-remove prerm.sh \
             -C staging .
 
       - name: Build RHEL Family Package (.rpm)
@@ -90,7 +123,9 @@ jobs:
             --maintainer "SysWarden Engineering" \
             --description "SysWarden Host-based Security Orchestrator for Linux" \
             --url "https://github.com/${{ github.repository }}" \
-            --architecture noarch \
+            --architecture x86_64 \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" \
+            --before-remove prerm.sh \
             -C staging .
 
       - name: Generate Checksums

@@ -593,7 +593,7 @@ github:
         - getplumber/plumber
         - ruby/setup-ruby
         - gitleaks/gitleaks-action
-        - mfinelli/setup-shfmt
+        - golangci/golangci-lint-action
         - aquasecurity/trivy-action
 
     # ===========================================

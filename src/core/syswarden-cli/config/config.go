@@ -1,0 +1,48 @@
+package config
+
+// Config represents the parsed syswarden-auto.conf file securely mapped to memory
+type Config struct {
+	EnterpriseMode       bool
+	SSHPort              string
+	FirewallBackend      string
+	WhitelistInfra       bool
+	WhitelistIPs         string
+	EnableWG             bool
+	WGPort               string
+	WGSubnet             string
+	ModsecLogs           string
+	Hardening            bool
+	CISL2Hardening       bool
+	ListChoice           string
+	CustomURL            string
+	CustomHash           string
+	EnableGeo            bool
+	GeoCodes             string
+	EnableASN            bool
+	ASNList              string
+	UseSpamhaus          bool
+	HAEnabled            bool
+	HAPeerIP             string
+	HAPeerPort           string
+	HAStrictHostKey      bool
+	SiemEnabled          bool
+	SiemIP               string
+	SiemPort             string
+	SiemProto            string
+	SiemTLSCA            string
+	EnableAbuse          bool
+	AbuseAPIKey          string
+	EnableWebhook        bool
+	WebhookURLDiscord    string
+	WebhookURLTeams      string
+	EnableWazuh          bool
+	WazuhIP              string
+	WazuhName            string
+	WazuhGroup           string
+	WazuhCommPort        string
+	WazuhEnrollPort      string
+	SecureWipeConf       bool
+}
+
+// GlobalConfig is the singleton instance holding the parsed configuration
+var GlobalConfig *Config

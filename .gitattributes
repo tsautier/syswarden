@@ -8,6 +8,10 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 
+# Force LF for Golang & Data files
+*.go text eol=lf
+*.json text eol=lf
+
 # Force LF for documentation (avoids diff clutter across OS)
 *.md text eol=lf
 

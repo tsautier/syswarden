@@ -1,0 +1,50 @@
+package integration
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"syswarden-cli/config"
+)
+
+// SetupSIEM configures Syslog forwarding natively
+func SetupSIEM() error {
+	fmt.Println("[INFO] Configuring SIEM Logging Integration...")
+
+	if !config.GlobalConfig.SiemEnabled {
+		fmt.Println("[INFO] SIEM integration disabled.")
+		return nil
+	}
+
+	ip := config.GlobalConfig.SiemIP
+	port := config.GlobalConfig.SiemPort
+	proto := config.GlobalConfig.SiemProto
+
+	if ip == "" || port == "" {
+		return fmt.Errorf("SIEM IP or Port is missing in configuration")
+	}
+
+	// 1. We write the rsyslog configuration natively
+	confPath := "/etc/rsyslog.d/99-syswarden-siem.conf"
+	
+	// Secure formatting (CWE-117)
+	var rsyslogConf string
+	if proto == "udp" {
+		rsyslogConf = fmt.Sprintf("*.* @%s:%s\n", ip, port)
+	} else {
+		// TCP
+		rsyslogConf = fmt.Sprintf("*.* @@%s:%s\n", ip, port)
+	}
+
+	if err := os.WriteFile(confPath, []byte(rsyslogConf), 0640); err != nil {
+		return fmt.Errorf("failed to write rsyslog SIEM config: %w", err)
+	}
+
+	// 2. Restart Rsyslog safely
+	if err := exec.Command("systemctl", "restart", "rsyslog").Run(); err != nil {
+		fmt.Printf("[WARN] Failed to restart rsyslog: %v\n", err)
+	}
+
+	fmt.Printf("[+] SIEM Forwarder successfully configured (%s:%s/%s)\n", ip, port, proto)
+	return nil
+}

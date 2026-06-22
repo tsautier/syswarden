@@ -1,0 +1,120 @@
+package logger
+
+import (
+	"encoding/json"
+	"log"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"syswarden-core/telemetry"
+)
+
+type Logger struct {
+	file *os.File
+	mu   sync.Mutex
+}
+
+// TelemetryEvent represents a banned or allowed IP event
+type TelemetryEvent struct {
+	Action    string `json:"action,omitempty"`
+	Timestamp string `json:"timestamp"`
+	IP        string `json:"ip"`
+	Jail      string `json:"jail"`
+	Payload   string `json:"payload"`
+}
+
+func NewLogger(logPath string) *Logger {
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("[Logger] Warning: failed to create log dir: %v", err)
+	}
+
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("[Logger] Warning: failed to open log file %s: %v", logPath, err)
+		return &Logger{}
+	}
+
+	return &Logger{file: file}
+}
+
+func (l *Logger) Info(msg string) {
+	log.Printf("[INFO] %s", msg)
+}
+
+func (l *Logger) Error(msg string, err error) {
+	log.Printf("[ERROR] %s: %v", msg, err)
+}
+
+// LogBan writes a JSON telemetry event when an IP is banned
+func (l *Logger) LogBan(ip, jail, payload string) {
+	telemetry.ReportAbuseAsync(ip, jail)
+	if l.file == nil {
+		return
+	}
+
+	event := TelemetryEvent{
+		Action:    "BANNED",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		IP:        ip,
+		Jail:      jail,
+		Payload:   payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		l.Error("Failed to marshal telemetry event", err)
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, err := l.file.Write(data); err != nil {
+		log.Printf("[Logger] Error writing telemetry data: %v", err)
+	}
+	if _, err := l.file.Write([]byte("\n")); err != nil {
+		log.Printf("[Logger] Error writing newline: %v", err)
+	}
+	
+	log.Printf("[SysWarden-BLOCK] IP=%s Jail=%s Payload=%s", ip, jail, payload)
+}
+
+// LogAllowed writes a JSON telemetry event when an IP is successfully allowed (e.g. login)
+func (l *Logger) LogAllowed(ip, service, payload string) {
+	if l.file == nil {
+		return
+	}
+
+	event := TelemetryEvent{
+		Action:    "ALLOWED",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		IP:        ip,
+		Jail:      service, // Store service in the Jail field for simplicity
+		Payload:   payload,
+	}
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		l.Error("Failed to marshal telemetry event", err)
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, err := l.file.Write(data); err != nil {
+		log.Printf("[Logger] Error writing telemetry data: %v", err)
+	}
+	if _, err := l.file.Write([]byte("\n")); err != nil {
+		log.Printf("[Logger] Error writing newline: %v", err)
+	}
+	
+	log.Printf("[SysWarden-ALLOWED] Legitimate access IP=%s Service=%s", ip, service)
+}
+
+func (l *Logger) Close() {
+	if l.file != nil {
+		l.file.Close()
+	}
+}

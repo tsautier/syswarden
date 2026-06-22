@@ -98,37 +98,21 @@ jobs:
                 fi
             fi
 
-      - name: "Generate compliant Markdown Release Notes"
+      - name: "Generate Markdown Release Notes from Changelog"
         run: |
-            # Auto-generate changelog strictly from git history without emojis
-            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-            if [ -z "${PREV_TAG}" ]; then
-                LOG_RANGE="HEAD"
+            NOTES_FILE="release_notes.md"
+            
+            # Extract the latest release notes from changelog.md (everything before the first '---')
+            if [ -f "changelog.md" ]; then
+                awk '/^---/{exit} {print}' changelog.md > "${NOTES_FILE}"
             else
-                LOG_RANGE="${PREV_TAG}..HEAD"
+                echo "CRITICAL: changelog.md not found!"
+                exit 1
             fi
 
-            NOTES_FILE="release_notes.md"
-            echo "## SysWarden Release ${{ github.ref_name }}" > "${NOTES_FILE}"
-            echo "" >> "${NOTES_FILE}"
-
-            # Loop through strictly requested categories
-            for CATEGORY in "ADDED" "FIXED" "UPDATED" "UPGRADED"; do
-                echo "### ${CATEGORY}" >> "${NOTES_FILE}"
-
-                # Fetch matching commits using native git grep logic
-                COMMITS=$(git log "${LOG_RANGE}" --grep="${CATEGORY}" --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" || true)
-
-                if [ -z "${COMMITS}" ]; then
-                    echo "- No ${CATEGORY} items in this release." >> "${NOTES_FILE}"
-                else
-                    echo "${COMMITS}" >> "${NOTES_FILE}"
-                fi
-                echo "" >> "${NOTES_FILE}"
-            done
-
             # Inject compliance audit trail references
-            echo "### COMPLIANCE & SECURITY" >> "${NOTES_FILE}"
+            echo "" >> "${NOTES_FILE}"
+            echo "## COMPLIANCE & SECURITY" >> "${NOTES_FILE}"
             echo "- Plumber Compliance Audit bundled as \`plumber-compliance.zip\`." >> "${NOTES_FILE}"
             echo "- Cryptographic SBOM (SPDX) and Supply Chain Attestation (SLSA Level 3) generated and attached." >> "${NOTES_FILE}"
 

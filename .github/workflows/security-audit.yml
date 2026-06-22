@@ -7,8 +7,9 @@ on:
   push:
     branches: [ "main", "master" ]
     paths:
-      - '**.sh'
-      - '**.py'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/**'
 
 # OSSF Scorecard: Enforce strict read-all at the top-level
@@ -22,16 +23,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Run ShellCheck on Bash scripts
-        # --shell=bash: Forces Bash mode analysis to compensate for missing shebangs in modules
-        # --exclude=SC2034,SC2154: Disables false positives related to cross-file variables
-        run: find . -type f -name "*.sh" -exec shellcheck --shell=bash --exclude=SC2034,SC2154 --severity=warning {} +
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
-      - name: Setup shfmt
-        uses: mfinelli/setup-shfmt@a25fda4c1fe115aec0f85e04126610841bc3141d #v4
-        
-      - name: Check Bash formatting (shfmt)
-        run: shfmt -d -i 4 -ci .
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: Run gosec Security Scanner
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...
+
+      - name: Run govulncheck (Supply Chain Security)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
   anti-leaks:
     name: Secret Scanning
@@ -102,10 +112,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
       - name: Compile Modular Source Code
-        run: |
-          chmod +x build.sh
-          ./build.sh
+        run: pwsh -File ./build.ps1
 
       - name: Bundle Compiled SysWarden Scripts
         run: tar -czvf syswarden-release.tar.gz -C dist .

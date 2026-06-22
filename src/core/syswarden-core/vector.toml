@@ -1,0 +1,31 @@
+# Vector.dev configuration for SysWarden v2.0
+# This configuration collects logs from systemd/journald and forwards them to the SysWarden Zero-Disk UDS.
+
+[sources.journald_auth]
+type = "journald"
+include_units = ["sshd.service", "nginx.service", "apache2.service"]
+
+[sources.flat_files]
+type = "file"
+include = [
+  "/var/log/auth.log",
+  "/var/log/secure",
+  "/var/log/nginx/*.log",
+  "/var/log/apache2/*.log"
+]
+read_from = "end"
+
+[transforms.normalize_logs]
+type = "remap"
+inputs = ["journald_auth", "flat_files"]
+source = '''
+  # Extract message and structure the payload for SysWarden Core
+  . = string!(.message)
+'''
+
+[sinks.syswarden_uds]
+type = "socket"
+inputs = ["normalize_logs"]
+mode = "unix"
+path = "/var/run/syswarden.sock"
+encoding.codec = "text"
