@@ -99,7 +99,8 @@ jobs:
           # RPM Upgrade ($1 = 2) or DEB Upgrade ($1 = configure && $2 != "")
           if [ "$1" = "2" ] || [ "$1" = "configure" -a -n "$2" ]; then
               systemctl daemon-reload
-              systemctl restart syswarden-core || true
+              /opt/syswarden/bin/syswarden-cli reload
+              systemctl enable syswarden-firewall || true
               systemctl restart syswarden-firewall || true
           # RPM Install ($1 = 1) or DEB Install ($1 = configure && $2 == "")
           elif [ "$1" = "1" ] || [ "$1" = "configure" ]; then

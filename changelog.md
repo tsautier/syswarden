@@ -1,3 +1,12 @@
+# Release v2.00.9
+
+## ADDED
+- Implemented an **Auto-Healing WAF Bridge** recovery mechanism. The `syswarden-cli reload` command now automatically and dynamically regenerates the `rsyslog` integration bridge (`99-syswarden-waf-bridge.conf`) based on the active user configuration.
+
+## FIXED
+- Updated the CI/CD `postinst.sh` lifecycle script to execute a native `syswarden reload` instead of a simple service restart during an upgrade. This guarantees that any configuration components (like firewall rules and log bridges) destructively purged by older versions are instantaneously restored without user intervention, achieving 100% Zero-Touch Upgrades.
+
+---
 
 # Release v2.00.8
 

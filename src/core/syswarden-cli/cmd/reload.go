@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/firewall"
+	"syswarden-cli/pkg/integration"
 	"syswarden-cli/pkg/network"
 )
 
@@ -24,6 +25,11 @@ var reloadCmd = &cobra.Command{
 		// Re-apply Wireguard if changed
 		if err := network.SetupWireguard(); err != nil {
 			fmt.Printf("[ERROR] Wireguard reload failed: %v\n", err)
+		}
+
+		// Re-apply WAF Log Bridge (Rsyslog)
+		if err := integration.SetupWAFLogForwarder(); err != nil {
+			fmt.Printf("[ERROR] WAF Log Bridge reload failed: %v\n", err)
 		}
 
 		// Restart Daemons gracefully
