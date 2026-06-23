@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-var Version = "v2.01.3"
+var Version = "v2.01.4"
 
 func isRHEL() bool {
 	_, errDnf := exec.LookPath("dnf")
@@ -106,6 +106,11 @@ func UpgradeSystem() error {
 		if err := downloadFile(pkgURL, pkgFile); err != nil {
 			return fmt.Errorf("failed to download DEB package: %w", err)
 		}
+
+		// [FIX] CIS Level 2 / ANSSI Hardening Compatibility
+		// Ensure the _apt sandbox user can read the file in the sticky /tmp directory
+		_ = os.Chmod(pkgFile, 0644)
+		_ = exec.Command("chown", "_apt", pkgFile).Run()
 
 		fmt.Println("[INFO] Installing new version via apt-get...")
 		cmd := exec.Command("apt-get", "install", "-y", pkgFile)

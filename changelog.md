@@ -1,3 +1,10 @@
+# Release v2.01.4
+
+## FIXED
+- **APT Sandbox Warning (CIS2/ANSSI)**: Resolved an issue where `syswarden update` triggered an APT Notice (`_apt` user permission denied) during `.deb` upgrades on highly hardened Debian/Ubuntu servers enforcing `fs.protected_regular=2`. The update engine now natively changes the ownership of the downloaded package to the `_apt` user before installation, guaranteeing flawless and completely silent APT Sandbox compliance.
+
+---
+
 # Release v2.01.3
 
 ## ADDED
