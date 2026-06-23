@@ -1,3 +1,10 @@
+# Release v2.00.6
+
+## FIXED
+- Remediated `golangci-lint` regressions (`errcheck`) by enforcing strict and explicit error handling on all `defer` file closure operations across the Go Native engine, maintaining compliance with Zero CWE standards.
+
+---
+
 # Release v2.00.5
 
 ## UPDATED
