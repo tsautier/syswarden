@@ -100,6 +100,17 @@ jobs:
           mkdir -p /etc/bash_completion.d
           /opt/syswarden/bin/syswarden-cli completion bash > /etc/bash_completion.d/syswarden 2>/dev/null || true
 
+          # Force Bash Autocompletion on Debian/Ubuntu minimal images
+          if [ -f /etc/debian_version ] && [ -f /root/.bashrc ]; then
+              if ! grep -qE "^[[:space:]]*\.[[:space:]]+/etc/bash_completion" /root/.bashrc; then
+                  echo "" >> /root/.bashrc
+                  echo "# SysWarden Auto-Completion Hook" >> /root/.bashrc
+                  echo "if [ -f /etc/bash_completion ] && ! shopt -oq posix; then" >> /root/.bashrc
+                  echo "    . /etc/bash_completion" >> /root/.bashrc
+                  echo "fi" >> /root/.bashrc
+              fi
+          fi
+
           # RPM Upgrade ($1 = 2) or DEB Upgrade ($1 = configure && $2 != "")
           if [ "$1" = "2" ] || [ "$1" = "configure" -a -n "$2" ]; then
               systemctl daemon-reload

@@ -1,3 +1,10 @@
+# Release v2.01.2
+
+## FIXED
+- **Ubuntu/Debian Autocompletion**: Added an automated post-installation hook in the `.deb` package (`postinst.sh`) to natively append and uncomment the `bash_completion` logic within the `root` user's `~/.bashrc`. This guarantees that the SysWarden CLI `<TAB>` autocompletion is fully functional out-of-the-box on minimal Ubuntu/Debian server environments where it is disabled by default.
+
+---
+
 # Release v2.01.1
 
 ## FIXED

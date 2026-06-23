@@ -167,7 +167,7 @@ sudo syswarden uninstall
 
 ### 6. Native Enterprise Management & Auditing
 
-SysWarden v2.00.6 includes a comprehensive, native Golang CLI to orchestrate all firewalls and system checks directly without bash scripts.
+SysWarden v2 includes a comprehensive, native Golang CLI to orchestrate all firewalls and system checks directly without bash scripts.
 
 **DevSecOps Full Audit:**
 Run a complete system compliance and integration check (Rsyslog bridges, Docker routing, WAF telemetry, Cron health):
