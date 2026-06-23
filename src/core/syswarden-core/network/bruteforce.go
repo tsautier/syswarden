@@ -3,6 +3,7 @@ package network
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -123,7 +124,7 @@ func (b *BruteforceEngine) tailFile(filepath string) {
 		Follow:    true,
 		ReOpen:    true,
 		MustExist: false,
-		Location:  &tail.SeekInfo{Offset: 0, Whence: os.SEEK_END},
+		Location:  &tail.SeekInfo{Offset: 0, Whence: io.SeekEnd},
 		Logger:    tail.DiscardingLogger,
 	})
 	if err != nil {

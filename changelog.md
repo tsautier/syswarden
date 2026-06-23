@@ -1,3 +1,10 @@
+# Release v2.01.1
+
+## FIXED
+- Resolved a `staticcheck` pipeline failure (deprecation warning) in the L7 Brute-Force module by replacing `os.SEEK_END` with the standard `io.SeekEnd` for file tailing operations, ensuring full compliance with Go 1.26 static analysis.
+
+---
+
 # Release v2.01.0
 
 ## ADDED
