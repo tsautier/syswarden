@@ -1,3 +1,11 @@
+# Release v2.00.2
+
+## ADDED
+- Enterprise SIEM Forwarding: Native support for robust TCP and TLS encryption via Rsyslog's `StreamDriver` (preventing CWE-319 vulnerabilities).
+- The SIEM forwarder dynamically configures TLS authentication in `anon` mode to ensure maximum compatibility with self-signed Enterprise PKIs without dropping encrypted logs.
+
+---
+
 # Release v2.00.1
 
 ## ADDED

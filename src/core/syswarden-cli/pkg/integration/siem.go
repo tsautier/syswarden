@@ -19,6 +19,7 @@ func SetupSIEM() error {
 	ip := config.GlobalConfig.SiemIP
 	port := config.GlobalConfig.SiemPort
 	proto := config.GlobalConfig.SiemProto
+	tlsCA := config.GlobalConfig.SiemTLSCA
 
 	if ip == "" || port == "" {
 		return fmt.Errorf("SIEM IP or Port is missing in configuration")
@@ -26,14 +27,24 @@ func SetupSIEM() error {
 
 	// 1. We write the rsyslog configuration natively
 	confPath := "/etc/rsyslog.d/99-syswarden-siem.conf"
-	
+
 	// Secure formatting (CWE-117)
 	var rsyslogConf string
 	if proto == "udp" {
 		rsyslogConf = fmt.Sprintf("*.* @%s:%s\n", ip, port)
 	} else {
 		// TCP
-		rsyslogConf = fmt.Sprintf("*.* @@%s:%s\n", ip, port)
+		if tlsCA != "" {
+			// TLS Configuration using anon mode for robust encryption without domain-match breakage
+			rsyslogConf = fmt.Sprintf("$DefaultNetstreamDriverCAFile %s\n", tlsCA)
+			rsyslogConf += "$ActionSendStreamDriver gtls\n"
+			rsyslogConf += "$ActionSendStreamDriverMode 1\n"
+			rsyslogConf += "$ActionSendStreamDriverAuthMode anon\n"
+			rsyslogConf += fmt.Sprintf("*.* @@%s:%s\n", ip, port)
+		} else {
+			// Cleartext TCP
+			rsyslogConf = fmt.Sprintf("*.* @@%s:%s\n", ip, port)
+		}
 	}
 
 	if err := os.WriteFile(confPath, []byte(rsyslogConf), 0640); err != nil {
