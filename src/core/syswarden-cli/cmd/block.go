@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/integration"

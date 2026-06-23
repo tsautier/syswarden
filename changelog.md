@@ -1,3 +1,10 @@
+# Release v2.01.7
+
+## FIXED
+- **Code Hygiene (CI/CD Pipeline)**: Cleaned up phantom `"os"` package imports across multiple CLI commands (`whitelist.go`, `unwhitelist.go`, `block.go`, `unblock.go`). This resolves a strict compilation and `golangci-lint` failure encountered by GitHub Actions runners during the automated build process.
+
+---
+
 # Release v2.01.6
 
 ## FIXED
