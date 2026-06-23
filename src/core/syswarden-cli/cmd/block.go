@@ -10,17 +10,18 @@ import (
 )
 
 var blockCmd = &cobra.Command{
-	Use:   "block <IP>",
+	Use:   "block <IP>...",
 	Short: "Hot-adds an IP to the kernel drop set",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := firewall.AddToBlocklist(args[0]); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+		for _, ip := range args {
+			if err := firewall.AddToBlocklist(ip); err != nil {
+				fmt.Printf("[ERROR] %s: %v\n", ip, err)
+			} else {
+				// Send Discord/Teams Notification for Manual Block
+				integration.SendBanAlert(ip)
+			}
 		}
-		// Send Discord/Teams Notification for Manual Block
-		integration.SendBanAlert(args[0])
-		fmt.Printf("[SUCCESS] IP %s safely blocklisted.\n", args[0])
 	},
 }
 

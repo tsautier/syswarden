@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"syswarden-cli/config"
 )
@@ -40,10 +39,12 @@ func AutoWhitelistAdminAndInfra() error {
 		}
 	}
 
-	if adminIP != "" && isValidIPv4(adminIP) && adminIP != "127.0.0.1" {
-		if !strings.Contains(existing, adminIP) {
-			ipsToAdd = append(ipsToAdd, adminIP)
-			fmt.Printf(" -> Auto-whitelisting Admin SSH IP: %s\n", adminIP)
+	if adminIP != "" && adminIP != "127.0.0.1" {
+		if valid, isIPv4 := IsValidIP(adminIP); valid && isIPv4 {
+			if !strings.Contains(existing, adminIP) {
+				ipsToAdd = append(ipsToAdd, adminIP)
+				fmt.Printf(" -> Auto-whitelisting Admin SSH IP: %s\n", adminIP)
+			}
 		}
 	} else {
 		fmt.Println("[WARN] Could not safely determine Admin IP from environment.")
@@ -57,7 +58,7 @@ func AutoWhitelistAdminAndInfra() error {
 		// DNS
 		out, _ := exec.Command("sh", "-c", "grep '^nameserver' /etc/resolv.conf | awk '{print $2}'").Output()
 		for _, ip := range strings.Fields(string(out)) {
-			if isValidIPv4(ip) {
+			if valid, isIPv4 := IsValidIP(ip); valid && isIPv4 {
 				ipsToAdd = append(ipsToAdd, ip)
 			}
 		}
@@ -65,7 +66,7 @@ func AutoWhitelistAdminAndInfra() error {
 		// Default Gateway
 		out, _ = exec.Command("sh", "-c", "ip -4 route show default 2>/dev/null | grep -Eo 'via [0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | awk '{print $2}'").Output()
 		for _, ip := range strings.Fields(string(out)) {
-			if isValidIPv4(ip) {
+			if valid, isIPv4 := IsValidIP(ip); valid && isIPv4 {
 				ipsToAdd = append(ipsToAdd, ip)
 			}
 		}
@@ -73,7 +74,17 @@ func AutoWhitelistAdminAndInfra() error {
 		// Local IPs
 		out, _ = exec.Command("sh", "-c", "ip -4 addr show | grep -oEo 'inet [0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+' | awk '{print $2}' | grep -v '^127\\.'").Output()
 		for _, ip := range strings.Fields(string(out)) {
-			if isValidIPv4(ip) {
+			if valid, isIPv4 := IsValidIP(ip); valid && isIPv4 {
+				ipsToAdd = append(ipsToAdd, ip)
+			}
+		}
+	}
+
+	// 3. User-Defined Config IPs
+	if config.GlobalConfig.WhitelistIPs != "" {
+		customIPs := strings.Fields(config.GlobalConfig.WhitelistIPs)
+		for _, ip := range customIPs {
+			if valid, isIPv4 := IsValidIP(ip); valid && isIPv4 {
 				ipsToAdd = append(ipsToAdd, ip)
 			}
 		}
@@ -103,9 +114,4 @@ func AutoWhitelistAdminAndInfra() error {
 	}
 
 	return nil
-}
-
-func isValidIPv4(ip string) bool {
-	matched, _ := regexp.MatchString(`^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$`, ip)
-	return matched
 }

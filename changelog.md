@@ -1,6 +1,14 @@
-# Release v2.01.4
+# Release v2.01.5
 
 ## FIXED
+- **Config Parser Oversight**: Resolved a core engine issue where the `SYSWARDEN_WHITELIST_IPS` configuration parameter was successfully parsed from `syswarden-auto.conf` but skipped during the firewall compilation phase. Custom whitelists are now flawlessly injected into the Nftables `syswarden_whitelist` set upon startup and reload.
+
+## ADDED
+- **Unlimited CLI Arguments**: The SysWarden CLI `whitelist`, `block`, `unwhitelist`, and `unblock` commands now natively support an unlimited number of arguments simultaneously (`syswarden block IP1 IP2 IP3...`). The strict parameter limits (e.g., `cobra.RangeArgs(1, 2)`) have been lifted, enabling instantaneous mass-processing.
+
+---
+
+# Release v2.01.4
 - **APT Sandbox Warning (CIS2/ANSSI)**: Resolved an issue where `syswarden update` triggered an APT Notice (`_apt` user permission denied) during `.deb` upgrades on highly hardened Debian/Ubuntu servers enforcing `fs.protected_regular=2`. The update engine now natively changes the ownership of the downloaded package to the `_apt` user before installation, guaranteeing flawless and completely silent APT Sandbox compliance.
 
 ---

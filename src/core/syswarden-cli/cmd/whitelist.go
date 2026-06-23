@@ -3,23 +3,33 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/firewall"
 )
 
 var whitelistCmd = &cobra.Command{
-	Use:   "whitelist <IP> [PORT]",
+	Use:   "whitelist <IP>... [PORT]",
 	Short: "Grants global VIP access and bypasses the firewall",
-	Args:  cobra.RangeArgs(1, 2),
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		var ips []string
 		port := ""
-		if len(args) == 2 {
-			port = args[1]
+		for _, arg := range args {
+			// If it's purely numerical, assume it's the port
+			matched, _ := regexp.MatchString(`^[0-9]+$`, arg)
+			if matched {
+				port = arg
+			} else {
+				ips = append(ips, arg)
+			}
 		}
-		if err := firewall.AddToWhitelist(args[0], port); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+		
+		for _, ip := range ips {
+			if err := firewall.AddToWhitelist(ip, port); err != nil {
+				fmt.Printf("[ERROR] %s: %v\n", ip, err)
+			}
 		}
 	},
 }
