@@ -1,3 +1,23 @@
+# Release v2.10.0
+
+## ADDED
+- Layer 2 Protection Engine: Implemented native OSI Layer 2 filtering capabilities leveraging NFTables netdev and arp families.
+- MAC Blacklist Capability: Introduced strict MAC address blocking at the ingress hook, ensuring zero interference with L3 routing, Docker networks, or existing firewalls (UFW/Firewalld).
+- ARP Flooding Protection: Integrated aggressive ARP request rate-limiting (max 10 req/s) to neutralize ARP Spoofing/Flooding attacks while maintaining full compatibility with High Availability architectures (VRRP/Keepalived).
+- Configuration Variables: Added SYSWARDEN_ENABLE_L2, SYSWARDEN_MAC_BLACKLIST, SYSWARDEN_ARP_PROTECT, and SYSWARDEN_LAN_MODE to the global configuration parser.
+- Local LAN Mode (Air-Gapped/Zero-Trust): Implemented SYSWARDEN_LAN_MODE. When enabled, SysWarden intelligently bypasses the download and memory injection of massive public OSINT blocklists (Data-Shield, GeoIP, ASN) to heavily optimize RAM/CPU/Bandwidth on strictly internal servers, while maintaining full internal L2/L7 defenses.
+
+## UPGRADED
+- Configuration Security: Implemented rigorous IEEE 802 Regex validation for all MAC address inputs to definitively prevent NFTables syntax poisoning and runtime crashes.
+
+## UPDATED
+- Nftables Generator: Restructured the atomic deployment engine to cleanly provision, append, and destroy the netdev and arp families upon reload.
+
+## FIXED
+- None
+
+---
+
 # Release v2.01.11
 
 ## FIXED

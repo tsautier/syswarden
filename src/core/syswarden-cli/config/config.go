@@ -45,6 +45,10 @@ type Config struct {
 	WazuhCommPort        string
 	WazuhEnrollPort      string
 	SecureWipeConf       bool
+	EnableL2             bool
+	MacBlacklist         string
+	ArpProtect           bool
+	LANMode              bool
 }
 
 // GlobalConfig is the singleton instance holding the parsed configuration

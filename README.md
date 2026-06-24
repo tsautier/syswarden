@@ -41,7 +41,10 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 ## Architectural Capabilities (CNAPP / HIDS-HIPS)
 
 **1. A "Next-Gen HIPS" (Host Intrusion Prevention System)**
-At its core, SysWarden is a formidable HIPS. Unlike a traditional IDS (Intrusion Detection System) that merely alerts, SysWarden actively prevents attacks by severing connections at the hardware level (Layer 2 / Nftables `netdev`). It acts entirely autonomously on the host system without waiting for instructions from an external hardware firewall.
+At its core, SysWarden is a formidable HIPS. Unlike a traditional IDS (Intrusion Detection System) that merely alerts, SysWarden actively prevents attacks across multiple concrete OSI layers:
+* **Layer 2 (Data Link)**: Native MAC address blacklisting via the `netdev` family and ARP Request Rate-Limiting to instantly kill ARP Flooding/Spoofing attacks without breaking VRRP HA setups.
+* **Layer 3 & 4 (Network & Transport)**: Stateful IP, CIDR, ASN, and GeoIP filtering via the `inet` family with explicit TCP Flag anomaly detection (e.g. killing invalid SYN/FIN/RST combinations).
+* **Layer 7 (Application)**: HTTP 401/403/404 Brute-Force and WAF (Web Application Firewall) payload inspection via the native Go `BruteforceEngine` tailing proxy access logs in real-time.
 
 **2. A CWPP (Cloud Workload Protection Platform)**
 By natively integrating Docker protection (Layer 3 via the `docker_protect` chain and Layer 7 via the Aho-Corasick WAF), SysWarden secures modern workloads. Whether the server hosts a Traefik cluster, databases, or containerized APIs, SysWarden wraps the containers in a shield without ever breaking their internal routing. This perfectly mirrors the behavior of enterprise agents like CrowdStrike or Palo Alto Prisma Cloud on Linux servers.
@@ -62,8 +65,8 @@ SysWarden doesn't just block. It manages its own Threat Intelligence (ingesting 
 * **Layer 3/4 Catch-All Auditing:** Enforces total visibility by securely logging any packet hitting the hardware drop threshold before execution, populating the real-time observability console (`syswarden alerts`) with granular "Catch-All" traffic analytics.
 
 **Core Network Defense (Hardware & Layer 2/3)**
-* Injects Threat Intelligence directly into the `netdev` table under `nftables`. Malicious packets are destroyed right at the Network Interface Card (NIC), bypassing kernel routing to guarantee zero CPU impact during volumetric DDoS attacks.
-* Native Go `net/http` clients securely download and sync hostile countries (GeoIP), cybercrime hosters, and rogue ASNs.
+* **OSI Layer 2 (MAC/ARP)**: Injects Threat Intelligence directly into the `netdev` table under `nftables`. Malicious MAC addresses are dropped right at the Network Interface Card (NIC) Ingress hook, bypassing kernel routing. Additionally, an isolated `arp` table limits ARP requests to strictly mitigate network saturation floods natively.
+* **OSI Layer 3 (IP/Routing)**: Native Go `net/http` clients securely download and sync hostile countries (GeoIP), cybercrime hosters, and rogue ASNs.
 
 **Stateful & Protocol Optimization (Layer 3/4)**
 * Implements UFW-grade stateful enforcement by silently destroying late `FIN-ACK`/`RST` packets on expired `conntrack` sessions, and strictly blocking `NEW` connections lacking the `SYN` flag.
@@ -120,6 +123,13 @@ sudo dnf install -y ./syswarden-<version>-1.noarch.rpm
 
 # 4. Review and tailor the embedded configuration to your infrastructure
 sudo syswarden config
+
+# The interactive wizard (or syswarden-auto.conf) allows configuring advanced parameters, for example:
+# - SYSWARDEN_ENABLE_L2="y" (Enable OSI Layer 2 MAC Drop)
+# - SYSWARDEN_MAC_BLACKLIST="00:1A:2B:3C:4D:5E" (Blacklist specific infected hardwares)
+# - SYSWARDEN_ARP_PROTECT="y" (Enable 10req/sec ARP Flood limits)
+# - SYSWARDEN_LAN_MODE="y" (Enable Local LAN Mode to save RAM by skipping global OSINT downloads)
+# - SYSWARDEN_BRUTEFORCE_LOGS="/var/log/traefik/access.log" (Enable L7 WAF log parsing)
 
 # 5. Execute the Go Orchestrator to apply policies instantly
 sudo syswarden install

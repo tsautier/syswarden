@@ -100,8 +100,14 @@ func CleanCIDRList(filepath string) error {
 }
 
 // DownloadFeeds manages the download of GeoIP, ASN, and OSINT feeds
-func DownloadFeeds(mirrorURL, geoCodes, asnList string) error {
+func DownloadFeeds(mirrorURL, geoCodes, asnList string, lanMode bool) error {
 	fmt.Println("[INFO] Initializing Network Intelligence Feeds...")
+
+	if lanMode {
+		fmt.Println("[INFO] LAN Mode is ENABLED. Skipping public Data-Shield, GeoIP, ASN, and OSINT feeds to conserve local resources.")
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 

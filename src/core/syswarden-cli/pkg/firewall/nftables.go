@@ -24,7 +24,8 @@ func ApplyNftables() error {
 	// 2. Destroy tables atomically if they exist
 	_, _ = nftRules.WriteString("destroy table inet syswarden\n")
 	_, _ = nftRules.WriteString("destroy table inet syswarden_table\n") // Cleanup legacy table
-	_, _ = nftRules.WriteString("destroy table netdev syswarden_hw_drop\n\n")
+	_, _ = nftRules.WriteString("destroy table netdev syswarden_hw_drop\n")
+	_, _ = nftRules.WriteString("destroy table arp syswarden_arp\n\n")
 
 	// 3. Hardware Drop Table (L2)
 	_, _ = nftRules.WriteString("table netdev syswarden_hw_drop {\n")
@@ -32,6 +33,11 @@ func ApplyNftables() error {
 	_, _ = nftRules.WriteString("\tset syswarden_whitelist6 { type ipv6_addr; flags interval; auto-merge; }\n")
 	_, _ = nftRules.WriteString("\tset banned_ips { type ipv4_addr; flags timeout; }\n")
 	_, _ = nftRules.WriteString("\tset syswarden_blacklist { type ipv4_addr; flags interval; auto-merge; }\n")
+
+	if config.GlobalConfig.EnableL2 && config.GlobalConfig.MacBlacklist != "" {
+		macs := strings.ReplaceAll(config.GlobalConfig.MacBlacklist, " ", ", ")
+		fmt.Fprintf(&nftRules, "\tset syswarden_mac_blacklist { type ether_addr; elements = { %s }; }\n", macs)
+	}
 
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 	_, _ = nftRules.WriteString("\tset syswarden_geoip { type ipv4_addr; flags interval; auto-merge; }\n")
@@ -41,6 +47,10 @@ func ApplyNftables() error {
 	}
 
 	fmt.Fprintf(&nftRules, "\tchain ingress_frontline {\n\t\ttype filter hook ingress device \"%s\" priority -500; policy accept;\n", activeIf)
+
+	if config.GlobalConfig.EnableL2 && config.GlobalConfig.MacBlacklist != "" {
+		_, _ = nftRules.WriteString("\t\tether saddr @syswarden_mac_blacklist counter log prefix \"[SysWarden-MAC-BLOCK] \" drop\n")
+	}
 
 	// Allow Whitelist O(1) matching via set (Requested by User)
 	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_whitelist accept\n")
@@ -147,6 +157,14 @@ func ApplyNftables() error {
 	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn counter drop\n")
 	}
 	_, _ = nftRules.WriteString("\t}\n}\n\n")
+
+	// 4. ARP Protection Table (L2)
+	if config.GlobalConfig.ArpProtect {
+		_, _ = nftRules.WriteString("table arp syswarden_arp {\n")
+		_, _ = nftRules.WriteString("\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n")
+		_, _ = nftRules.WriteString("\t\tarp operation request limit rate over 10/second counter log prefix \"[SysWarden-ARP-FLOOD] \" drop\n")
+		_, _ = nftRules.WriteString("\t}\n}\n\n")
+	}
 
 	// 5. Write atomic base file securely (Empty Sets)
 	nftFile := "/etc/syswarden/syswarden.nft"

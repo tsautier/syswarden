@@ -53,6 +53,7 @@ func UninstallSystem() error {
 	fmt.Println(" -> Cleaning Firewall Rules (nftables & iptables)...")
 	if err := exec.Command("nft", "list", "ruleset").Run(); err == nil {
   _ = exec.Command("nft", "delete", "table", "netdev", "syswarden_hw_drop").Run()
+  _ = exec.Command("nft", "delete", "table", "arp", "syswarden_arp").Run()
   _ = exec.Command("nft", "delete", "table", "inet", "syswarden").Run()
   _ = exec.Command("nft", "delete", "table", "inet", "syswarden_wg").Run()
 	}

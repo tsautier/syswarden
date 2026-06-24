@@ -145,6 +145,7 @@ jobs:
               systemctl stop syswarden-firewall.service || true
               systemctl disable syswarden-firewall.service || true
               nft delete table netdev syswarden_hw_drop || true
+              nft delete table arp syswarden_arp || true
               nft delete table inet syswarden || true
               if crontab -l > /tmp/sw_cron.bak 2>/dev/null; then
                   grep -v 'syswarden-cli' /tmp/sw_cron.bak | crontab - || true

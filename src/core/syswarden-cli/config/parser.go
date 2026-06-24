@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -119,6 +120,14 @@ func ParseConfig(filepath string) error {
 			GlobalConfig.WazuhEnrollPort = val
 		case "SYSWARDEN_SECURE_WIPE_CONF":
 			GlobalConfig.SecureWipeConf = parseBool(val)
+		case "SYSWARDEN_ENABLE_L2":
+			GlobalConfig.EnableL2 = parseBool(val)
+		case "SYSWARDEN_MAC_BLACKLIST":
+			GlobalConfig.MacBlacklist = parseMACList(val)
+		case "SYSWARDEN_ARP_PROTECT":
+			GlobalConfig.ArpProtect = parseBool(val)
+		case "SYSWARDEN_LAN_MODE":
+			GlobalConfig.LANMode = parseBool(val)
 		}
 	}
 
@@ -132,4 +141,24 @@ func ParseConfig(filepath string) error {
 func parseBool(val string) bool {
 	v := strings.ToLower(val)
 	return v == "y" || v == "yes" || v == "true" || v == "1"
+}
+
+// isValidMAC ensures the MAC address matches IEEE 802 standard format to prevent NFTables syntax poisoning
+func isValidMAC(mac string) bool {
+	matched, _ := regexp.MatchString(`^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`, mac)
+	return matched
+}
+
+func parseMACList(val string) string {
+	var validMACs []string
+	macs := strings.Fields(strings.ReplaceAll(val, ",", " "))
+	for _, mac := range macs {
+		mac = strings.TrimSpace(mac)
+		if isValidMAC(mac) {
+			validMACs = append(validMACs, strings.ToLower(mac))
+		} else {
+			fmt.Printf("[WARN] Config: Invalid MAC address format ignored: %s\n", mac)
+		}
+	}
+	return strings.Join(validMACs, " ")
 }

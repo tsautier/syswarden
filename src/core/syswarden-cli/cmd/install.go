@@ -39,7 +39,7 @@ var installCmd = &cobra.Command{
 		if mirrorURL == "" {
 			mirrorURL = "https://codeberg.org/"
 		}
-		if err := network.DownloadFeeds(mirrorURL, config.GlobalConfig.GeoCodes, config.GlobalConfig.ASNList); err != nil {
+		if err := network.DownloadFeeds(mirrorURL, config.GlobalConfig.GeoCodes, config.GlobalConfig.ASNList, config.GlobalConfig.LANMode); err != nil {
 			fmt.Printf("[ERROR] Failed to download threat feeds: %v\n", err)
 			return
 		}
@@ -106,7 +106,7 @@ var installCmd = &cobra.Command{
 			fmt.Printf("[ERROR] Systemd setup failed: %v\n", err)
 		}
 		
-		fmt.Println("[SysWarden] v2.01.11 Native Installation Complete.")
+		fmt.Println("[SysWarden] v2.10.0 Native Installation Complete.")
 	},
 }
 

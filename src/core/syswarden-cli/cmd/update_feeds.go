@@ -19,7 +19,7 @@ var updateFeedsCmd = &cobra.Command{
 			mirrorURL = "https://codeberg.org/"
 		}
 
-		if err := network.DownloadFeeds(mirrorURL, config.GlobalConfig.GeoCodes, config.GlobalConfig.ASNList); err != nil {
+		if err := network.DownloadFeeds(mirrorURL, config.GlobalConfig.GeoCodes, config.GlobalConfig.ASNList, config.GlobalConfig.LANMode); err != nil {
 			fmt.Printf("[ERROR] Failed to update threat feeds: %v\n", err)
 			return
 		}
