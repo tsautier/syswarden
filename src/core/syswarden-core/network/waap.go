@@ -63,7 +63,11 @@ func loadWAAPConfig() WAAPConfig {
 		switch key {
 		case "SYSWARDEN_BRUTEFORCE_LOGS":
 			if val != "" {
-				cfg.Logs = strings.Fields(val)
+				if strings.ToLower(val) == "auto" {
+					cfg.Logs = discoverLogs()
+				} else {
+					cfg.Logs = strings.Fields(val)
+				}
 			}
 		case "SYSWARDEN_BRUTEFORCE_THRESHOLD":
 			if t, err := strconv.Atoi(val); err == nil && t > 0 {
@@ -76,6 +80,27 @@ func loadWAAPConfig() WAAPConfig {
 		}
 	}
 	return cfg
+}
+
+func discoverLogs() []string {
+	var discovered []string
+
+	// Map of parent directories to log patterns
+	autoPaths := map[string][]string{
+		"/var/log/nginx":    {"/var/log/nginx/access.log", "/var/log/nginx/*.log"},
+		"/var/log/apache2":  {"/var/log/apache2/access.log", "/var/log/apache2/*.log"},
+		"/var/log/httpd":    {"/var/log/httpd/access_log", "/var/log/httpd/*_log"},
+		"/var/log/caddy":    {"/var/log/caddy/access.log", "/var/log/caddy/*.log"},
+		"/var/log/traefik":  {"/var/log/traefik/access.log", "/var/log/traefik/*.log"},
+		"/var/log/lighttpd": {"/var/log/lighttpd/access.log"},
+	}
+
+	for dir, patterns := range autoPaths {
+		if stat, err := os.Stat(dir); err == nil && stat.IsDir() {
+			discovered = append(discovered, patterns...)
+		}
+	}
+	return discovered
 }
 
 func NewWAAPEngine(fw firewall.Manager, l *logger.Logger) *WAAPEngine {

@@ -1,7 +1,7 @@
 package config
 
 const DefaultConfig = `# ==============================================================================
-# Version=v2.20.0
+# Version=v2.20.1
 # SYSWARDEN UNATTENDED INSTALLATION CONFIGURATION
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -56,8 +56,9 @@ SYSWARDEN_MODSEC_LOGS="/var/log/modsec/*.log"
 # Space-separated list of application access logs to tail (e.g., Traefik, Nginx, Apache)
 # SysWarden will natively parse these files in real-time to detect advanced exploits (SQLi, XSS, RCE, LFI)
 # and automatically track HTTP 401/403/404 bruteforce thresholds.
-# Supports wildcards. Leave empty to disable.
-SYSWARDEN_BRUTEFORCE_LOGS=""
+# Use "auto" to automatically discover Nginx, Apache, Caddy, Traefik, or HTTPD logs.
+# Leave empty ("") to completely disable the L7 WAAP Engine.
+SYSWARDEN_BRUTEFORCE_LOGS="auto"
 # Number of authentication failures/forbidden errors allowed before an IP is banned at L3
 SYSWARDEN_BRUTEFORCE_THRESHOLD="5"
 # Sliding window in seconds for the threshold

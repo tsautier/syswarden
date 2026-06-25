@@ -1,3 +1,10 @@
+# Release v2.20.1
+
+## ADDED
+- WAAP Auto-Discovery (Zero-Config Absolu): The WAAP engine now natively probes the file system for standard web server log directories (`/var/log/nginx`, `/var/log/apache2`, `/var/log/httpd`, `/var/log/caddy`, `/var/log/traefik`, `/var/log/lighttpd`). By setting `SYSWARDEN_BRUTEFORCE_LOGS="auto"` (the new default), SysWarden intelligently tails active web server access logs. This guarantees instant, zero-configuration L7 protection for amateur sysadmins without losing manual override capabilities for advanced users.
+
+---
+
 # Release v2.20.0
 
 ## ADDED
