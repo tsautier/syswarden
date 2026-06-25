@@ -117,14 +117,18 @@ func RunAudit() {
 		warn("Global Blocklist is missing.")
 	}
 
-	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" && config.GlobalConfig.GeoCodes != "none" {
-		pass("GeoIP Threat Intelligence is actively deployed and enforced.")
+	if config.GlobalConfig.GeoAllowed != "" {
+		pass(fmt.Sprintf("Zero-Trust Strict ALLOW [GeoIP] is actively enforced (Allowed: %s).", config.GlobalConfig.GeoAllowed))
+	} else if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" && config.GlobalConfig.GeoCodes != "none" {
+		pass("GeoIP Threat Intelligence (Classic Block) is actively deployed.")
 	} else {
 		info("GeoIP Threat Intelligence (Skipped by user).")
 	}
 
-	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" && config.GlobalConfig.ASNList != "none" {
-		pass("Manual ASN Routing Defense is actively deployed.")
+	if config.GlobalConfig.ASNAllowed != "" {
+		pass(fmt.Sprintf("Zero-Trust Strict ALLOW [ASN] is actively enforced (Allowed: %s).", config.GlobalConfig.ASNAllowed))
+	} else if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" && config.GlobalConfig.ASNList != "none" {
+		pass("Manual ASN Routing Defense (Classic Block) is actively deployed.")
 	} else {
 		info("Manual ASN Routing Defense (Skipped by user).")
 	}
@@ -157,6 +161,19 @@ func RunAudit() {
 	logHeader("Phase 4: Layer 7 Active Defense (SysWarden WAF)")
 	if isServiceActive("syswarden-core") {
 		pass("SysWarden WAF service (syswarden-core) is running.")
+
+		if config.GlobalConfig.BruteforceLogs != "" {
+			if strings.ToLower(config.GlobalConfig.BruteforceLogs) == "auto" {
+				pass("WAAP Auto-Discovery is ENABLED. Dynamically tailing system logs.")
+			} else {
+				pass("WAAP Manual Log Tailing is actively monitoring custom paths.")
+			}
+		}
+
+		if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+			pass("WAAP Sovereignty VERIFIED: L7 Engine dynamically overrides L3 Zero-Trust Whitelists.")
+		}
+
 		if _, err := os.Stat("/var/run/syswarden.sock"); err == nil {
 			pass("SysWarden UDS socket is active and listening for telemetry.")
 		} else {

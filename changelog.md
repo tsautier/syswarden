@@ -1,3 +1,10 @@
+# Release v2.30.1
+
+## UPDATED
+- [SecOps] SysWarden Audit Engine: The `syswarden audit` CLI command has been completely overhauled to natively recognize and validate the new Zero-Trust Strict ALLOW architecture (GeoIP and ASN). It now also actively audits the WAAP L7 Engine status, confirming Auto-Discovery mechanisms and L7 Sovereignty capabilities.
+
+---
+
 # Release v2.30.0
 
 ## ADDED
