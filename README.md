@@ -43,7 +43,7 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 **1. A "Next-Gen HIPS" (Host Intrusion Prevention System)**
 At its core, SysWarden is a formidable HIPS. Unlike a traditional IDS (Intrusion Detection System) that merely alerts, SysWarden actively prevents attacks across multiple concrete OSI layers:
 * **Layer 2 (Data Link)**: Native MAC address blacklisting via the `netdev` family and ARP Request Rate-Limiting to instantly kill ARP Flooding/Spoofing attacks without breaking VRRP HA setups.
-* **Layer 3 & 4 (Network & Transport)**: Stateful IP, CIDR, ASN, and GeoIP filtering via the `inet` family with explicit TCP Flag anomaly detection (e.g. killing invalid SYN/FIN/RST combinations).
+* **Layer 3 & 4 (Network & Transport)**: Stateful IP, CIDR, ASN, and GeoIP filtering via the `inet` family with explicit TCP Flag anomaly detection (e.g. killing invalid SYN/FIN/RST combinations). Includes a **Zero-Trust Strict ALLOW Mode** natively dropping any IP worldwide that isn't explicitly whitelisted via GeoIP or ASN.
 * **Layer 7 (Application)**: Advanced WAAP (Web Application Firewall) inspecting payloads via Zero-Overhead Substring Matching for zero-day exploits (SQLi, XSS, LFI, RCE) and HTTP 401/403/404 Brute-Force tracking via the native Go `WAAPEngine`.
 
 **2. A CWPP (Cloud Workload Protection Platform)**

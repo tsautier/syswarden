@@ -21,8 +21,10 @@ type Config struct {
 	CustomHash          string
 	EnableGeo           bool
 	GeoCodes            string
+	GeoAllowed          string
 	EnableASN           bool
 	ASNList             string
+	ASNAllowed          string
 	UseSpamhaus         bool
 	HAEnabled           bool
 	HAPeerIP            string

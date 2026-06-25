@@ -100,7 +100,7 @@ func CleanCIDRList(filepath string) error {
 }
 
 // DownloadFeeds manages the download of GeoIP, ASN, and OSINT feeds
-func DownloadFeeds(mirrorURL, geoCodes, asnList string, lanMode bool) error {
+func DownloadFeeds(mirrorURL, geoCodes, asnList, geoAllowed, asnAllowed string, lanMode bool) error {
 	fmt.Println("[INFO] Initializing Network Intelligence Feeds...")
 
 	if lanMode {
@@ -141,6 +141,46 @@ func DownloadFeeds(mirrorURL, geoCodes, asnList string, lanMode bool) error {
 			}
 			dest := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToUpper(asn))
 			fmt.Printf("Downloading ASN [%s]... ", asn)
+			if err := FetchASNWhois(asn, dest); err != nil {
+				fmt.Printf("FAILED (%v)\n", err)
+			} else {
+				fmt.Println("OK")
+			}
+		}
+	}
+
+	// Download GeoIP ALLOW lists (Zero-Trust Mode)
+	if geoAllowed != "" {
+		codes := strings.Split(geoAllowed, " ")
+		for _, code := range codes {
+			code = strings.TrimSpace(code)
+			if code == "" || code == "none" {
+				continue
+			}
+			url := fmt.Sprintf("https://www.ipdeny.com/ipblocks/data/countries/%s.zone", strings.ToLower(code))
+			dest := fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToLower(code))
+			fmt.Printf("Downloading GeoIP ALLOW [%s]... ", code)
+			if err := SecureDownloader(ctx, url, dest); err != nil {
+				fmt.Printf("FAILED (%v)\n", err)
+			} else {
+				fmt.Println("OK")
+			}
+		}
+	}
+
+	// Download ASN ALLOW lists (Zero-Trust Mode)
+	if asnAllowed != "" {
+		asns := strings.Split(asnAllowed, " ")
+		for _, asn := range asns {
+			asn = strings.TrimSpace(asn)
+			if asn == "" || asn == "none" || asn == "auto" {
+				continue
+			}
+			if !strings.HasPrefix(asn, "AS") {
+				asn = "AS" + asn
+			}
+			dest := fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToUpper(asn))
+			fmt.Printf("Downloading ASN ALLOW [%s]... ", asn)
 			if err := FetchASNWhois(asn, dest); err != nil {
 				fmt.Printf("FAILED (%v)\n", err)
 			} else {

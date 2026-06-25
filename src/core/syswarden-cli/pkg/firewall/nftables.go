@@ -77,6 +77,12 @@ func ApplyNftables() error {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn limit rate 2/second burst 5 packets log prefix \"[SysWarden-ASN] \"\n")
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn drop\n")
 	}
+
+	// ZERO-TRUST MODE: Drop everything that is not in the unified whitelist
+	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_whitelist limit rate 2/second burst 5 packets log prefix \"[SysWarden-ZERO-TRUST] \"\n")
+		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_whitelist drop\n")
+	}
 	_, _ = nftRules.WriteString("\t}\n}\n\n")
 
 	// 3.5. INET Table (L3/L4) for Docker & Internal Routing Protection
@@ -156,6 +162,11 @@ func ApplyNftables() error {
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn counter drop\n")
 	}
+
+	// ZERO-TRUST MODE: Drop everything that is not in the unified whitelist (Forward chain for Docker)
+	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_whitelist counter drop\n")
+	}
 	_, _ = nftRules.WriteString("\t}\n}\n\n")
 
 	// 4. ARP Protection Table (L2)
@@ -191,7 +202,29 @@ func ApplyNftables() error {
 	_ = exec.Command("sysctl", "-w", "net.core.wmem_max=8388608").Run()
 	_ = exec.Command("sysctl", "-w", "net.core.rmem_max=8388608").Run()
 
-	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_whitelist.ipv4"}, "syswarden_whitelist")
+	whitelistFiles := []string{"/etc/syswarden/lists/syswarden_whitelist.ipv4"}
+	if config.GlobalConfig.GeoAllowed != "" {
+		codes := strings.Split(config.GlobalConfig.GeoAllowed, " ")
+		for _, code := range codes {
+			code = strings.TrimSpace(code)
+			if code != "" && code != "none" {
+				whitelistFiles = append(whitelistFiles, fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToLower(code)))
+			}
+		}
+	}
+	if config.GlobalConfig.ASNAllowed != "" {
+		asns := strings.Split(config.GlobalConfig.ASNAllowed, " ")
+		for _, asn := range asns {
+			asn = strings.TrimSpace(asn)
+			if asn != "" && asn != "none" && asn != "auto" {
+				if !strings.HasPrefix(asn, "AS") {
+					asn = "AS" + asn
+				}
+				whitelistFiles = append(whitelistFiles, fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToUpper(asn)))
+			}
+		}
+	}
+	populateSet(ctx, whitelistFiles, "syswarden_whitelist")
 	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_whitelist.ipv6"}, "syswarden_whitelist6")
 	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_blacklist.ipv4", "/etc/syswarden/lists/syswarden_threatintel.ipv4"}, "syswarden_blacklist")
 

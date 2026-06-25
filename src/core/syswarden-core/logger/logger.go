@@ -85,6 +85,7 @@ func (l *Logger) LogBan(ip, jail, payload string) {
 
 // LogAllowed writes a JSON telemetry event when an IP is successfully allowed (e.g. login)
 func (l *Logger) LogAllowed(ip, service, payload string) {
+	go webhook.SendAllowAlert(ip, service)
 	if l.file == nil {
 		return
 	}

@@ -91,7 +91,7 @@ func SendBanAlert(ip, jail, action string) {
 					{Name: "Node", Value: hostname, Inline: true},
 				},
 				Footer: EmbedFooter{
-					Text: "SysWarden v2.20.1 - Advanced Agentic Defense",
+					Text: "SysWarden v2.30.0 - Advanced Agentic Defense",
 				},
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 			},
@@ -118,5 +118,60 @@ func SendBanAlert(ip, jail, action string) {
 		log.Printf("[Webhook] Successfully sent ban alert for IP %s", ip)
 	} else {
 		log.Printf("[Webhook] Failed to send alert, HTTP status: %d", resp.StatusCode)
+	}
+}
+
+func SendAllowAlert(ip, service string) {
+	cfg := loadConfig()
+	if !cfg.Enabled || cfg.URL == "" {
+		return
+	}
+
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "SysWarden-Node"
+	}
+
+	payload := DiscordPayload{
+		Content: nil,
+		Embeds: []DiscordEmbed{
+			{
+				Title:       "✅ SysWarden Access Granted",
+				Description: "A legitimate connection was authorized by the firewall.",
+				Color:       3066993, // Green color
+				Fields: []EmbedField{
+					{Name: "Allowed IP", Value: ip, Inline: true},
+					{Name: "Service Target", Value: service, Inline: true},
+					{Name: "Action Taken", Value: "ALLOWED", Inline: true},
+					{Name: "Node", Value: hostname, Inline: true},
+				},
+				Footer: EmbedFooter{
+					Text: "SysWarden - Zero-Trust Telemetry",
+				},
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[Webhook] Failed to marshal payload: %v", err)
+		return
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(cfg.URL, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		log.Printf("[Webhook] Failed to send alert: %v", err)
+		return
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		log.Printf("[Webhook] Successfully sent allow alert for IP %s", ip)
+	} else {
+		log.Printf("[Webhook] Failed to send allow alert, HTTP status: %d", resp.StatusCode)
 	}
 }

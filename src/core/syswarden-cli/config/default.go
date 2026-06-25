@@ -1,7 +1,7 @@
 package config
 
 const DefaultConfig = `# ==============================================================================
-# Version=v2.20.1
+# Version=v2.30.0
 # SYSWARDEN UNATTENDED INSTALLATION CONFIGURATION
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -83,15 +83,21 @@ SYSWARDEN_CUSTOM_HASH=""
 # --- Geo-Blocking ---
 # y = Enable, n = Disable
 SYSWARDEN_ENABLE_GEO="y"
-# Space-separated country codes (e.g., "ru cn kp ir")
+# Space-separated country codes to DROP (e.g., "ru cn kp ir")
 SYSWARDEN_GEO_CODES="ru cn kp ir br vn in by ng bd pe mx ua my ph lt id af al bd by bo cl hr ec hk il kz lb my md pk ph qa sa sd tm uz zm zw ye ao ar am bz bj ba bw bg bi cm cg cy dj do eg ee fi ge gh gi hn iq ie jp ke kr lv ly me nc nz no ps pa pt pr sc ug tz tj"
+# ZERO-TRUST MODE: Space-separated country codes to ALLOW. If defined, ALL OTHER COUNTRIES WILL BE DROPPED.
+SYSWARDEN_GEO_ALLOWED=""
+
 
 # --- ASN Blocking ---
 # Enable the ASN blocking module
 SYSWARDEN_ENABLE_ASN="y"
 
-# Master List (VPNs, Proxies, Linode, Tor Exit Nodes/Bulletproof Hosters)
+# Master List (VPNs, Proxies, Linode, Tor Exit Nodes/Bulletproof Hosters) to DROP
 SYSWARDEN_ASN_LIST="AS30823 AS210644 AS200593 AS202425 AS215540 AS9009 AS201069 AS20473 AS60068 AS51396 AS212238 AS209334 AS198953 AS201814 AS16276 AS62282 AS14061 AS202662 AS24940 AS398324 AS31173 AS23969 AS11878 AS32097 AS43948 AS62240 AS16265 AS3223 AS53667 AS200651 AS58224 AS57821 AS199524 AS51852 AS197540 AS209334 AS329415 AS204106 AS57371 AS47139"
+
+# ZERO-TRUST MODE: Space-separated ASN codes to ALLOW. If defined, ALL OTHER ASNs WILL BE DROPPED.
+SYSWARDEN_ASN_ALLOWED=""
 
 # Include Spamhaus ASN-DROP list for known cybercriminal infrastructures
 SYSWARDEN_USE_SPAMHAUS="n"

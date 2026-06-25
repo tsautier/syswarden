@@ -72,10 +72,14 @@ func ParseConfig(filepath string) error {
 			GlobalConfig.EnableGeo = parseBool(val)
 		case "SYSWARDEN_GEO_CODES":
 			GlobalConfig.GeoCodes = val
+		case "SYSWARDEN_GEO_ALLOWED":
+			GlobalConfig.GeoAllowed = val
 		case "SYSWARDEN_ENABLE_ASN":
 			GlobalConfig.EnableASN = parseBool(val)
 		case "SYSWARDEN_ASN_LIST":
 			GlobalConfig.ASNList = val
+		case "SYSWARDEN_ASN_ALLOWED":
+			GlobalConfig.ASNAllowed = val
 		case "SYSWARDEN_USE_SPAMHAUS":
 			GlobalConfig.UseSpamhaus = parseBool(val)
 		case "SYSWARDEN_HA_ENABLED":

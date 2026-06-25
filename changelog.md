@@ -1,3 +1,10 @@
+# Release v2.30.0
+
+## ADDED
+- [Governance] Zero-Trust Strict ALLOW Mode for GeoIP and ASN. Introduces `SYSWARDEN_GEO_ALLOWED` and `SYSWARDEN_ASN_ALLOWED`. If configured, the engine operates in a default-deny state, blocking all inbound traffic except for the explicitly whitelisted countries or ASNs, natively merging with the hardware `syswarden_whitelist` set for O(1) processing.
+- [SecOps] WAAP L7 Sovereignty: Even if an IP is allowed via the new Zero-Trust L3 whitelist, the WAAP engine retains absolute priority. If a whitelisted IP initiates a malicious attack (SQLi, XSS, etc.), it is immediately banned, dropped, and reported to the SIEM.
+---
+
 # Release v2.20.1
 
 ## ADDED
