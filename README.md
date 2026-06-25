@@ -44,7 +44,7 @@ It acts as a ruthless first line of defense. By fusing dynamic firewall orchestr
 At its core, SysWarden is a formidable HIPS. Unlike a traditional IDS (Intrusion Detection System) that merely alerts, SysWarden actively prevents attacks across multiple concrete OSI layers:
 * **Layer 2 (Data Link)**: Native MAC address blacklisting via the `netdev` family and ARP Request Rate-Limiting to instantly kill ARP Flooding/Spoofing attacks without breaking VRRP HA setups.
 * **Layer 3 & 4 (Network & Transport)**: Stateful IP, CIDR, ASN, and GeoIP filtering via the `inet` family with explicit TCP Flag anomaly detection (e.g. killing invalid SYN/FIN/RST combinations).
-* **Layer 7 (Application)**: HTTP 401/403/404 Brute-Force and WAF (Web Application Firewall) payload inspection via the native Go `BruteforceEngine` tailing proxy access logs in real-time.
+* **Layer 7 (Application)**: Advanced WAAP (Web Application Firewall) inspecting payloads via Zero-Overhead Substring Matching for zero-day exploits (SQLi, XSS, LFI, RCE) and HTTP 401/403/404 Brute-Force tracking via the native Go `WAAPEngine`.
 
 **2. A CWPP (Cloud Workload Protection Platform)**
 By natively integrating Docker protection (Layer 3 via the `docker_protect` chain and Layer 7 via the Aho-Corasick WAF), SysWarden secures modern workloads. Whether the server hosts a Traefik cluster, databases, or containerized APIs, SysWarden wraps the containers in a shield without ever breaking their internal routing. This perfectly mirrors the behavior of enterprise agents like CrowdStrike or Palo Alto Prisma Cloud on Linux servers.
@@ -75,7 +75,7 @@ SysWarden doesn't just block. It manages its own Threat Intelligence (ingesting 
 **Application Security & Active Response (Layer 7)**
 * Protects 56+ vital services (Docker, Nginx, Databases) using the ultra-fast `syswarden-core` WAF daemon.
 * **Multi-Tenant Docker WAF Bridge:** Transparently streams access logs from Traefik and isolated ModSecurity containers directly into the native Go engine using an asynchronous `rsyslog` (`imfile`/`omuxsock`) bridge.
-* **Native L7 Brute-Force Analytics:** Replaces Fail2ban entirely. Asynchronously parses raw access logs (Traefik, Nginx, Apache) in real-time, enforcing native Nftables bans on abusive HTTP 401/403/404 attempts using memory-safe sliding-window tracking.
+* **Native WAAP (L7) Engine:** Replaces Fail2ban entirely. Asynchronously parses raw access logs (Traefik, Nginx, Apache) in real-time. Detects advanced signatures (SQLi, XSS, LFI, RCE, Scanners) via Zero-Overhead Substring Matching for immediate blocking, and enforces native Nftables bans on abusive HTTP 401/403/404 attempts using memory-safe sliding-window tracking.
 * Native SIEM integration (`syswarden-cli` injects directly to `rsyslog` over TLS/UDP).
 * Sends critical bans securely to Discord/Teams webhooks natively, protected by `context.WithTimeout` against SSRF and deadlocks.
 

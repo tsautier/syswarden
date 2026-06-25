@@ -26,11 +26,11 @@ func SetupWireguard() error {
 
 	_ = os.MkdirAll("/etc/wireguard/clients", 0700)
 	_ = os.Chmod("/etc/wireguard", 0700)
-	
+
 	// Create sysctl configuration for IP forwarding
 	_ = os.MkdirAll("/etc/sysctl.d", 0755)
 	_ = os.WriteFile("/etc/sysctl.d/99-syswarden-wireguard.conf", []byte("net.ipv4.ip_forward = 1\n"), 0644)
- _ = exec.Command("sysctl", "-p", "/etc/sysctl.d/99-syswarden-wireguard.conf").Run()
+	_ = exec.Command("sysctl", "-p", "/etc/sysctl.d/99-syswarden-wireguard.conf").Run()
 
 	// Keys
 	fmt.Println(" -> Generating cryptographic keys")
@@ -119,19 +119,19 @@ PersistentKeepalive = 25
 
 	// Start service
 	fmt.Println(" -> Starting WireGuard Interface")
- _ = exec.Command("systemctl", "daemon-reload").Run()
- _ = exec.Command("systemctl", "enable", "--now", "wg-quick@wg0").Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "enable", "--now", "wg-quick@wg0").Run()
 
 	fmt.Println("\n=======================================================")
 	fmt.Println("             WIREGUARD CLIENT CONFIGURATION            ")
 	fmt.Println("=======================================================")
 	fmt.Println("Scan the QR Code below with your WireGuard mobile app:")
-	
+
 	qrCmd := exec.Command("qrencode", "-t", "ansiutf8")
 	qrCmd.Stdin = strings.NewReader(clientConf)
 	qrCmd.Stdout = os.Stdout
 	_ = qrCmd.Run()
-	
+
 	fmt.Println("=======================================================")
 	fmt.Println("Client config saved at: " + clientConfPath)
 

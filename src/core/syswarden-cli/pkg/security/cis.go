@@ -61,7 +61,7 @@ install udf /bin/true
 	if err := os.WriteFile("/etc/modprobe.d/syswarden-cis-fs.conf", []byte(content), 0644); err != nil {
 		return err
 	}
-	
+
 	fsList := []string{"cramfs", "freevxfs", "jffs2", "hfs", "hfsplus", "squashfs", "udf"}
 	for _, fs := range fsList {
 		_ = exec.Command("rmmod", fs).Run()
@@ -80,7 +80,7 @@ install tipc /bin/true
 	if err := os.WriteFile("/etc/modprobe.d/syswarden-cis-net.conf", []byte(content), 0644); err != nil {
 		return err
 	}
-	
+
 	protoList := []string{"dccp", "sctp", "rds", "tipc"}
 	for _, proto := range protoList {
 		_ = exec.Command("rmmod", proto).Run()
@@ -120,12 +120,12 @@ net.ipv4.tcp_syncookies = 1
 func restrictCoreDumps() error {
 	fmt.Println(" -> Enforcing hard limits on core dumps (CIS 1.5.1)")
 	_ = os.MkdirAll("/etc/security/limits.d", 0755)
-	
+
 	limitsContent := "# --- SysWarden: CIS Level 2 Limits ---\n* hard core 0\n"
 	if err := os.WriteFile("/etc/security/limits.d/99-syswarden-cis.conf", []byte(limitsContent), 0644); err != nil {
 		return err
 	}
-	
+
 	// systemd override
 	if _, err := os.Stat("/etc/systemd/coredump.conf"); err == nil {
 		_ = exec.Command("sed", "-i", "s/.*Storage=.*/Storage=none/", "/etc/systemd/coredump.conf").Run()
@@ -146,11 +146,11 @@ func applySSHHardening() error {
 	if err != nil {
 		return err
 	}
-	
+
 	lines := strings.Split(string(content), "\n")
 	configMap := map[string]string{
-		"X11Forwarding": "no",
-		"MaxAuthTries": "4",
+		"X11Forwarding":       "no",
+		"MaxAuthTries":        "4",
 		"ClientAliveInterval": "300",
 		"ClientAliveCountMax": "3",
 	}

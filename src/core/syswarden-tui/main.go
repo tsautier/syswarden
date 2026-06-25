@@ -13,10 +13,11 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"golang.org/x/term"
 )
 
 const DataFile = "/var/lib/syswarden/ui/data.json"
-const SysWardenVersion = "v2.10.1"
+const SysWardenVersion = "v2.20.0"
 
 // --- DATA MODELS ---
 type Service struct {
@@ -83,10 +84,10 @@ type Attacker struct {
 }
 
 type WAF struct {
-	TotalBanned      int        `json:"total_banned"`
-	ActiveSignatures int        `json:"active_signatures"`
-	SignaturesData   []JailData `json:"signatures_data"`
-	BannedIPs        []BannedIP `json:"banned_ips"`
+	TotalBanned      int            `json:"total_banned"`
+	ActiveSignatures int            `json:"active_signatures"`
+	SignaturesData   []JailData     `json:"signatures_data"`
+	BannedIPs        []BannedIP     `json:"banned_ips"`
 	TopAttackers     []Attacker     `json:"top_attackers"`
 	RiskRadar        []int          `json:"risk_radar"`
 	AllowedEvents    []AllowedEvent `json:"allowed_events"`
@@ -108,21 +109,26 @@ type DashboardData struct {
 }
 
 var (
-	app           *tview.Application
-	data          DashboardData
-	mu            sync.Mutex
-	headerText    *tview.TextView
-	l3Text        *tview.TextView
-	vectorsText   *tview.TextView
-	trustedText   *tview.TextView
-	jailsTable    *tview.Table
+	app            *tview.Application
+	data           DashboardData
+	mu             sync.Mutex
+	headerText     *tview.TextView
+	l3Text         *tview.TextView
+	vectorsText    *tview.TextView
+	trustedText    *tview.TextView
+	jailsTable     *tview.Table
 	attackersTable *tview.Table
-	bannedTable   *tview.Table
-	
-	fetchError    error
+	bannedTable    *tview.Table
+
+	fetchError error
 )
 
 func main() {
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		printDashboardText()
+		return
+	}
+
 	app = tview.NewApplication()
 
 	// 1. Header (System Info)
@@ -172,7 +178,7 @@ func main() {
 	bannedTable.SetBorder(true).
 		SetTitle(" [white]❖ WAF ALLOWED/BANNED IP REGISTRY (L4/L7)[-] ").
 		SetBorderColor(tcell.ColorBlue)
-	
+
 	// Ensure safe exiting via Q/Ctrl+C
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -259,12 +265,16 @@ func buildProgressBar(used, total int, label string, color string) string {
 		return fmt.Sprintf("[gray][%s 0%%][-]", label)
 	}
 	pct := float64(used) / float64(total)
-	if pct > 1.0 { pct = 1.0 }
-	
+	if pct > 1.0 {
+		pct = 1.0
+	}
+
 	barsCount := 20
 	filled := int(pct * float64(barsCount))
-	if filled > barsCount { filled = barsCount }
-	
+	if filled > barsCount {
+		filled = barsCount
+	}
+
 	barStr := strings.Repeat("█", filled) + strings.Repeat("░", barsCount-filled)
 	c := color
 	if pct > 0.85 {
@@ -291,8 +301,12 @@ func refreshUI() {
 	}
 
 	ghStars, ghRelease := d.GithubStars, d.GithubRelease
-	if ghStars == "" { ghStars = "--" }
-	if ghRelease == "" { ghRelease = "--" }
+	if ghStars == "" {
+		ghStars = "--"
+	}
+	if ghRelease == "" {
+		ghRelease = "--"
+	}
 
 	load1Str := "0.00"
 	if parts := strings.Split(d.System.LoadAverage, ","); len(parts) > 0 {
@@ -300,7 +314,11 @@ func refreshUI() {
 	}
 	loadVal, _ := strconv.ParseFloat(load1Str, 64)
 	cLoad := "green"
-	if loadVal >= 0.75 { cLoad = "red" } else if loadVal >= 0.50 { cLoad = "yellow" }
+	if loadVal >= 0.75 {
+		cLoad = "red"
+	} else if loadVal >= 0.50 {
+		cLoad = "yellow"
+	}
 
 	var servicesStr []string
 	for _, s := range d.System.Services {
@@ -321,7 +339,9 @@ func refreshUI() {
 		portsStr = append(portsStr, fmt.Sprintf("%s:%s", p.Protocol, p.Port))
 	}
 	pStr := strings.Join(portsStr, " │ ")
-	if len(portsStr) == 0 { pStr = "No external ports exposed. Locked down." }
+	if len(portsStr) == 0 {
+		pStr = "No external ports exposed. Locked down."
+	}
 
 	ramBar := buildProgressBar(d.System.RamUsedMb, d.System.RamTotalMb, "MEM", "green")
 	diskBar := buildProgressBar(d.System.DiskUsedMb, d.System.DiskTotalMb, "DSK", "cyan")
@@ -333,10 +353,10 @@ func refreshUI() {
 
 	headerLines := fmt.Sprintf(
 		" [gray]Noise:[-] [green]%s[-] │ [gray]Signal:[-] [red]%s[-] │ [gray]Stars:[-] [yellow]%s[-] │ [gray]Release:[-] [cyan]%s[-] │ [gray]Node:[-] [white]%s[-]%s\n\n"+
-		" [gray]Cores:[-] [white]%s[-] │ [gray]Arch:[-] [white]%s[-] │ [gray]OS:[-] [white]%s[-] │ [gray]CPU:[-] [white]%s[-]\n"+
-		" [gray]Uptime:[-] [cyan]%s[-] │ [gray]Load:[-] [%s]%s[-] │ %s │ %s\n"+
-		" [gray]Services:[-] %s\n"+
-		" [gray]Ports:[-] [blue]%s[-]",
+			" [gray]Cores:[-] [white]%s[-] │ [gray]Arch:[-] [white]%s[-] │ [gray]OS:[-] [white]%s[-] │ [gray]CPU:[-] [white]%s[-]\n"+
+			" [gray]Uptime:[-] [cyan]%s[-] │ [gray]Load:[-] [%s]%s[-] │ %s │ %s\n"+
+			" [gray]Services:[-] %s\n"+
+			" [gray]Ports:[-] [blue]%s[-]",
 		noisePct, signalPct, ghStars, ghRelease, d.System.Hostname, errState,
 		d.System.Cores, d.System.Arch, d.System.Os, d.System.CpuModel,
 		d.System.Uptime, cLoad, d.System.LoadAverage, ramBar, diskBar,
@@ -426,10 +446,17 @@ func refreshUI() {
 
 			var cVec tcell.Color
 			j := strings.ToLower(b.Jail)
-			if strings.Contains(j, "sqli") || strings.Contains(j, "xss") || strings.Contains(j, "lfi") || strings.Contains(j, "revshell") || strings.Contains(j, "webshell") || strings.Contains(j, "ssti") || strings.Contains(j, "ssrf") || strings.Contains(j, "jndi") || strings.Contains(j, "modsec") { cVec = tcell.ColorRed } else
-			if strings.Contains(j, "ssh") || strings.Contains(j, "auth") || strings.Contains(j, "privesc") || strings.Contains(j, "prestashop") { cVec = tcell.ColorYellow } else
-			if strings.Contains(j, "scan") || strings.Contains(j, "bot") || strings.Contains(j, "mapper") || strings.Contains(j, "enum") || strings.Contains(j, "hunter") || strings.Contains(j, "tls") || strings.Contains(j, "honeypot") { cVec = tcell.ColorBlue } else
-			if strings.Contains(j, "flood") || strings.Contains(j, "slowloris") || strings.Contains(j, "dos") { cVec = tcell.ColorDarkGray } else { cVec = tcell.ColorYellow }
+			if strings.Contains(j, "sqli") || strings.Contains(j, "xss") || strings.Contains(j, "lfi") || strings.Contains(j, "rce") || strings.Contains(j, "revshell") || strings.Contains(j, "webshell") || strings.Contains(j, "ssti") || strings.Contains(j, "ssrf") || strings.Contains(j, "jndi") || strings.Contains(j, "modsec") {
+				cVec = tcell.ColorRed
+			} else if strings.Contains(j, "ssh") || strings.Contains(j, "auth") || strings.Contains(j, "privesc") || strings.Contains(j, "prestashop") {
+				cVec = tcell.ColorYellow
+			} else if strings.Contains(j, "scan") || strings.Contains(j, "bot") || strings.Contains(j, "mapper") || strings.Contains(j, "enum") || strings.Contains(j, "hunter") || strings.Contains(j, "tls") || strings.Contains(j, "honeypot") {
+				cVec = tcell.ColorBlue
+			} else if strings.Contains(j, "flood") || strings.Contains(j, "slowloris") || strings.Contains(j, "dos") {
+				cVec = tcell.ColorDarkGray
+			} else {
+				cVec = tcell.ColorYellow
+			}
 
 			bannedTable.SetCell(row, 0, tview.NewTableCell(b.IP).SetTextColor(tcell.ColorWhite))
 			bannedTable.SetCell(row, 1, tview.NewTableCell(b.Jail).SetTextColor(cVec))
@@ -439,4 +466,49 @@ func refreshUI() {
 		}
 	}
 	bannedTable.Select(r, c)
+}
+
+func printDashboardText() {
+	bytes, err := os.ReadFile(DataFile)
+	if err != nil {
+		fmt.Printf("=== SYSWARDEN ENTERPRISE DASHBOARD (SNAPSHOT) ===\n[ERROR] Telemetry data unreadable: %v\n", err)
+		return
+	}
+
+	var d DashboardData
+	if err := json.Unmarshal(bytes, &d); err != nil {
+		fmt.Printf("=== SYSWARDEN ENTERPRISE DASHBOARD (SNAPSHOT) ===\n[ERROR] Invalid telemetry JSON: %v\n", err)
+		return
+	}
+
+	load1Str := "0.00"
+	if parts := strings.Split(d.System.LoadAverage, ","); len(parts) > 0 {
+		load1Str = strings.TrimSpace(parts[0])
+	}
+
+	fmt.Println("=== SYSWARDEN ENTERPRISE DASHBOARD (SNAPSHOT) ===")
+	fmt.Printf("[SYSTEM] Node: %s | Uptime: %s | Load: %s\n", d.System.Hostname, d.System.Uptime, load1Str)
+	fmt.Printf("[L3 FIREWALL] Global Blocks: %d (GeoIP: %d | ASN: %d)\n", d.Layer3.GlobalBlocked, d.Layer3.GeoIPBlocked, d.Layer3.ASNBlocked)
+	fmt.Printf("[WAAP L7] Active Bans: %d\n", d.WAF.TotalBanned)
+
+	// Format Jails
+	var jails []string
+	for i := 0; i < len(d.WAF.SignaturesData); i++ {
+		jails = append(jails, fmt.Sprintf("%s (%d)", d.WAF.SignaturesData[i].Name, d.WAF.SignaturesData[i].Count))
+	}
+	if len(jails) > 0 {
+		fmt.Printf("[WAAP JAILS] %s\n", strings.Join(jails, ", "))
+	} else {
+		fmt.Println("[WAAP JAILS] None")
+	}
+
+	fmt.Println("[TOP ATTACKERS]")
+	if len(d.WAF.TopAttackers) == 0 {
+		fmt.Println(" - None")
+	} else {
+		for i := 0; i < len(d.WAF.TopAttackers); i++ {
+			a := d.WAF.TopAttackers[i]
+			fmt.Printf(" - %s (%s / %s / %s)\n", a.IP, a.Country, a.ASN, a.ISP)
+		}
+	}
 }

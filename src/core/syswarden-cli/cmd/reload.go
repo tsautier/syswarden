@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"os/exec"
 	"github.com/spf13/cobra"
+	"os/exec"
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/integration"
 	"syswarden-cli/pkg/network"
@@ -44,7 +44,7 @@ var reloadCmd = &cobra.Command{
 		// Restart Daemons gracefully
 		if !noRestart {
 			fmt.Println("[*] Restarting background engines...")
-   _ = exec.Command("systemctl", "restart", "syswarden-core.service").Run()
+			_ = exec.Command("systemctl", "restart", "syswarden-core.service").Run()
 		}
 
 		fmt.Println("[SUCCESS] SysWarden configuration reloaded natively.")

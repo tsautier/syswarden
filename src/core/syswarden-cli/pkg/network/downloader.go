@@ -83,7 +83,7 @@ func CleanCIDRList(filepath string) error {
 		if !strings.Contains(line, "/") {
 			line = line + "/32"
 		}
-		
+
 		ip, _, err := net.ParseCIDR(line)
 		if err == nil {
 			// Strictly enforce IPv4 to prevent Nftables chunk crash
@@ -217,7 +217,7 @@ func SetupFeedsCron() error {
 
 	// Generate a random minute (1-59) to prevent "Thundering Herd" API collisions
 	randomMinute := rand.Intn(59) + 1
-	
+
 	cronJob := fmt.Sprintf("%d * * * * /opt/syswarden/bin/syswarden-cli update-feeds >/dev/null 2>&1", randomMinute)
 
 	// Add to crontab natively
@@ -230,7 +230,7 @@ func SetupFeedsCron() error {
 		}
 	}
 	newLines = append(newLines, cronJob)
-	
+
 	newCron := strings.Join(newLines, "\n") + "\n"
 	cmd := exec.Command("crontab", "-")
 	cmd.Stdin = strings.NewReader(newCron)

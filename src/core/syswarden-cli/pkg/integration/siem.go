@@ -47,6 +47,15 @@ func SetupSIEM() error {
 		}
 	}
 
+	// Add native JSON WAAP telemetry forwarding via imfile
+	rsyslogConf += "\n# SysWarden WAAP Native JSON Telemetry\n"
+	rsyslogConf += "module(load=\"imfile\" PollingInterval=\"10\")\n"
+	rsyslogConf += "input(type=\"imfile\"\n"
+	rsyslogConf += "      File=\"/var/log/syswarden/waf.json\"\n"
+	rsyslogConf += "      Tag=\"syswarden-waf-json\"\n"
+	rsyslogConf += "      Severity=\"alert\"\n"
+	rsyslogConf += "      Facility=\"local7\")\n"
+
 	if err := os.WriteFile(confPath, []byte(rsyslogConf), 0640); err != nil {
 		return fmt.Errorf("failed to write rsyslog SIEM config: %w", err)
 	}

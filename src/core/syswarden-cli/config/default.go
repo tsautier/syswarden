@@ -1,7 +1,7 @@
 package config
 
 const DefaultConfig = `# ==============================================================================
-# Version=v2.10.1
+# Version=v2.20.0
 # SYSWARDEN UNATTENDED INSTALLATION CONFIGURATION
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,9 +52,10 @@ SYSWARDEN_WG_SUBNET="10.66.66.0/24"
 # Leave empty for standard single-node installations
 SYSWARDEN_MODSEC_LOGS="/var/log/modsec/*.log"
 
-# --- L7 Brute-Force & Log Analytics (Fail2ban Native Replacement) ---
+# --- WAAP (L7) Engine & Advanced Signatures ---
 # Space-separated list of application access logs to tail (e.g., Traefik, Nginx, Apache)
-# SysWarden will natively parse these files in real-time to detect repeated HTTP 401/403/404 errors.
+# SysWarden will natively parse these files in real-time to detect advanced exploits (SQLi, XSS, RCE, LFI)
+# and automatically track HTTP 401/403/404 bruteforce thresholds.
 # Supports wildcards. Leave empty to disable.
 SYSWARDEN_BRUTEFORCE_LOGS=""
 # Number of authentication failures/forbidden errors allowed before an IP is banned at L3

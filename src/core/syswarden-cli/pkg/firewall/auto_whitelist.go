@@ -12,9 +12,9 @@ import (
 func AutoWhitelistAdminAndInfra() error {
 	fmt.Println("[INFO] Scanning and auto-whitelisting critical infrastructure & Admin IP...")
 
- _ = os.MkdirAll("/etc/syswarden/lists", 0755)
+	_ = os.MkdirAll("/etc/syswarden/lists", 0755)
 	whitelistFile := "/etc/syswarden/lists/syswarden_whitelist.ipv4"
-	
+
 	// Read existing
 	content, _ := os.ReadFile(whitelistFile)
 	existing := string(content)

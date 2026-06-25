@@ -592,6 +592,20 @@ func getGithubRelease() string {
 var cachedWAF WAF
 var lastWAFFetch time.Time
 
+func getMitreTag(jail string) string {
+	j := strings.ToLower(jail)
+	if strings.Contains(j, "bruteforce") || strings.Contains(j, "ssh") || strings.Contains(j, "auth") || strings.Contains(j, "login") {
+		return "T1110: Brute Force"
+	} else if strings.Contains(j, "scan") || strings.Contains(j, "recon") {
+		return "T1595: Active Scanning"
+	} else if strings.Contains(j, "sqli") || strings.Contains(j, "xss") || strings.Contains(j, "lfi") || strings.Contains(j, "rce") || strings.Contains(j, "exploit") || strings.Contains(j, "waap") {
+		return "T1190: Exploit Public-Facing Application"
+	} else if strings.Contains(j, "flood") || strings.Contains(j, "dos") {
+		return "T1498: Network Denial of Service"
+	}
+	return "T1190: Exploit Public-Facing Application"
+}
+
 func getWAFStats() WAF {
 	if time.Since(lastWAFFetch) < 15*time.Second && cachedWAF.TotalBanned > 0 {
 		return cachedWAF
@@ -644,7 +658,7 @@ func getWAFStats() WAF {
 					IP:      event.IP,
 					Jail:    event.Jail,
 					Payload: event.Payload,
-					Mitre:   "T1190", // Default exploit mitre
+					Mitre:   getMitreTag(event.Jail),
 				})
 			}
 		}
@@ -676,7 +690,7 @@ func getWAFStats() WAF {
 		waf.SignaturesData = append(waf.SignaturesData, JailData{
 			Name:  jail,
 			Count: count,
-			Mitre: "T1190",
+			Mitre: getMitreTag(jail),
 		})
 	}
 

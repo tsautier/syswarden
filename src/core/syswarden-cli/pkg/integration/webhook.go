@@ -49,12 +49,12 @@ func SetupWebhooks() error {
 
 	if discordURL := config.GlobalConfig.WebhookURLDiscord; discordURL != "" {
 		fmt.Println("[INFO] Verifying Discord Webhook connectivity...")
-		
+
 		hostname, _ := os.Hostname()
 		if hostname == "" {
 			hostname = "SysWarden-Node"
 		}
-		
+
 		payload := DiscordPayload{
 			Content: nil,
 			Embeds: []DiscordEmbed{
@@ -63,26 +63,26 @@ func SetupWebhooks() error {
 					Description: "Native Go Webhook integration established.",
 					Color:       3066993, // Green
 					Fields: []EmbedField{
-						{Name: "Version", Value: "v2.10.1", Inline: true},
+						{Name: "Version", Value: "v2.20.0", Inline: true},
 						{Name: "Node", Value: hostname, Inline: true},
 						{Name: "Status", Value: "Active", Inline: true},
 					},
-					Footer: EmbedFooter{Text: "SysWarden Advanced Agentic Defense"},
+					Footer:    EmbedFooter{Text: "SysWarden Advanced Agentic Defense"},
 					Timestamp: time.Now().UTC().Format(time.RFC3339),
 				},
 			},
 		}
 		data, _ := json.Marshal(payload)
-		
+
 		req, _ := http.NewRequestWithContext(ctx, "POST", discordURL, bytes.NewBuffer(data))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to reach Discord webhook: %w", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		
+
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			fmt.Println("[+] Discord Webhook is active.")
 		} else {
@@ -119,7 +119,7 @@ func SendBanAlert(ip string) {
 					{Name: "Action", Value: "Manual Kernel Drop", Inline: true},
 					{Name: "Node", Value: hostname, Inline: true},
 				},
-				Footer: EmbedFooter{Text: "SysWarden Advanced Agentic Defense"},
+				Footer:    EmbedFooter{Text: "SysWarden Advanced Agentic Defense"},
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 			},
 		},

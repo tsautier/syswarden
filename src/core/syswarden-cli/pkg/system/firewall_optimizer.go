@@ -23,7 +23,7 @@ func OptimizeHostFirewall() error {
 	case "nftables":
 		fmt.Println("[INFO] Auto-Deploy: Bypassing Firewalld for pure Nftables OS Services...")
 		_ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
-		
+
 		if _, err := exec.LookPath("nft"); err != nil {
 			if _, err := exec.LookPath("dnf"); err == nil {
 				_ = exec.Command("dnf", "install", "-y", "nftables").Run()
@@ -36,7 +36,7 @@ func OptimizeHostFirewall() error {
 	case "iptables":
 		fmt.Println("[INFO] Auto-Deploy: Bypassing Firewalld for classic Iptables persistence...")
 		_ = exec.Command("systemctl", "disable", "--now", "firewalld").Run()
-		
+
 		if _, err := exec.LookPath("dnf"); err == nil {
 			_ = exec.Command("dnf", "install", "-y", "iptables-services").Run()
 		} else if _, err := exec.LookPath("yum"); err == nil {

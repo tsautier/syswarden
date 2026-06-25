@@ -49,7 +49,7 @@ func checkFilePerms(filepath string, validPerms []string, expectedOwner string) 
 		fail(fmt.Sprintf("Cannot stat %s", filepath))
 		return
 	}
-	
+
 	modeStr := fmt.Sprintf("%04o", info.Mode().Perm())
 	isValid := false
 	for _, perm := range validPerms {
@@ -83,7 +83,7 @@ func RunAudit() {
 
 	// Phase 2
 	logHeader("Phase 2: Log Routing & Anti-Injection Verification")
-	
+
 	if _, err := os.Stat("/var/log/auth.log"); err == nil {
 		checkFilePerms("/var/log/auth.log", []string{"640", "600"}, "root")
 	} else if _, err := os.Stat("/var/log/secure"); err == nil {
@@ -203,6 +203,6 @@ func RunAudit() {
 			warn("Firewall Persistence UNKNOWN: Nftables base file /etc/syswarden/syswarden.nft is missing.")
 		}
 	}
-	
+
 	fmt.Printf("\n\033[1;32m[✔] SysWarden Audit Sequence Completed.\033[0m\n")
 }

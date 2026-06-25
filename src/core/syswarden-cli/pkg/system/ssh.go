@@ -33,7 +33,7 @@ func ConfigureSSH() error {
 		// Simulate file edit
 		_ = exec.Command("sed", "-i", "s/^#AllowTcpForwarding.*/AllowTcpForwarding no/", sshConf).Run()
 		_ = exec.Command("sed", "-i", "s/^[[:space:]]*AllowTcpForwarding[[:space:]]*yes/AllowTcpForwarding no/", sshConf).Run()
-		
+
 		_ = exec.Command("systemctl", "restart", "ssh").Run()
 	}
 

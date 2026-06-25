@@ -24,7 +24,7 @@ var whitelistCmd = &cobra.Command{
 				ips = append(ips, arg)
 			}
 		}
-		
+
 		for _, ip := range ips {
 			if err := firewall.AddToWhitelist(ip, port); err != nil {
 				fmt.Printf("[ERROR] %s: %v\n", ip, err)

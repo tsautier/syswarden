@@ -57,9 +57,9 @@ func main() {
 	var wg sync.WaitGroup
 	telemetry.StartWorker(ctx, &wg, telemetryLogger.LogAllowed, telemetryLogger.LogBan)
 
-	// Start L7 BruteForce Analytics Engine (Fail2ban Native Replacement)
-	bruteforceEngine := network.NewBruteforceEngine(fwManager, telemetryLogger)
-	bruteforceEngine.Start()
+	// Start L7 WAAP Analytics Engine (Heuristic & Bruteforce)
+	waapEngine := network.NewWAAPEngine(fwManager, telemetryLogger)
+	waapEngine.Start()
 
 	// Handle Graceful Shutdown
 	sigChan := make(chan os.Signal, 1)

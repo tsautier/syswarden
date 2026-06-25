@@ -18,7 +18,7 @@ const (
 
 // ensureDir ensures the lists directory exists
 func ensureDir() {
- _ = os.MkdirAll("/etc/syswarden/lists", 0750)
+	_ = os.MkdirAll("/etc/syswarden/lists", 0750)
 }
 
 // IsValidIP checks if a string is a valid IPv4 or IPv6 or a valid CIDR subnet
@@ -28,7 +28,7 @@ func IsValidIP(ip string) (bool, bool) {
 	if parsedIP != nil {
 		return true, parsedIP.To4() != nil
 	}
-	
+
 	// 2. Check if it's a CIDR block (ex: 10.0.0.0/24)
 	parsedIP, _, err := net.ParseCIDR(ip)
 	if err == nil && parsedIP != nil {
@@ -110,7 +110,7 @@ func RemoveFromWhitelist(ip string) error {
 	if isIPv4 {
 		file = WhitelistV4
 	}
-	// Note: We might need to iterate and remove even if it has a port. 
+	// Note: We might need to iterate and remove even if it has a port.
 	// For simplicity, we'll try to remove exact IP, but we should handle IP:PORT stripping.
 	content, err := os.ReadFile(file)
 	if err == nil {
@@ -323,7 +323,7 @@ func CheckIP(ip string) {
 // ListIPs prints out all custom IP lists
 func ListIPs() {
 	fmt.Printf("\n=== SysWarden Custom IP Registry (%s) ===\n", system.Version)
-	
+
 	printFile := func(filepath, title string) {
 		fmt.Printf("\n[ %s ]\n", title)
 		content, err := os.ReadFile(filepath)

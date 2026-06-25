@@ -41,7 +41,7 @@ func SetupHACluster() error {
 	// In a full Go architecture, we register a cron job that calls the Go CLI to perform the sync natively
 	// instead of relying on a bash script containing python sockets.
 	cronJob := "*/30 * * * * /opt/syswarden/bin/syswarden-cli ha-sync >/dev/null 2>&1"
-	
+
 	out, _ := exec.Command("crontab", "-l").Output()
 	lines := strings.Split(string(out), "\n")
 	var newLines []string
@@ -51,7 +51,7 @@ func SetupHACluster() error {
 		}
 	}
 	newLines = append(newLines, cronJob)
-	
+
 	newCron := strings.Join(newLines, "\n") + "\n"
 	cmd := exec.Command("crontab", "-")
 	cmd.Stdin = strings.NewReader(newCron)
@@ -62,4 +62,3 @@ func SetupHACluster() error {
 	fmt.Println("[+] HA Cluster Sync ENABLED.")
 	return nil
 }
-

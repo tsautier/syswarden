@@ -19,7 +19,7 @@ func SetupSystemd() error {
 	}
 
 	servicePath := "/etc/systemd/system/syswarden-core.service"
-	
+
 	serviceContent := `[Unit]
 Description=SysWarden WAF and Core Engine
 After=network.target rsyslog.service
@@ -78,7 +78,7 @@ WantedBy=multi-user.target
 		return fmt.Errorf("failed to write syswarden-firewall.service: %w", err)
 	}
 
- _ = exec.Command("systemctl", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run()
 	fmt.Println("[INFO] Enabling SysWarden Firewall Persistence...")
 	if err := exec.Command("systemctl", "enable", "--now", "syswarden-firewall.service").Run(); err != nil {
 		fmt.Printf("[WARN] Failed to enable/start syswarden-firewall.service: %v\n", err)

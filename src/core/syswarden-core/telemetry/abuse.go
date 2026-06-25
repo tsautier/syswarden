@@ -70,6 +70,14 @@ func ReportAbuseAsync(ip string, jail string) {
 			categories = "18,22"
 		} else if strings.Contains(jailLower, "geo") || strings.Contains(jailLower, "asn") {
 			categories = "14,15"
+		} else if strings.Contains(jailLower, "l7-sqli") {
+			categories = "16,21"
+		} else if strings.Contains(jailLower, "l7-xss") || strings.Contains(jailLower, "l7-lfi") || strings.Contains(jailLower, "l7-rce") {
+			categories = "21"
+		} else if strings.Contains(jailLower, "l7-scanner") {
+			categories = "19"
+		} else if strings.Contains(jailLower, "l7-bruteforce") {
+			categories = "18,21"
 		}
 
 		url := "https://api.abuseipdb.com/api/v2/report"

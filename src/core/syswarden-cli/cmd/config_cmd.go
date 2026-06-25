@@ -39,7 +39,7 @@ var configCmd = &cobra.Command{
 		}
 
 		fmt.Printf("[*] Opening configuration with %s...\n", editor)
-		
+
 		// Launch interactive editor
 		execCmd := exec.Command(editor, configPath)
 		execCmd.Stdin = os.Stdin

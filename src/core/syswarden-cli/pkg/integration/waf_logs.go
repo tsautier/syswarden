@@ -12,7 +12,7 @@ func SetupWAFLogForwarder() error {
 	fmt.Println("[INFO] Configuring WAF Multi-Tenant Log Bridge (Rsyslog -> UDS)...")
 
 	confPath := "/etc/rsyslog.d/99-syswarden-waf-bridge.conf"
-	
+
 	// Base modules
 	rsyslogConf := `module(load="imfile")
 module(load="omuxsock")

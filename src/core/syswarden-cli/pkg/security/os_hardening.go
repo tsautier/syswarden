@@ -35,7 +35,7 @@ func lockCrontab() {
 
 func purgePrivilegedGroups() {
 	fmt.Println(" -> Purging non-root users from privileged groups")
-	
+
 	// Try to identify current admin to prevent locking ourselves out
 	currentAdmin := os.Getenv("SUDO_USER")
 	if currentAdmin == "" {
@@ -68,9 +68,9 @@ func purgePrivilegedGroups() {
 
 func lockUserProfiles() {
 	fmt.Println(" -> Locking down profiles for standard users")
-	
+
 	currentAdmin := os.Getenv("SUDO_USER")
-	
+
 	dirs, err := os.ReadDir("/home")
 	if err != nil {
 		return
@@ -82,7 +82,7 @@ func lockUserProfiles() {
 			if userName == currentAdmin {
 				continue
 			}
-			
+
 			profiles := []string{".profile", ".bashrc", ".bash_profile"}
 			for _, p := range profiles {
 				pPath := filepath.Join("/home", userName, p)

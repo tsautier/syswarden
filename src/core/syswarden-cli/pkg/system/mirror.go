@@ -15,7 +15,7 @@ var StandardMirrors = map[string]string{
 // SelectFastestMirror benchmarks mirrors and selects the fastest one
 func SelectFastestMirror() (string, error) {
 	fmt.Println("[INFO] Benchmarking mirrors...")
-	
+
 	fastestTime := time.Hour
 	fastestURL := StandardMirrors["Codeberg"] // Default fallback
 
@@ -25,11 +25,11 @@ func SelectFastestMirror() (string, error) {
 
 	for name, url := range StandardMirrors {
 		fmt.Printf("Connecting to %s... ", name)
-		
+
 		start := time.Now()
 		req, _ := http.NewRequestWithContext(context.Background(), "HEAD", url, nil)
 		resp, err := client.Do(req)
-		
+
 		if err == nil && resp.StatusCode == 200 {
 			duration := time.Since(start)
 			fmt.Printf("%d ms\n", duration.Milliseconds())

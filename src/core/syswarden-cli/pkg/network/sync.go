@@ -14,7 +14,7 @@ func getLocalBlocklist() ([]string, error) {
 	if err != nil {
 		return []string{}, nil
 	}
-	
+
 	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
 	var ips []string
 	for _, l := range lines {
@@ -51,7 +51,7 @@ func SyncHAPeer() error {
 	// 1. Get remote blocklist
 	remoteCmdArgs := append(sshOpts, "root@"+peerIP, "cat", "/etc/syswarden/lists/syswarden_blacklist.ipv4")
 	remoteOut, err := exec.Command("ssh", remoteCmdArgs...).Output()
-	
+
 	remoteIPs := make(map[string]bool)
 	if err == nil {
 		lines := strings.Split(strings.TrimSpace(string(remoteOut)), "\n")
@@ -91,9 +91,9 @@ func SyncHAPeer() error {
 		if end > len(toPush) {
 			end = len(toPush)
 		}
-		
+
 		batch := toPush[i:end]
-		
+
 		// Create a script to run on remote to append and apply dynamically without full reload
 		remoteScript := fmt.Sprintf(`
 for ip in %s; do
@@ -103,7 +103,7 @@ for ip in %s; do
 done
 nft add element inet syswarden syswarden_blacklist { %s } 2>/dev/null || true
 `, strings.Join(batch, " "), strings.Join(batch, ", "))
-		
+
 		pushArgs := append(sshOpts, "root@"+peerIP, "bash", "-c", "'"+remoteScript+"'")
 		if err := exec.Command("ssh", pushArgs...).Run(); err != nil {
 			fmt.Printf("[WARN] Failed to push batch starting at index %d: %v\n", i, err)

@@ -1,3 +1,17 @@
+# Release v2.20.0
+
+## ADDED
+- Advanced WAAP (L7) Engine: The L7 engine (`waap.go`) now performs Zero-Overhead Substring Matching for critical payload signatures, expanding defense beyond brute-force. It now natively detects and immediately bans attacks targeting SQL Injection (`l7-sqli`), Cross-Site Scripting (`l7-xss`), Local File Inclusion (`l7-lfi`), Remote Code Execution (`l7-rce`), and Malicious Scanners (`l7-scanner`), all without complex RegEx CPU overhead.
+- MITRE ATT&CK Mapping: Dynamically integrated specific MITRE ATT&CK techniques in the telemetry engine to natively reflect heuristic WAF bans in the TUI (e.g., T1190 for Exploits, T1595 for Active Scanning, T1110 for Brute Force).
+- AbuseIPDB Integration: Added dynamic mappings for the new WAAP jails (`l7-sqli`, `l7-rce`, etc.) to specific AbuseIPDB categories (16, 19, 21) for highly accurate Threat Intelligence reporting.
+- Native JSON SIEM Integration: Rsyslog integration now explicitly leverages the `imfile` module to forward the raw WAAP telemetry (`/var/log/syswarden/waf.json`) in pure JSON format to enterprise SIEMs (Elastic, Splunk, Wazuh) without requiring complex grok decoding.
+
+## FIXED
+- TTY Fallback (Non-Interactive CLI): Implemented an intelligent fallback mechanism (`term.IsTerminal`) across `syswarden alerts` and `syswarden tui`. The interface now perfectly degrades into a clean, parseable text stream instead of panicking when executed without a pseudo-terminal (e.g., Cron, SSH without `-t`, or CI/CD pipelines).
+- Webhook Asymmetry: Resolved an issue where only Kernel-level (L3) drops triggered Discord/Teams notifications. The notification payload generation is now strictly coupled with the `logger.go` core, ensuring all WAAP (L7) mitigation events are immediately broadcasted to the SOC.
+
+---
+
 # Release v2.10.1
 
 ## ADDED

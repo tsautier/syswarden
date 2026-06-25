@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"syswarden-core/telemetry"
+	"syswarden-core/webhook"
 )
 
 type Logger struct {
@@ -51,6 +52,7 @@ func (l *Logger) Error(msg string, err error) {
 // LogBan writes a JSON telemetry event when an IP is banned
 func (l *Logger) LogBan(ip, jail, payload string) {
 	telemetry.ReportAbuseAsync(ip, jail)
+	go webhook.SendBanAlert(ip, jail, "WAF Drop (L7)")
 	if l.file == nil {
 		return
 	}

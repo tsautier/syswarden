@@ -42,7 +42,7 @@ func SetupAbuseIPDB() error {
 
 	fmt.Println("[INFO] AbuseIPDB configuration validated and securely stored.")
 	// Note: The actual background reporting logic is handled natively inside syswarden-core (WAF)
-	
+
 	fmt.Println("[+] AbuseIPDB Unified Reporter enabled natively via Go WAF.")
 	return nil
 }
