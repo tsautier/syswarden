@@ -167,7 +167,7 @@ jobs:
             --description "SysWarden Host-based Security Orchestrator for Linux" \
             --url "https://github.com/${{ github.repository }}" \
             --architecture amd64 \
-            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cron" \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cron" -d "bash-completion" \
             --after-install postinst.sh \
             --before-remove prerm.sh \
             --after-remove postrm.sh \
@@ -183,7 +183,7 @@ jobs:
             --description "SysWarden Host-based Security Orchestrator for Linux" \
             --url "https://github.com/${{ github.repository }}" \
             --architecture x86_64 \
-            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cronie" \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cronie" -d "bash-completion" \
             --after-install postinst.sh \
             --before-remove prerm.sh \
             --after-remove postrm.sh \

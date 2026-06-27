@@ -102,6 +102,11 @@ export SYSWARDEN_PKG_INSTALL=1
 ln -sf /opt/syswarden/bin/syswarden-cli /usr/local/bin/syswarden
 ln -sf /opt/syswarden/bin/syswarden-tui /usr/local/bin/syswarden-tui
 
+# Generate Bash Autocompletion
+if [ -d /etc/bash_completion.d ]; then
+    /opt/syswarden/bin/syswarden-cli completion bash > /etc/bash_completion.d/syswarden || true
+fi
+
 # RPM Upgrade ($1 = 2) or DEB Upgrade ($1 = configure && $2 != "")
 if [ "$1" = "2" ] || [ "$1" = "configure" -a -n "$2" ]; then
     systemctl daemon-reload
@@ -120,6 +125,7 @@ cat << 'EOF' > postrm.sh
 if [ "$1" = "0" ] || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   rm -f /usr/local/bin/syswarden
   rm -f /usr/local/bin/syswarden-tui
+  rm -f /etc/bash_completion.d/syswarden
   rm -rf /opt/syswarden
   rm -rf /etc/syswarden
 fi
@@ -153,7 +159,7 @@ fpm -f -s dir -t deb \
     --vendor "SysWarden Security" \
     --maintainer "SysWarden Engineering" \
     --description "SysWarden Host-based Security Orchestrator for Linux" \
-    -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" \
+    -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "bash-completion" \
     --after-install postinst.sh \
     --before-remove prerm.sh \
     --after-remove postrm.sh \
@@ -166,7 +172,7 @@ fpm -f -s dir -t rpm \
     --vendor "SysWarden Security" \
     --maintainer "SysWarden Engineering" \
     --description "SysWarden Host-based Security Orchestrator for Linux" \
-    -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" \
+    -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "bash-completion" \
     --after-install postinst.sh \
     --before-remove prerm.sh \
     --after-remove postrm.sh \
