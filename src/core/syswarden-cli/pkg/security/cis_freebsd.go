@@ -121,7 +121,7 @@ net.inet.udp.checksum=1
 
 func restrictCoreDumps() error {
 	fmt.Println(" -> Enforcing hard limits on core dumps")
-	
+
 	_ = exec.Command("sysctl", "kern.coredump=0").Run()
 	_ = exec.Command("sysctl", "kern.sugid_coredump=0").Run()
 

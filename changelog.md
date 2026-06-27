@@ -1,3 +1,11 @@
+# Release v3.10.0
+
+## FIXED
+- **CWE-400 (Uncontrolled Resource Consumption):** Applied a strict kernel-level rate limit (`limit rate 2/second burst 5 packets`) to the `[Catch-All]` firewall logging rule in Linux (nftables/iptables) to completely eliminate CPU exhaustion loops during aggressive volumetric port scans (e.g. Nmap, OpenVAS).
+- **L3 Portscan Auto-Ban (Fail2ban Parity):** Engineered a high-performance in-memory telemetry state tracker native to Go. SysWarden now parses dropped packet logs efficiently and executes a definitive L3 native silent drop ban after 3 occurrences, instantly terminating the attacker's portscan without external dependencies.
+
+---
+
 # Release v3.01.0
 
 ## ADDED

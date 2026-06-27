@@ -18,7 +18,10 @@ import (
 	"time"
 )
 
-// --- DATA MODELS (Matching syswarden-tui exactly) ---
+type FirewallManager interface {
+	Ban(ip string) error
+}
+
 type Service struct {
 	Name   string `json:"name"`
 	Path   string `json:"path"`
@@ -117,7 +120,7 @@ type TelemetryEvent struct {
 }
 
 // StartWorker launches the background telemetry generator replacing the cron bash script
-func StartWorker(ctx context.Context, wg *sync.WaitGroup, logAllowed func(ip, service, payload string), logBan func(ip, jail, payload string)) {
+func StartWorker(ctx context.Context, wg *sync.WaitGroup, fwManager FirewallManager, logAllowed func(ip, service, payload string), logBan func(ip, jail, payload string)) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -147,11 +150,11 @@ func StartWorker(ctx context.Context, wg *sync.WaitGroup, logAllowed func(ip, se
 		monitorAllowedEvents(ctx, logAllowed)
 	}()
 
-	// Start ARP Flood monitor
+	// Start ARP Flood & Portscan monitor
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		monitorARPFloods(ctx, logBan)
+		monitorKernelDrops(ctx, fwManager, logBan)
 	}()
 }
 
@@ -208,7 +211,7 @@ func monitorAllowedEvents(ctx context.Context, logAllowed func(ip, service, payl
 	_ = cmd.Wait()
 }
 
-func monitorARPFloods(ctx context.Context, logBan func(ip, jail, payload string)) {
+func monitorKernelDrops(ctx context.Context, fwManager FirewallManager, logBan func(ip, jail, payload string)) {
 	if logBan == nil {
 		return
 	}
@@ -226,17 +229,38 @@ func monitorARPFloods(ctx context.Context, logBan func(ip, jail, payload string)
 	cmd := exec.CommandContext(ctx, "bash", "-c", bashScript)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Printf("[Telemetry Worker] Failed to start tail for ARP events: %v", err)
+		log.Printf("[Telemetry Worker] Failed to start tail for kernel drop events: %v", err)
 		return
 	}
 	if err := cmd.Start(); err != nil {
 		return
 	}
 
+	strikeMap := make(map[string]int)
+	var strikeMu sync.Mutex
+
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.Contains(line, "[SysWarden-ARP-FLOOD]") {
+
+		// 1. Parse Catch-All Drops for L3 Portscanners (Fail2ban Parity)
+		if strings.Contains(line, "[Catch-All]") {
+			ip := extractField(line, "SRC=")
+			if ip != "" {
+				strikeMu.Lock()
+				strikeMap[ip]++
+				hits := strikeMap[ip]
+				strikeMu.Unlock()
+
+				if hits == 3 {
+					// 3 strikes: Permanently Ban IP using Firewall Manager
+					if fwManager != nil {
+						_ = fwManager.Ban(ip)
+					}
+					logBan(ip, "L3-PORTSCAN", line)
+				}
+			}
+		} else if strings.Contains(line, "[SysWarden-ARP-FLOOD]") {
 			ip := extractField(line, "SRC=")
 			if ip == "" {
 				ip = extractField(line, "MAC=") // Fallback to MAC if SRC IP is missing
@@ -246,7 +270,7 @@ func monitorARPFloods(ctx context.Context, logBan func(ip, jail, payload string)
 			}
 			logBan(ip, "L2-ARP-FLOOD", line)
 		} else if runtime.GOOS == "freebsd" && strings.Contains(line, "arp: ") && (strings.Contains(line, "moved from") || strings.Contains(line, "wrong iface")) {
-			// Parse FreeBSD native arp warning: "arp: 192.168.1.50 moved from xx:xx to yy:yy"
+			// Parse FreeBSD native arp warning
 			parts := strings.Fields(line)
 			ip := "Unknown-ARP-Attacker"
 			for i, p := range parts {

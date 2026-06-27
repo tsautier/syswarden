@@ -138,7 +138,7 @@ func ApplyPolicies() error {
 	}
 
 	// Catch-All Default Deny Logging
-	_, _ = nftRules.WriteString("\t\tct state new log prefix \"[SysWarden-BLOCK] [Catch-All] \"\n")
+	_, _ = nftRules.WriteString("\t\tct state new limit rate 2/second burst 5 packets log prefix \"[SysWarden-BLOCK] [Catch-All] \"\n")
 	_, _ = nftRules.WriteString("\t\tct state new counter drop\n")
 	_, _ = nftRules.WriteString("\t}\n\n")
 
