@@ -1,3 +1,10 @@
+# Release v3.10.1
+
+## UPDATED
+- **TUI & Alerts Formatting:** Enhanced `syswarden alerts` to intelligently parse raw kernel payload strings for `L3-PORTSCAN` and `L2-ARP-FLOOD` blocks. Instead of displaying the raw `dmesg` buffer, the alerts now cleanly extract and display just the relevant `PORT` or `PROTO` (e.g., `JAIL: L3-PORTSCAN | PORT: 8080`), vastly improving terminal readability.
+
+---
+
 # Release v3.10.0
 
 ## FIXED

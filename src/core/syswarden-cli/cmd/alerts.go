@@ -171,7 +171,18 @@ func streamWAF(app *tview.Application, table *tview.Table) {
 		} else {
 			info := "JAIL: " + wafEvent.Jail
 			if wafEvent.Payload != "" {
-				info += " | " + wafEvent.Payload
+				if wafEvent.Jail == "L3-PORTSCAN" || wafEvent.Jail == "L2-ARP-FLOOD" {
+					portRegex := regexp.MustCompile(`DPT=([0-9]+)`)
+					protoRegex := regexp.MustCompile(`PROTO=([A-Za-z0-9]+)`)
+
+					if m := portRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
+						info += " | PORT: " + m[1]
+					} else if m := protoRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
+						info += " | PROTO: " + m[1]
+					}
+				} else {
+					info += " | " + wafEvent.Payload
+				}
 			}
 			addRow(app, table, date, "SYSWARDEN WAF", "BANNED", wafEvent.IP, info, tcell.ColorPurple, tcell.ColorRed)
 		}
@@ -285,7 +296,18 @@ func streamWAFText() {
 		} else {
 			info := "JAIL: " + wafEvent.Jail
 			if wafEvent.Payload != "" {
-				info += " | PAYLOAD: " + wafEvent.Payload
+				if wafEvent.Jail == "L3-PORTSCAN" || wafEvent.Jail == "L2-ARP-FLOOD" {
+					portRegex := regexp.MustCompile(`DPT=([0-9]+)`)
+					protoRegex := regexp.MustCompile(`PROTO=([A-Za-z0-9]+)`)
+
+					if m := portRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
+						info += " | PORT: " + m[1]
+					} else if m := protoRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
+						info += " | PROTO: " + m[1]
+					}
+				} else {
+					info += " | PAYLOAD: " + wafEvent.Payload
+				}
 			}
 			fmt.Printf("[%s] [SYSWARDEN WAF] [BANNED] %s -> %s\n", date, wafEvent.IP, info)
 		}
