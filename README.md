@@ -212,7 +212,7 @@ Run a complete system compliance and integration check (Rsyslog bridges, Docker 
 sudo syswarden audit
 ```
 
-### 3. Dynamic Management
+### 7. Dynamic Management
 SysWarden provides an instantaneous, zero-delay CLI for incident response.
 
 ```bash
@@ -241,7 +241,7 @@ sudo syswarden check <IP>
 sudo syswarden list
 ```
 
-### 7. High Availability (HA) Cluster Setup
+### 8. High Availability (HA) Cluster Setup
 
 SysWarden v2.0 natively supports High Availability (HA) clustering. When an attacker is blocked on one node (L3 or L7), the ban is instantly and securely replicated to all registered peers.
 
