@@ -540,12 +540,10 @@ func getLayer3Stats() Layer3 {
 	return l3
 }
 
-type IPWhoIsResponse struct {
-	CountryCode string `json:"country_code"`
-	Connection  struct {
-		Asn int    `json:"asn"`
-		Isp string `json:"isp"`
-	} `json:"connection"`
+type FreeIPAPIResponse struct {
+	CountryCode     string `json:"countryCode"`
+	Asn             string `json:"asn"`
+	AsnOrganization string `json:"asnOrganization"`
 }
 
 var osintCache = make(map[string]Attacker)
@@ -565,21 +563,26 @@ func enrichOSINT(ip string, payload string) Attacker {
 		}
 
 		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get("https://ipwho.is/" + ip)
+		resp, err := client.Get("https://de.freeipapi.com/api/json/" + ip)
 		if err == nil {
 			defer func() {
 				_ = resp.Body.Close()
 			}()
-			var res IPWhoIsResponse
+			var res FreeIPAPIResponse
 			if json.NewDecoder(resp.Body).Decode(&res) == nil {
 				if res.CountryCode != "" {
 					att.Country = res.CountryCode
 				}
-				if res.Connection.Asn != 0 {
-					att.ASN = fmt.Sprintf("AS%d", res.Connection.Asn)
+				if res.Asn != "" {
+					// Ensure ASN prefix matches TUI UI standard (e.g., "AS13335")
+					if !strings.HasPrefix(res.Asn, "AS") {
+						att.ASN = "AS" + res.Asn
+					} else {
+						att.ASN = res.Asn
+					}
 				}
-				if res.Connection.Isp != "" {
-					att.ISP = res.Connection.Isp
+				if res.AsnOrganization != "" {
+					att.ISP = res.AsnOrganization
 				}
 			}
 		}

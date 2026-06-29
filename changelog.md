@@ -1,3 +1,13 @@
+# Release v3.31.0
+
+## ADDED
+- **ARM64 Support**: Native cross-compilation support for `linux/arm64` (aarch64) in CI/CD. Distribution packages (`.deb`, `.rpm`, `.apk`) and raw binaries are now seamlessly built, bundled, and released automatically to support ARM architectures (e.g., AWS Graviton, Raspberry Pi, Oracle Cloud).
+
+## UPDATED
+- **OSINT Threat Intelligence Engine**: Migrated the core IP metadata enrichment provider to `FreeIPAPI` over HTTPS (`de.freeipapi.com`). This enterprise-level transition natively supports extremely high-volume environments (60 requests/minute or ~86,000/day) without requiring API keys, eliminating previous restrictions while maintaining absolute 100% precision on Country, ASN, and ISP data in the TUI Dashboard.
+
+---
+
 # Release v3.30.0
 
 ## ADDED

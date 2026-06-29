@@ -127,12 +127,15 @@ VERSION=$(curl -s https://api.github.com/repos/duggytuxy/syswarden/releases/late
 V_NUM=${VERSION#v}
 
 # 2. Download the appropriate package and its checksum
-# For Debian/Ubuntu (amd64)
+# For Debian/Ubuntu (amd64 & arm64)
 wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden_${V_NUM}_amd64.deb
-# For RHEL/AlmaLinux/Rocky (x86_64)
+wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden_${V_NUM}_arm64.deb
+# For RHEL/AlmaLinux/Rocky (x86_64 & aarch64)
 wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden-${V_NUM}-1.x86_64.rpm
-# For Alpine Linux (x86_64)
+wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden-${V_NUM}-1.aarch64.rpm
+# For Alpine Linux (x86_64 & aarch64)
 wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden_${V_NUM}_amd64.apk
+wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden_${V_NUM}_aarch64.apk
 # For FreeBSD 14+ (amd64)
 wget https://github.com/duggytuxy/syswarden/releases/download/${VERSION}/syswarden-${V_NUM}.txz
 
@@ -144,11 +147,11 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 
 # 4. Install the package
 # For Debian/Ubuntu
-sudo apt-get install -y ./syswarden_${V_NUM}_amd64.deb
+sudo apt-get install -y ./syswarden_${V_NUM}_*.deb
 # For RHEL/AlmaLinux/Rocky
-sudo dnf install -y ./syswarden-${V_NUM}-1.x86_64.rpm
+sudo dnf install -y ./syswarden-${V_NUM}-1.*.rpm
 # For Alpine Linux
-sudo apk add --allow-untrusted ./syswarden_${V_NUM}_amd64.apk
+sudo apk add --allow-untrusted ./syswarden_${V_NUM}_*.apk
 # For FreeBSD 14+
 sudo pkg add ./syswarden-${V_NUM}.txz
 
