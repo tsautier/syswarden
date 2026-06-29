@@ -56,7 +56,7 @@ jobs:
           sudo apt-get install -y rpm
           gem install --no-document fpm
 
-      - name: Prepare Staging Environment
+      - name: Prepare Staging Environment (AMD64)
         run: |
           # Create standard Linux filesystem hierarchy for the deployment package
           mkdir -p staging/opt/syswarden/bin
@@ -88,6 +88,32 @@ jobs:
           # Create a symlink for global execution from the terminal (Routing to Go CLI)
           ln -s /opt/syswarden/bin/syswarden-cli staging/usr/local/bin/syswarden
           ln -s /opt/syswarden/bin/syswarden-tui staging/usr/local/bin/syswarden-tui
+
+      - name: Prepare Staging Environment (ARM64)
+        run: |
+          mkdir -p staging_arm64/opt/syswarden/bin
+          mkdir -p staging_arm64/usr/local/bin
+
+          if [ -f dist/linux-arm64/bin/syswarden-cli ]; then
+            cp dist/linux-arm64/bin/syswarden-cli staging_arm64/opt/syswarden/bin/
+            chmod 750 staging_arm64/opt/syswarden/bin/syswarden-cli
+          fi
+
+          if [ -f dist/linux-arm64/bin/syswarden-core ]; then
+            cp dist/linux-arm64/bin/syswarden-core staging_arm64/opt/syswarden/bin/
+            cp dist/linux-arm64/signatures.json staging_arm64/opt/syswarden/
+            chmod 750 staging_arm64/opt/syswarden/bin/syswarden-core
+          fi
+          
+          if [ -f dist/linux-arm64/bin/syswarden-tui ]; then
+            cp dist/linux-arm64/bin/syswarden-tui staging_arm64/opt/syswarden/bin/
+            chmod 750 staging_arm64/opt/syswarden/bin/syswarden-tui
+          fi
+
+          chmod 640 staging_arm64/opt/syswarden/signatures.json
+
+          ln -s /opt/syswarden/bin/syswarden-cli staging_arm64/usr/local/bin/syswarden
+          ln -s /opt/syswarden/bin/syswarden-tui staging_arm64/usr/local/bin/syswarden-tui
 
       - name: Build Debian Package (.deb)
         run: |
@@ -173,6 +199,20 @@ jobs:
             --after-remove postrm.sh \
             -C staging .
 
+          fpm -s dir -t deb \
+            -n syswarden \
+            -v ${{ env.VERSION }} \
+            --vendor "SysWarden Security" \
+            --maintainer "SysWarden Engineering" \
+            --description "SysWarden Host-based Security Orchestrator for Linux (ARM64)" \
+            --url "https://github.com/${{ github.repository }}" \
+            --architecture arm64 \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cron" -d "bash-completion" \
+            --after-install postinst.sh \
+            --before-remove prerm.sh \
+            --after-remove postrm.sh \
+            -C staging_arm64 .
+
       - name: Build RHEL Family Package (.rpm)
         run: |
           fpm -s dir -t rpm \
@@ -189,6 +229,20 @@ jobs:
             --after-remove postrm.sh \
             -C staging .
 
+          fpm -s dir -t rpm \
+            -n syswarden \
+            -v ${{ env.VERSION }} \
+            --vendor "SysWarden Security" \
+            --maintainer "SysWarden Engineering" \
+            --description "SysWarden Host-based Security Orchestrator for Linux (ARM64)" \
+            --url "https://github.com/${{ github.repository }}" \
+            --architecture aarch64 \
+            -d "nftables" -d "ipset" -d "curl" -d "wget" -d "rsyslog" -d "cronie" -d "bash-completion" \
+            --after-install postinst.sh \
+            --before-remove prerm.sh \
+            --after-remove postrm.sh \
+            -C staging_arm64 .
+
       - name: Build Alpine Package (.apk)
         run: |
           fpm -s dir -t apk \
@@ -204,6 +258,20 @@ jobs:
             --before-remove prerm.sh \
             --after-remove postrm.sh \
             -C staging .
+
+          fpm -s dir -t apk \
+            -n syswarden \
+            -v ${{ env.VERSION }} \
+            --vendor "SysWarden Security" \
+            --maintainer "SysWarden Engineering" \
+            --description "SysWarden Host-based Security Orchestrator for Alpine Linux (ARM64)" \
+            --url "https://github.com/${{ github.repository }}" \
+            --architecture aarch64 \
+            -d "nftables" -d "curl" -d "wget" -d "rsyslog" -d "bash-completion" \
+            --after-install postinst.sh \
+            --before-remove prerm.sh \
+            --after-remove postrm.sh \
+            -C staging_arm64 .
 
       - name: Build FreeBSD Package (.pkg)
         run: |

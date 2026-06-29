@@ -124,6 +124,29 @@ Set-Location "src/core/syswarden-cli"
 go build -ldflags="-s -w" -o ../../../dist/freebsd/bin/syswarden-cli .
 Set-Location ../../../
 
+Write-Host "[*] Compiling SysWarden Native Go Modules for Linux ARM64..." -ForegroundColor Cyan
+if (!(Test-Path "$DistDir/linux-arm64/bin")) {
+    New-Item -ItemType Directory -Force -Path "$DistDir/linux-arm64/bin" | Out-Null
+}
+
+$env:GOOS="linux"
+$env:GOARCH="arm64"
+
+Set-Location "src/core/syswarden-cli"
+go build -ldflags="-s -w" -o ../../../dist/linux-arm64/bin/syswarden-cli .
+Set-Location ../../../
+
+Set-Location "src/core/syswarden-core"
+go build -ldflags="-s -w" -o ../../../dist/linux-arm64/bin/syswarden-core .
+Set-Location ../../../
+Copy-Item -Path "src/core/syswarden-core/signatures.json" -Destination "$DistDir/linux-arm64/signatures.json" -Force
+
+Set-Location "src/core/syswarden-tui"
+go build -ldflags="-s -w" -o ../../../dist/linux-arm64/bin/syswarden-tui .
+Set-Location ../../../
+
+Write-Host "[+] Linux ARM64 Compilation successful." -ForegroundColor Green
+
 Set-Location "src/core/syswarden-core"
 go build -ldflags="-s -w" -o ../../../dist/freebsd/bin/syswarden-core .
 Set-Location ../../../
