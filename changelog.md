@@ -1,3 +1,10 @@
+# Release v3.40.4
+
+## ADDED
+- **Spamhaus ASN-DROP Support**: Implemented dynamic downloading and parsing of the `asndrop.json` (JSON Lines) list. Integrated deduplication against custom ASN lists, enforcing native ASN extraction and blocking while strictly rate-limiting RADB WHOIS lookups to prevent blacklisting. The implementation safely ignores IPv6 constraints at the WHOIS parsing layer to maintain compatibility with Nftables chunking logic.
+
+---
+
 # Release v3.40.3
 
 ## FIXED

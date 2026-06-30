@@ -1,7 +1,9 @@
 package network
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -100,7 +102,7 @@ func CleanCIDRList(filepath string) error {
 }
 
 // DownloadFeeds manages the download of GeoIP, ASN, and OSINT feeds
-func DownloadFeeds(mirrorURL, geoCodes, asnList, geoAllowed, asnAllowed string, lanMode bool) error {
+func DownloadFeeds(mirrorURL, geoCodes, asnList, geoAllowed, asnAllowed string, lanMode, useSpamhaus bool) error {
 	fmt.Println("[INFO] Initializing Network Intelligence Feeds...")
 
 	if lanMode {
@@ -129,6 +131,10 @@ func DownloadFeeds(mirrorURL, geoCodes, asnList, geoAllowed, asnAllowed string, 
 		}
 	}
 
+	// Build the deduplicated list of ASNs to drop
+	asnSet := make(map[string]bool)
+	var asnsToDrop []string
+
 	if asnList != "" {
 		asns := strings.Split(asnList, " ")
 		for _, asn := range asns {
@@ -139,13 +145,42 @@ func DownloadFeeds(mirrorURL, geoCodes, asnList, geoAllowed, asnAllowed string, 
 			if !strings.HasPrefix(asn, "AS") {
 				asn = "AS" + asn
 			}
-			dest := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToUpper(asn))
-			fmt.Printf("Downloading ASN [%s]... ", asn)
-			if err := FetchASNWhois(asn, dest); err != nil {
-				fmt.Printf("FAILED (%v)\n", err)
-			} else {
-				fmt.Println("OK")
+			asn = strings.ToUpper(asn)
+			if !asnSet[asn] {
+				asnSet[asn] = true
+				asnsToDrop = append(asnsToDrop, asn)
 			}
+		}
+	}
+
+	if useSpamhaus {
+		fmt.Printf("Fetching Spamhaus ASN-DROP list... ")
+		spamhausASNs, err := FetchSpamhausASNs(ctx)
+		if err != nil {
+			fmt.Printf("FAILED (%v)\n", err)
+		} else {
+			fmt.Printf("OK (%d ASNs found)\n", len(spamhausASNs))
+			for _, asn := range spamhausASNs {
+				asn = strings.ToUpper(asn)
+				if !asnSet[asn] {
+					asnSet[asn] = true
+					asnsToDrop = append(asnsToDrop, asn)
+				}
+			}
+		}
+	}
+
+	for i, asn := range asnsToDrop {
+		dest := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", asn)
+		fmt.Printf("Downloading ASN [%s]... ", asn)
+		if err := FetchASNWhois(asn, dest); err != nil {
+			fmt.Printf("FAILED (%v)\n", err)
+		} else {
+			fmt.Println("OK")
+		}
+		// Rate limit RADB queries to prevent blacklisting
+		if i < len(asnsToDrop)-1 {
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 
@@ -321,4 +356,55 @@ func FetchASNWhois(asn, destPath string) error {
 	}
 
 	return CleanCIDRList(destPath)
+}
+
+// FetchSpamhausASNs retrieves the latest ASNs from the Spamhaus DROP JSON list
+func FetchSpamhausASNs(ctx context.Context) ([]string, error) {
+	url := "https://www.spamhaus.org/drop/asndrop.json"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	var resp *http.Response
+	for retries := 0; retries < 3; retries++ {
+		resp, err = client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("download failed: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bad status code: %d", resp.StatusCode)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var asns []string
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ";") {
+			continue
+		}
+
+		var record struct {
+			ASN int `json:"asn"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err == nil && record.ASN > 0 {
+			asns = append(asns, fmt.Sprintf("AS%d", record.ASN))
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading response: %w", err)
+	}
+
+	return asns, nil
 }
