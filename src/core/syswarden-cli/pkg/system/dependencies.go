@@ -51,7 +51,7 @@ func InstallDependencies() error {
 		}
 	} else if _, err := exec.LookPath("apk"); err == nil {
 		fmt.Println(" -> Detected Alpine Linux (APK)")
-		cmd := exec.CommandContext(ctx, "apk", "add", "--no-cache", "nftables", "wireguard-tools", "qrencode", "curl", "jq", "rsyslog")
+		cmd := exec.CommandContext(ctx, "apk", "add", "--no-cache", "nftables", "wireguard-tools", "libqrencode-tools", "curl", "jq", "rsyslog")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("APK installation failed: %w", err)
 		}
