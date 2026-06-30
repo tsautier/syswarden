@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"syswarden-cli/config"
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/integration"
 	"syswarden-cli/pkg/network"
 	"syswarden-cli/pkg/security"
 	"syswarden-cli/pkg/system"
+
+	"github.com/spf13/cobra"
 )
 
 var installCmd = &cobra.Command{

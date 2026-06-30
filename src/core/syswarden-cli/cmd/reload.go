@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os/exec"
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/integration"
 	"syswarden-cli/pkg/network"
+
+	"github.com/spf13/cobra"
 )
 
 var noRestart bool

@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"regexp"
 
-	"github.com/spf13/cobra"
 	"syswarden-cli/config"
+
+	"github.com/spf13/cobra"
 )
 
 var configCmd = &cobra.Command{

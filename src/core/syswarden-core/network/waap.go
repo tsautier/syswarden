@@ -13,10 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nxadm/tail"
 	"syswarden-core/firewall"
 	"syswarden-core/logger"
 	"syswarden-core/utils"
+
+	"github.com/nxadm/tail"
 )
 
 type WAAPConfig struct {

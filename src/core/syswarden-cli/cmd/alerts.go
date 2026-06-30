@@ -126,7 +126,12 @@ func StreamKernelLogs(app *tview.Application, table *tview.Table) {
 }
 
 func streamWAF(app *tview.Application, table *tview.Table) {
-	cmd := exec.Command("stdbuf", "-oL", "/usr/bin/tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	var cmd *exec.Cmd
+	if _, err := exec.LookPath("stdbuf"); err == nil {
+		cmd = exec.Command("stdbuf", "-oL", "tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	} else {
+		cmd = exec.Command("tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return
@@ -258,7 +263,12 @@ func StreamKernelLogsText() {
 }
 
 func streamWAFText() {
-	cmd := exec.Command("stdbuf", "-oL", "/usr/bin/tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	var cmd *exec.Cmd
+	if _, err := exec.LookPath("stdbuf"); err == nil {
+		cmd = exec.Command("stdbuf", "-oL", "tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	} else {
+		cmd = exec.Command("tail", "-F", "-n", "10", "/var/log/syswarden/waf.json")
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return

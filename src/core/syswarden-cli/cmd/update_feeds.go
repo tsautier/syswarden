@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"syswarden-cli/config"
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/network"
+
+	"github.com/spf13/cobra"
 )
 
 var updateFeedsCmd = &cobra.Command{

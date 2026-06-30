@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/firewall"
+
+	"github.com/spf13/cobra"
 )
 
 var allowSSHCmd = &cobra.Command{

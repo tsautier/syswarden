@@ -3,9 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/firewall"
 	"syswarden-cli/pkg/integration"
+
+	"github.com/spf13/cobra"
 )
 
 var blockCmd = &cobra.Command{

@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/system"
+
+	"github.com/spf13/cobra"
 )
 
 var auditCmd = &cobra.Command{

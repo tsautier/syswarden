@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"syswarden-cli/config"
 	"syswarden-cli/pkg/system"
+
+	"github.com/spf13/cobra"
 )
 
 var cfgFile string

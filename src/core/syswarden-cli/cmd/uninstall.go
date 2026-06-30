@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"syswarden-cli/pkg/system"
+
+	"github.com/spf13/cobra"
 )
 
 var uninstallCmd = &cobra.Command{

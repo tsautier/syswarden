@@ -169,7 +169,7 @@ func monitorAllowedEvents(ctx context.Context, logAllowed func(ip, service, payl
 
 	bashScript := `
 		{
-			tail -F /var/log/auth.log /var/log/nginx/access.log /var/log/apache2/access.log /var/log/httpd/access_log /var/log/secure 2>/dev/null &
+			tail -F /var/log/auth.log /var/log/nginx/access.log /var/log/apache2/access.log /var/log/httpd/access_log /var/log/secure /var/log/messages 2>/dev/null &
 			if command -v journalctl &> /dev/null; then
 				journalctl -u ssh -u sshd -f -n 0 2>/dev/null &
 			fi
@@ -223,6 +223,8 @@ func monitorKernelDrops(ctx context.Context, fwManager FirewallManager, logBan f
 	bashScript := `
 		if command -v journalctl &> /dev/null; then
 			journalctl -k -f -n 0 2>/dev/null
+		elif command -v rc-service &> /dev/null; then
+			tail -F /var/log/messages /var/log/kern.log 2>/dev/null
 		else
 			dmesg -w 2>/dev/null
 		fi
@@ -446,13 +448,31 @@ func getSystemStats() SystemData {
 
 	// Services
 	services := []string{"syswarden-core", "syswarden-firewall", "sshd"}
-	if err := exec.Command("systemctl", "status", "sshd").Run(); err != nil {
-		services[2] = "ssh" // Debian/Ubuntu uses ssh instead of sshd
+	useOpenRC := false
+	if _, err := exec.LookPath("rc-service"); err == nil {
+		useOpenRC = true
 	}
+
+	if useOpenRC {
+		if err := exec.Command("rc-service", "sshd", "status").Run(); err != nil {
+			services[2] = "ssh"
+		}
+	} else {
+		if err := exec.Command("systemctl", "status", "sshd").Run(); err != nil {
+			services[2] = "ssh" // Debian/Ubuntu uses ssh instead of sshd
+		}
+	}
+
 	for _, srv := range services {
 		status := "inactive"
-		if err := exec.Command("systemctl", "is-active", srv).Run(); err == nil {
-			status = "active"
+		if useOpenRC {
+			if err := exec.Command("rc-service", srv, "status").Run(); err == nil {
+				status = "active"
+			}
+		} else {
+			if err := exec.Command("systemctl", "is-active", srv).Run(); err == nil {
+				status = "active"
+			}
 		}
 		sys.Services = append(sys.Services, Service{
 			Name:   srv,
