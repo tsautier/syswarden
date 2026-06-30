@@ -1,3 +1,11 @@
+# Release v3.40.2
+
+### FIXED
+
+Error package and code hygiene v3.40.1
+
+---
+
 # Release v3.40.1
 
 ## FIXED
