@@ -21,11 +21,16 @@ func SetupWAFLogForwarder() error {
 module(load="omuxsock")
 $OMUxSockSocket /var/run/syswarden.sock
 
-# Nginx Logs
+# Web Server Logs
 input(type="imfile" File="/var/log/nginx/*.log" Tag="syswarden-waf" ruleset="waf_bridge")
-# Apache Logs
 input(type="imfile" File="/var/log/apache2/*.log" Tag="syswarden-waf" ruleset="waf_bridge")
 input(type="imfile" File="/var/log/httpd/*.log" Tag="syswarden-waf" ruleset="waf_bridge")
+
+# System & Auth Logs (HIDS)
+input(type="imfile" File="/var/log/auth.log" Tag="syswarden-waf" ruleset="waf_bridge")
+input(type="imfile" File="/var/log/secure" Tag="syswarden-waf" ruleset="waf_bridge")
+input(type="imfile" File="/var/log/syslog" Tag="syswarden-waf" ruleset="waf_bridge")
+input(type="imfile" File="/var/log/messages" Tag="syswarden-waf" ruleset="waf_bridge")
 `
 
 	// Docker Multi-tenant / Traefik / ModSec Logs

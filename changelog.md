@@ -1,3 +1,10 @@
+# Release v3.40.6
+
+## FIXED
+- **HIDS / SSH Brute-Force Visibility**: Fixed a critical log forwarding omission where `syswarden-cli` only configured Rsyslog to forward Web server logs (Nginx/Apache) to the core engine socket (`waf_bridge`). The configuration (`waf_logs_linux.go` and `waf_logs_freebsd.go`) has been updated to nativey include `/var/log/auth.log`, `/var/log/secure`, `/var/log/syslog`, and `/var/log/messages`, instantly restoring SysWarden's capability to detect and ban SSH brute-force attempts.
+
+---
+
 # Release v3.40.5
 
 ## ADDED

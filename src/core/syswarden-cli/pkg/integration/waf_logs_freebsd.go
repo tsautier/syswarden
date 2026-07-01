@@ -21,13 +21,14 @@ func SetupWAFLogForwarder() error {
 module(load="omuxsock")
 $OMUxSockSocket /var/run/syswarden.sock
 
-# Nginx Logs (FreeBSD typical paths and Jails)
+# Web Server Logs (FreeBSD typical paths and Jails)
 input(type="imfile" File="/var/log/nginx/*.log" Tag="syswarden-waf" ruleset="waf_bridge")
 input(type="imfile" File="/var/log/nginx-access.log" Tag="syswarden-waf" ruleset="waf_bridge")
-
-# Apache Logs
 input(type="imfile" File="/var/log/httpd-access.log" Tag="syswarden-waf" ruleset="waf_bridge")
-`
+
+# System & Auth Logs (HIDS)
+input(type="imfile" File="/var/log/auth.log" Tag="syswarden-waf" ruleset="waf_bridge")
+input(type="imfile" File="/var/log/messages" Tag="syswarden-waf" ruleset="waf_bridge")`
 
 	// Docker Multi-tenant / Traefik / ModSec Logs
 	if config.GlobalConfig.ModsecLogs != "" {
