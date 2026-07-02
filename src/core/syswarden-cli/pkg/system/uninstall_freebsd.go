@@ -27,11 +27,11 @@ func UninstallSystem() error {
 	_ = exec.Command("pkill", "-9", "-f", "syswarden-core").Run()
 
 	// 3. Remove WireGuard
-	if _, err := os.Stat("/usr/local/etc/wireguard/wg0.conf"); err == nil {
+	if _, err := os.Stat("/usr/local/etc/wireguard/wg-syswarden.conf"); err == nil {
 		fmt.Println(" -> Removing WireGuard VPN configs...")
-		_ = exec.Command("service", "wireguard", "stop").Run()
 		_ = exec.Command("sysrc", "-x", "wireguard_interfaces").Run()
-		_ = os.Remove("/usr/local/etc/wireguard/wg0.conf")
+		_ = exec.Command("service", "wireguard", "stop").Run()
+		_ = os.Remove("/usr/local/etc/wireguard/wg-syswarden.conf")
 		_ = os.RemoveAll("/usr/local/etc/wireguard/clients")
 	}
 

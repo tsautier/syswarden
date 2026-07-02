@@ -19,7 +19,7 @@ func SetupWireguard() error {
 
 	fmt.Println("[INFO] Configuring WireGuard VPN...")
 
-	if _, err := os.Stat("/etc/wireguard/wg0.conf"); err == nil {
+	if _, err := os.Stat("/etc/wireguard/wg-syswarden.conf"); err == nil {
 		fmt.Println("[INFO] WireGuard configuration already exists. Skipping to prevent lockout.")
 		return nil
 	}
@@ -74,14 +74,14 @@ func SetupWireguard() error {
 	postDown := ""
 	switch config.GlobalConfig.FirewallBackend {
 	case "nftables":
-		postUp = fmt.Sprintf(`nft 'add table inet syswarden_wg'; nft 'add chain inet syswarden_wg prerouting { type nat hook prerouting priority dstnat; }'; nft 'add chain inet syswarden_wg postrouting { type nat hook postrouting priority srcnat; }'; nft 'add rule inet syswarden_wg postrouting oifname "%s" masquerade'; nft 'add chain inet filter forward { type filter hook forward priority 0; }' 2>/dev/null || true; nft 'insert rule inet filter forward iifname "wg0" accept'; nft 'insert rule inet filter forward oifname "wg0" accept'`, activeIf)
-		postDown = `nft delete table inet syswarden_wg 2>/dev/null || true; nft delete rule inet filter forward iifname "wg0" accept 2>/dev/null || true; nft delete rule inet filter forward oifname "wg0" accept 2>/dev/null || true`
+		postUp = fmt.Sprintf(`nft 'add table inet syswarden_wg'; nft 'add chain inet syswarden_wg prerouting { type nat hook prerouting priority dstnat; }'; nft 'add chain inet syswarden_wg postrouting { type nat hook postrouting priority srcnat; }'; nft 'add rule inet syswarden_wg postrouting oifname "%s" masquerade'; nft 'add chain inet filter forward { type filter hook forward priority 0; }' 2>/dev/null || true; nft 'insert rule inet filter forward iifname "wg-syswarden" accept'; nft 'insert rule inet filter forward oifname "wg-syswarden" accept'`, activeIf)
+		postDown = `nft delete table inet syswarden_wg 2>/dev/null || true; nft delete rule inet filter forward iifname "wg-syswarden" accept 2>/dev/null || true; nft delete rule inet filter forward oifname "wg-syswarden" accept 2>/dev/null || true`
 	case "firewalld":
 		postUp = ""
 		postDown = ""
 	default:
-		postUp = fmt.Sprintf("iptables -t nat -I POSTROUTING 1 -s %s -o %s -j MASQUERADE; iptables -I FORWARD 1 -i wg0 -j ACCEPT; iptables -I FORWARD 1 -o wg0 -j ACCEPT", config.GlobalConfig.WGSubnet, activeIf)
-		postDown = fmt.Sprintf("iptables -t nat -D POSTROUTING -s %s -o %s -j MASQUERADE 2>/dev/null || true; iptables -D FORWARD -i wg0 -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o wg0 -j ACCEPT 2>/dev/null || true", config.GlobalConfig.WGSubnet, activeIf)
+		postUp = fmt.Sprintf("iptables -t nat -I POSTROUTING 1 -s %s -o %s -j MASQUERADE; iptables -I FORWARD 1 -i wg-syswarden -j ACCEPT; iptables -I FORWARD 1 -o wg-syswarden -j ACCEPT", config.GlobalConfig.WGSubnet, activeIf)
+		postDown = fmt.Sprintf("iptables -t nat -D POSTROUTING -s %s -o %s -j MASQUERADE 2>/dev/null || true; iptables -D FORWARD -i wg-syswarden -j ACCEPT 2>/dev/null || true; iptables -D FORWARD -o wg-syswarden -j ACCEPT 2>/dev/null || true", config.GlobalConfig.WGSubnet, activeIf)
 	}
 
 	// Write configs safely
@@ -98,7 +98,7 @@ PresharedKey = %s
 AllowedIPs = %s/32
 `, serverVPNIP, config.GlobalConfig.WGPort, serverPrivStr, postUp, postDown, clientPubStr, presharedKeyStr, clientVPNIP)
 
-	_ = os.WriteFile("/etc/wireguard/wg0.conf", []byte(serverConf), 0600)
+	_ = os.WriteFile("/etc/wireguard/wg-syswarden.conf", []byte(serverConf), 0600)
 
 	clientConf := fmt.Sprintf(`[Interface]
 PrivateKey = %s
@@ -120,12 +120,12 @@ PersistentKeepalive = 25
 	// Start service
 	fmt.Println(" -> Starting WireGuard Interface")
 	if system.IsAlpine() {
-		_ = exec.Command("ln", "-s", "/etc/init.d/wg-quick", "/etc/init.d/wg-quick.wg0").Run()
-		_ = exec.Command("rc-update", "add", "wg-quick.wg0", "default").Run()
-		_ = exec.Command("rc-service", "wg-quick.wg0", "start").Run()
+		_ = exec.Command("ln", "-s", "/etc/init.d/wg-quick", "/etc/init.d/wg-quick.wg-syswarden").Run()
+		_ = exec.Command("rc-update", "add", "wg-quick.wg-syswarden", "default").Run()
+		_ = exec.Command("rc-service", "wg-quick.wg-syswarden", "start").Run()
 	} else {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
-		_ = exec.Command("systemctl", "enable", "--now", "wg-quick@wg0").Run()
+		_ = exec.Command("systemctl", "enable", "--now", "wg-quick@wg-syswarden").Run()
 	}
 
 	fmt.Println("\n=======================================================")

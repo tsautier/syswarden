@@ -96,7 +96,7 @@ func ApplyPolicies() error {
 	if config.GlobalConfig.EnableWG {
 		_, _ = pfRules.WriteString("# SSH Cloaking (Strict WG VPN Only)\n")
 		_, _ = pfRules.WriteString(fmt.Sprintf("pass in quick on %s proto tcp from <syswarden_whitelist> to any port %s keep state\n", activeIf, sshPort))
-		_, _ = pfRules.WriteString(fmt.Sprintf("pass in quick on wg0 proto tcp from %s to any port %s keep state\n", config.GlobalConfig.WGSubnet, sshPort))
+		_, _ = pfRules.WriteString(fmt.Sprintf("pass in quick on wg-syswarden proto tcp from %s to any port %s keep state\n", config.GlobalConfig.WGSubnet, sshPort))
 		_, _ = pfRules.WriteString(fmt.Sprintf("block drop in quick on %s proto tcp to any port %s\n", activeIf, sshPort))
 	} else {
 		_, _ = pfRules.WriteString("# Standard SSH Access\n")

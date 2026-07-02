@@ -12,16 +12,13 @@ import (
 
 func SetupWireguard() error {
 	if !config.GlobalConfig.EnableWG {
-		fmt.Println("[INFO] WireGuard is disabled in configuration. Ensuring it is stopped.")
-		_ = exec.Command("service", "wireguard", "stop").Run()
-		_ = exec.Command("sysrc", "-x", "wireguard_interfaces").Run()
-		_ = os.Remove("/usr/local/etc/wireguard/wg0.conf")
+		fmt.Println("[INFO] WireGuard is disabled in SysWarden configuration. Skipping WireGuard setup.")
 		return nil
 	}
 
 	fmt.Println("[INFO] Configuring WireGuard VPN natively for FreeBSD...")
 
-	if _, err := os.Stat("/usr/local/etc/wireguard/wg0.conf"); err == nil {
+	if _, err := os.Stat("/usr/local/etc/wireguard/wg-syswarden.conf"); err == nil {
 		fmt.Println("[INFO] WireGuard configuration already exists. Skipping to prevent lockout.")
 		return nil
 	}
@@ -95,7 +92,7 @@ PresharedKey = %s
 AllowedIPs = %s/32
 `, serverVPNIP, config.GlobalConfig.WGPort, serverPrivStr, postUp, postDown, clientPubStr, presharedKeyStr, clientVPNIP)
 
-	_ = os.WriteFile("/usr/local/etc/wireguard/wg0.conf", []byte(serverConf), 0600)
+	_ = os.WriteFile("/usr/local/etc/wireguard/wg-syswarden.conf", []byte(serverConf), 0600)
 
 	clientConf := fmt.Sprintf(`[Interface]
 PrivateKey = %s
@@ -117,7 +114,7 @@ PersistentKeepalive = 25
 	// Start service
 	fmt.Println(" -> Starting WireGuard Interface")
 	_ = exec.Command("sysrc", "wireguard_enable=YES").Run()
-	_ = exec.Command("sysrc", "wireguard_interfaces=wg0").Run()
+	_ = exec.Command("sysrc", "wireguard_interfaces=wg-syswarden").Run()
 	_ = exec.Command("service", "wireguard", "start").Run()
 
 	fmt.Println("\n=======================================================")

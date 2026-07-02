@@ -190,10 +190,10 @@ func RunAudit() {
 	logHeader("Phase 6: Zero Trust Remote Access (VPN & SSH Cloaking)")
 	if config.GlobalConfig.EnableWG {
 		pass("WireGuard Cloaking is ENABLED in config.")
-		if _, err := os.Stat("/etc/wireguard/wg0.conf"); err == nil {
+		if _, err := os.Stat("/usr/local/etc/wireguard/wg-syswarden.conf"); err == nil {
 			pass("WireGuard Configuration VERIFIED.")
 		} else {
-			fail("WireGuard Configuration FAILED: /etc/wireguard/wg0.conf missing.")
+			fail("WireGuard Configuration FAILED: /usr/local/etc/wireguard/wg-syswarden.conf missing.")
 		}
 	} else {
 		info("WireGuard Zero Trust Remote Access is DISABLED (Skipped).")
