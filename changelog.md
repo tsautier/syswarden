@@ -1,3 +1,9 @@
+# Release v3.50.3
+
+## ADDED
+- **Data-Shield Dynamic Latency Benchmark**: Engineered an autonomous, multi-threaded latency benchmarking system (`SelectFastestThreatIntelMirror`) to dynamically select the fastest Threat Intelligence mirror upon execution. The orchestration engine now pre-tests GitHub, GitLab, jsDelivr, Bitbucket, and Codeberg via HTTP `HEAD` probes, chronometers their response times, and sorts the fallback sequence strictly by optimal latency. This completely replaces the blind sequential failover, guaranteeing absolute maximum bandwidth and minimal network overhead during Zero-Trust ingestion operations.
+---
+
 # Release v3.50.2
 
 ## ADDED
