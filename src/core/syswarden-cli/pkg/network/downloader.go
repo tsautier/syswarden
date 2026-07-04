@@ -144,7 +144,9 @@ func DownloadFeeds(mirrorURL, customURL6, listChoice, geoCodes, asnList, geoAllo
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	// Increased global context timeout to 15 minutes to allow full mirror failover rotation
+	// without hitting "context deadline exceeded" prematurely.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
 	if geoCodes != "" {

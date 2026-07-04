@@ -4,6 +4,7 @@
 - **High Availability (HA) Multi-Node Support**: The `syswarden-cli ha-sync` orchestration engine natively supports resolving and synchronizing across multiple HA peer nodes simultaneously. `SYSWARDEN_HA_PEER_IP` now accepts a space- or comma-separated list of IP addresses, effortlessly projecting the active Zero-Trust blocklist state to an entire cluster ecosystem in parallel.
 
 ## FIXED
+- **Threat Intelligence Mirror Resilience**: Fixed an edge-case network exhaustion bug (`context deadline exceeded`) observed on RHEL/AlmaLinux families. The orchestration engine's global context timeout has been aggressively expanded (from 2m to 15m) to guarantee that all fallback mirrors (GitHub, GitLab, jsDelivr, Bitbucket, Codeberg) can fully execute their retry loops sequentially without being prematurely terminated by the main thread.
 - **High Availability (HA) TOFU Automation**: Engineered a secure Trust On First Use (TOFU) host-key exchange sequence within the `cluster.go` orchestration engine. SysWarden now autonomously utilizes native `ssh-keyscan` during HA initialization to securely pin the standby node's ED25519 public key into the local `known_hosts` vault. This completely eliminates silent `StrictHostKeyChecking` connection drops and guarantees immediate Zero-Touch synchronization across cluster nodes without any post-installation key bridging.
 
 ---
