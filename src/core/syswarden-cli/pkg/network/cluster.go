@@ -2,7 +2,9 @@ package network
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syswarden-cli/config"
 )
@@ -29,14 +31,46 @@ func SetupHACluster() error {
 		return nil
 	}
 
-	peerIP := config.GlobalConfig.HAPeerIP
+	peerIPsStr := strings.ReplaceAll(config.GlobalConfig.HAPeerIP, ",", " ")
+	peerIPs := strings.Fields(peerIPsStr)
 	peerPort := config.GlobalConfig.HAPeerPort
-	if peerIP == "" {
+	if len(peerIPs) == 0 {
 		fmt.Println("[WARN] HA Cluster enabled but no Peer IP configured.")
 		return nil
 	}
 
-	fmt.Printf("[INFO] Configuring HA Synchronization Engine to Peer %s:%s\n", peerIP, peerPort)
+	fmt.Printf("[INFO] Configuring HA Synchronization Engine to Peers: %v on port %s\n", peerIPs, peerPort)
+
+	// Trust On First Use (TOFU): Automatically fetch and store the peer's host key
+	if config.GlobalConfig.HAStrictHostKey {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			sshDir := filepath.Join(homeDir, ".ssh")
+			_ = os.MkdirAll(sshDir, 0700)
+			knownHosts := filepath.Join(sshDir, "known_hosts")
+
+			for _, ip := range peerIPs {
+				fmt.Printf("[INFO] Auto-discovering ED25519 host key for %s (TOFU)...\n", ip)
+				scanCmd := exec.Command("ssh-keyscan", "-t", "ed25519", "-p", peerPort, ip)
+				keyOut, err := scanCmd.Output()
+				if err == nil && len(keyOut) > 0 {
+					existingKeys, _ := os.ReadFile(knownHosts)
+					if !strings.Contains(string(existingKeys), strings.TrimSpace(string(keyOut))) {
+						f, err := os.OpenFile(knownHosts, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+						if err == nil {
+							_, _ = f.Write(keyOut)
+							f.Close()
+							fmt.Printf("[+] Peer %s host key securely added to known_hosts.\n", ip)
+						}
+					} else {
+						fmt.Printf("[+] Peer %s host key already trusted.\n", ip)
+					}
+				} else {
+					fmt.Printf("[WARN] Could not fetch host key from %s. Manual ssh-keyscan may be required.\n", ip)
+				}
+			}
+		}
+	}
 
 	// In a full Go architecture, we register a cron job that calls the Go CLI to perform the sync natively
 	// instead of relying on a bash script containing python sockets.

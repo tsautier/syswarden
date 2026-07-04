@@ -1,3 +1,13 @@
+# Release v3.50.2
+
+## ADDED
+- **High Availability (HA) Multi-Node Support**: The `syswarden-cli ha-sync` orchestration engine natively supports resolving and synchronizing across multiple HA peer nodes simultaneously. `SYSWARDEN_HA_PEER_IP` now accepts a space- or comma-separated list of IP addresses, effortlessly projecting the active Zero-Trust blocklist state to an entire cluster ecosystem in parallel.
+
+## FIXED
+- **High Availability (HA) TOFU Automation**: Engineered a secure Trust On First Use (TOFU) host-key exchange sequence within the `cluster.go` orchestration engine. SysWarden now autonomously utilizes native `ssh-keyscan` during HA initialization to securely pin the standby node's ED25519 public key into the local `known_hosts` vault. This completely eliminates silent `StrictHostKeyChecking` connection drops and guarantees immediate Zero-Touch synchronization across cluster nodes without any post-installation key bridging.
+
+---
+
 # Release v3.50.1
 
 ## FIXED
