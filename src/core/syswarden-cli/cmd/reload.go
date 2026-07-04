@@ -33,6 +33,11 @@ var reloadCmd = &cobra.Command{
 			fmt.Printf("[ERROR] WAF Log Bridge reload failed: %v\n", err)
 		}
 
+		// Re-apply AbuseIPDB / Telemetry configuration
+		if err := integration.SetupAbuseIPDB(); err != nil {
+			fmt.Printf("[ERROR] AbuseIPDB reload failed: %v\n", err)
+		}
+
 		// Re-apply Background Cron Orchestration (Repairs missing jobs)
 		fmt.Println("[*] Verifying background orchestration...")
 		if err := network.SetupFeedsCron(); err != nil {

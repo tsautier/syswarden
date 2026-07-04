@@ -11,17 +11,20 @@ import (
 func SetupAbuseIPDB() error {
 	if config.GlobalConfig.EnterpriseMode {
 		fmt.Println("[WARN] Enterprise Mode is ACTIVE. Third-party telemetry (AbuseIPDB) is strictly disabled.")
+		_ = os.Remove("/etc/syswarden/secrets.env")
 		return nil
 	}
 
 	if !config.GlobalConfig.EnableAbuse {
 		fmt.Println("[INFO] AbuseIPDB reporting is DISABLED by configuration.")
+		_ = os.Remove("/etc/syswarden/secrets.env")
 		return nil
 	}
 
 	apiKey := config.GlobalConfig.AbuseAPIKey
 	if apiKey == "" {
 		fmt.Println("[WARN] AbuseIPDB enabled but no API Key provided. Skipping.")
+		_ = os.Remove("/etc/syswarden/secrets.env")
 		return nil
 	}
 
