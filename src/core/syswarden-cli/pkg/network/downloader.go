@@ -270,15 +270,48 @@ func DownloadFeeds(mirrorURL, customURL6, listChoice, geoCodes, asnList, geoAllo
 	}
 
 	// Download Data-Shield
-	dataShieldUrl := fmt.Sprintf("%s/duggytuxy21/Data-Shield_IPv4_Blocklist/raw/branch/main/prod_data-shield_ipv4_blocklist.txt", strings.TrimRight(mirrorURL, "/"))
-	if listChoice == "3" {
-		dataShieldUrl = strings.TrimRight(mirrorURL, "/")
-	}
 	fmt.Printf("Downloading Threat Intel IPv4 Blocklist... ")
-	if err := SecureDownloader(ctx, dataShieldUrl, "/etc/syswarden/lists/syswarden_threatintel.ipv4"); err != nil {
-		fmt.Printf("FAILED (%v)\n", err)
+	if listChoice == "3" {
+		dataShieldUrl := strings.TrimRight(mirrorURL, "/")
+		if err := SecureDownloader(ctx, dataShieldUrl, "/etc/syswarden/lists/syswarden_threatintel.ipv4"); err != nil {
+			fmt.Printf("FAILED (%v)\n", err)
+		} else {
+			fmt.Println("OK")
+		}
 	} else {
-		fmt.Println("OK")
+		var success bool
+		var mirrors []string
+		if listChoice == "2" {
+			mirrors = []string{
+				"https://raw.githubusercontent.com/duggytuxy/Data-Shield_IPv4_Blocklist/refs/heads/main/prod_critical_data-shield_ipv4_blocklist.txt",
+				"https://gitlab.com/duggytuxy/Data-Shield-IPv4-Blocklist/-/raw/main/prod_critical_data-shield_ipv4_blocklist.txt?ref_type=heads",
+				"https://cdn.jsdelivr.net/gh/duggytuxy/Data-Shield_IPv4_Blocklist@refs/heads/main/prod_critical_data-shield_ipv4_blocklist.txt",
+				"https://bitbucket.org/duggytuxy/data-shield-ipv4-blocklist/raw/HEAD/prod_critical_data-shield_ipv4_blocklist.txt",
+				"https://codeberg.org/duggytuxy21/Data-Shield_IPv4_Blocklist/raw/branch/main/prod_critical_data-shield_ipv4_blocklist.txt",
+			}
+		} else {
+			mirrors = []string{
+				"https://raw.githubusercontent.com/duggytuxy/Data-Shield_IPv4_Blocklist/refs/heads/main/prod_data-shield_ipv4_blocklist.txt",
+				"https://gitlab.com/duggytuxy/Data-Shield-IPv4-Blocklist/-/raw/main/prod_data-shield_ipv4_blocklist.txt?ref_type=heads",
+				"https://cdn.jsdelivr.net/gh/duggytuxy/Data-Shield_IPv4_Blocklist@refs/heads/main/prod_data-shield_ipv4_blocklist.txt",
+				"https://bitbucket.org/duggytuxy/data-shield-ipv4-blocklist/raw/HEAD/prod_data-shield_ipv4_blocklist.txt",
+				"https://codeberg.org/duggytuxy21/Data-Shield_IPv4_Blocklist/raw/branch/main/prod_data-shield_ipv4_blocklist.txt",
+			}
+		}
+
+		var lastErr error
+		for _, url := range mirrors {
+			if err := SecureDownloader(ctx, url, "/etc/syswarden/lists/syswarden_threatintel.ipv4"); err == nil {
+				fmt.Println("OK")
+				success = true
+				break
+			} else {
+				lastErr = err
+			}
+		}
+		if !success {
+			fmt.Printf("FAILED (%v)\n", lastErr)
+		}
 	}
 
 	// Download OSINT Feeds (CINS Army & Blocklist.de)
@@ -386,7 +419,7 @@ func FetchASNWhois(asn, destBase string) error {
 	// Extract IPv4 and IPv6 routes
 	reV4 := regexp.MustCompile(`(?m)^route:\s+([0-9]{1,3}\.([0-9]{1,3}\.){2}[0-9]{1,3}/[0-9]{1,2})`)
 	reV6 := regexp.MustCompile(`(?m)^route6:\s+([0-9a-fA-F:]+/[0-9]{1,3})`)
-	
+
 	matchesV4 := reV4.FindAllStringSubmatch(string(data), -1)
 	matchesV6 := reV6.FindAllStringSubmatch(string(data), -1)
 
@@ -400,7 +433,7 @@ func FetchASNWhois(asn, destBase string) error {
 			cidrsV4 = append(cidrsV4, m[1])
 		}
 	}
-	
+
 	var cidrsV6 []string
 	for _, m := range matchesV6 {
 		if len(m) > 1 {
@@ -412,7 +445,7 @@ func FetchASNWhois(asn, destBase string) error {
 	if err := os.WriteFile(destBase+".ipv4", []byte(outV4), 0640); err != nil {
 		return err
 	}
-	
+
 	if len(cidrsV6) > 0 {
 		outV6 := strings.Join(cidrsV6, "\n") + "\n"
 		if err := os.WriteFile(destBase+".ipv6", []byte(outV6), 0640); err != nil {
@@ -422,7 +455,7 @@ func FetchASNWhois(asn, destBase string) error {
 
 	_ = CleanCIDRList(destBase + ".ipv4")
 	_ = CleanCIDRListV6(destBase + ".ipv6")
-	
+
 	return nil
 }
 

@@ -1,3 +1,10 @@
+# Release v3.50.1
+
+## FIXED
+- **Threat Intelligence Mirror Resilience**: Implemented a highly resilient mirror fallback rotation (GitHub, GitLab, jsDelivr, Bitbucket, Codeberg) within the `downloader.go` orchestration engine. This natively mitigates single-point-of-failure network timeouts (e.g., Codeberg IPv6 rate-limiting) during Data-Shield ingestion by automatically failing over to the next available enterprise CDN, ensuring uninterrupted Zero-Trust L3 protection.
+
+---
+
 # Release v3.50.0
 
 ## ADDED

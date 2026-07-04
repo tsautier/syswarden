@@ -28,7 +28,7 @@ func ApplyPolicies() error {
 
 	// Setup Tables for IP Sets (Loading files directly)
 	_, _ = pfRules.WriteString("table <syswarden_whitelist> persist file \"/etc/syswarden/lists/syswarden_whitelist.ipv4\" file \"/etc/syswarden/lists/syswarden_whitelist.ipv6\"\n")
-	
+
 	var ztFilesStr strings.Builder
 	if config.GlobalConfig.GeoAllowed != "" {
 		codes := strings.Split(config.GlobalConfig.GeoAllowed, " ")
@@ -62,7 +62,7 @@ func ApplyPolicies() error {
 		}
 	}
 	_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_zt_allowed> persist%s\n", ztFilesStr.String()))
-	
+
 	_, _ = pfRules.WriteString("table <syswarden_blacklist> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv4\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv4\"\n")
 	_, _ = pfRules.WriteString("table <syswarden_blacklist6> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv6\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv6\"\n")
 	_, _ = pfRules.WriteString("table <banned_ips> persist\n")
