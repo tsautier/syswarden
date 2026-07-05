@@ -91,8 +91,6 @@ func ParseConfig(filepath string) error {
 			GlobalConfig.HAPeerIP = val
 		case "SYSWARDEN_HA_PEER_PORT":
 			GlobalConfig.HAPeerPort = val
-		case "SYSWARDEN_HA_STRICT_HOST_KEY":
-			GlobalConfig.HAStrictHostKey = parseBool(val)
 		case "SYSWARDEN_SIEM_ENABLED":
 			GlobalConfig.SiemEnabled = parseBool(val)
 		case "SYSWARDEN_SIEM_IP":

@@ -110,12 +110,10 @@ SYSWARDEN_USE_SPAMHAUS="n"
 # --- HA Cluster Sync ---
 # y = Enable, n = Disable (Replicates state to a standby node over encrypted channels)
 SYSWARDEN_HA_ENABLED="y"
-# Standby Node IP (Must be accessible via root SSH keys)
+# Standby Node IP (Automatically whitelisted for TLS P2P API)
 SYSWARDEN_HA_PEER_IP=""
-# Standby Node SSH Port
+# Standby Node TLS Port
 SYSWARDEN_HA_PEER_PORT="62026"
-# y = Strictly verify SSH host keys to prevent MitM attacks during sync (Recommended)
-SYSWARDEN_HA_STRICT_HOST_KEY="y"
 
 # --- SIEM Log Forwarding (ISO 27001 / NIS2 COMPLIANT) ---
 # y = Enable, n = Disable (Forwards attack logs to an external SIEM via Rsyslog)

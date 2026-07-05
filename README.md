@@ -253,19 +253,23 @@ sudo syswarden list
 
 ### 8. High Availability (HA) Cluster Setup
 
-SysWarden v2.0 natively supports High Availability (HA) clustering. When an attacker is blocked on one node (L3 or L7), the ban is instantly and securely replicated to all registered peers.
+SysWarden natively supports High Availability (HA) clustering. When an attacker is blocked on one node (L3 or L7), the ban is instantly and securely replicated to all registered peers.
+
+Starting with v3.51.0, the HA synchronization uses a **"Zero-Touch" TLS P2P API**, abandoning the legacy SSH-based sync. The `syswarden-core` daemon dynamically generates self-signed certificates and enforces strict Zero-Trust TCP IP validation.
 
 **Prerequisites:**
 1. Both servers must have SysWarden installed and running.
-2. They must be able to communicate securely via SSH on a dedicated port (default: `62026`).
-3. Passwordless SSH keys must be exchanged between the nodes for the `root` user.
+2. They must be able to communicate securely via a dedicated TCP port of your choice (default: `62026`).
+
+> [!TIP]
+> **Zero-Touch Auto-Whitelist**: The HA clustering engine natively and autonomously whitelists all configured `SYSWARDEN_HA_PEER_IP` nodes upon installation or reload. This eliminates the need for manual firewall interventions to allow the TLS P2P API traffic.
 
 **Configuration on each node:**
 1. Edit your enterprise configuration via the secure CLI:
 ```bash
 sudo syswarden config
 ```
-2. Enable HA and add your peer IP(s) (comma-separated):
+2. Enable HA and add your peer IP(s) (comma-separated) and the custom TLS port:
 ```conf
 SYSWARDEN_HA_ENABLE="true"
 SYSWARDEN_HA_PEERS="172.x.x.x,10.x.x.x"

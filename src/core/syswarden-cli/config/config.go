@@ -31,7 +31,6 @@ type Config struct {
 	HAEnabled           bool
 	HAPeerIP            string
 	HAPeerPort          string
-	HAStrictHostKey     bool
 	SiemEnabled         bool
 	SiemIP              string
 	SiemPort            string

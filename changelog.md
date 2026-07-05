@@ -1,3 +1,13 @@
+# Release v3.51.3
+
+## UPDATED
+- **Documentation**: Updated `README.md` and `Deployment-Tutorial.md` to fully reflect the new Zero-Touch TLS P2P API architecture for High Availability clustering, removing all legacy references to SSH ports and passwordless keys.
+- **HA Configuration**: Cleaned up the `syswarden config` and `syswarden manual` outputs by removing obsolete SSH parameters (e.g. `SYSWARDEN_HA_STRICT_HOST_KEY`) and explicitly indicating the use of a TLS port.
+
+## FIXED
+- **Legacy Code Cleanup**: Removed the deprecated Trust On First Use (TOFU) `ssh-keyscan` logic from the CLI's cluster setup routine (`cluster.go`), ensuring the codebase is exclusively reliant on the modern TLS API.
+---
+
 # Release v3.51.2
 
 ## FIXED
