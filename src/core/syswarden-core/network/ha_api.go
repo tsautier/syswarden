@@ -30,7 +30,7 @@ func loadHAConfig() HAConfig {
 	cfg := HAConfig{
 		Enabled: "n",
 		PeerIPs: []string{},
-		Port:    "22", // Default legacy, but user should configure a separate port for HA API
+		Port:    "62026", // Default HA TLS API Port
 	}
 
 	file, err := os.Open("/opt/syswarden/syswarden-auto.conf")
@@ -43,15 +43,27 @@ func loadHAConfig() HAConfig {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "SYSWARDEN_HA_ENABLED=") {
-			cfg.Enabled = strings.Trim(strings.Split(line, "=")[1], "\"")
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				cfg.Enabled = strings.ToLower(strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'")))
+			}
 		}
 		if strings.HasPrefix(line, "SYSWARDEN_HA_PEER_IP=") {
-			ips := strings.Trim(strings.Split(line, "=")[1], "\"")
-			ips = strings.ReplaceAll(ips, ",", " ")
-			cfg.PeerIPs = append(cfg.PeerIPs, strings.Fields(ips)...)
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				ips := strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'"))
+				ips = strings.ReplaceAll(ips, ",", " ")
+				cfg.PeerIPs = append(cfg.PeerIPs, strings.Fields(ips)...)
+			}
 		}
 		if strings.HasPrefix(line, "SYSWARDEN_HA_PEER_PORT=") {
-			cfg.Port = strings.Trim(strings.Split(line, "=")[1], "\"")
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				portVal := strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'"))
+				if portVal != "" {
+					cfg.Port = portVal
+				}
+			}
 		}
 	}
 	return cfg
@@ -94,7 +106,7 @@ type HASyncPayload struct {
 
 func StartHAServer(fwManager firewall.Manager) {
 	cfg := loadHAConfig()
-	if cfg.Enabled != "y" || len(cfg.PeerIPs) == 0 {
+	if (cfg.Enabled != "y" && cfg.Enabled != "true" && cfg.Enabled != "1") || len(cfg.PeerIPs) == 0 {
 		return
 	}
 
@@ -170,7 +182,7 @@ func StartHAServer(fwManager firewall.Manager) {
 
 			for _, ip := range payload.IPs {
 				_ = fwManager.Ban(ip)
-				
+
 				// Also persist locally to blocklist
 				if !strings.Contains(ip, ":") {
 					f, _ := os.OpenFile("/etc/syswarden/lists/syswarden_blacklist.ipv4", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)

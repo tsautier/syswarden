@@ -1,3 +1,10 @@
+# Release v3.51.5
+
+## FIXED
+- **HA Cluster Network Binding**: Fixed a critical parser fragility in the High Availability TLS configuration reader (`ha_api.go`) that caused silent binding failures on the listening port (e.g. `62026`). The config parser is now fully immune to trailing spaces, `\r` line endings from hybrid Windows/Linux environments, and variable quote encapsulation. Added a failsafe default to guarantee the correct port is always exposed.
+
+---
+
 # Release v3.51.4
 
 ## UPDATED
