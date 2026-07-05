@@ -1,3 +1,9 @@
+# Release v3.50.5
+
+## ADDED
+- **GitOps Auto-Versioning CI/CD**: Migrated the legacy local PowerShell release script into a fully autonomous GitHub Actions workflow (`auto-versioning.yml`). The version bumping process (Patch, Minor, Major, Upgrade) is now dynamically orchestrated upon push to the `main` branch based on the commit message prefix, ensuring absolute consistency across all core components.
+---
+
 # Release v3.50.4
 
 ## FIXED
