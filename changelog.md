@@ -1,4 +1,4 @@
-# Release v3.51.3
+# Release v3.51.4
 
 ## UPDATED
 - **Documentation**: Updated `README.md` and `Deployment-Tutorial.md` to fully reflect the new Zero-Touch TLS P2P API architecture for High Availability clustering, removing all legacy references to SSH ports and passwordless keys.
