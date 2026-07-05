@@ -173,7 +173,7 @@ func monitorAllowedEvents(ctx context.Context, logAllowed func(ip, service, payl
 		{
 			tail -F /var/log/auth.log /var/log/nginx/access.log /var/log/apache2/access.log /var/log/httpd/access_log /var/log/secure /var/log/messages 2>/dev/null &
 			if command -v journalctl &> /dev/null; then
-				journalctl -u ssh -u sshd -f -n 0 2>/dev/null &
+				journalctl -t sshd -f -n 0 2>/dev/null &
 			fi
 			wait
 		}

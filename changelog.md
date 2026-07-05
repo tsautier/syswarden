@@ -1,3 +1,10 @@
+# Release v3.51.2
+
+## FIXED
+- **SSH Socket Activation Compatibility**: Fixed a critical bug in the telemetry worker (`worker.go`) where it failed to capture successful SSH logins on modern distributions utilizing socket-activated SSH (like Alma Linux 10+ and Ubuntu 24.04+). Migrated the `journalctl` query from `-u sshd` (Systemd unit matching) to `-t sshd` (Syslog Identifier matching) to ensure comprehensive session logging regardless of the underlying ephemeral `sshd@<id>.service` naming scheme.
+
+---
+
 # Release v3.51.1
 
 ## ADDED
