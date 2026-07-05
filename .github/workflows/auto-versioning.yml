@@ -49,12 +49,12 @@ jobs:
           # --- PATH CONFIGURATION ---
           $GitRepoPath = $env:GITHUB_WORKSPACE
           $TargetFiles = @(
-              Join-Path $GitRepoPath "src/core/syswarden-cli/pkg/system/upgrade.go",
-              Join-Path $GitRepoPath "src/core/syswarden-tui/main.go",
-              Join-Path $GitRepoPath "src/core/syswarden-cli/cmd/install.go",
-              Join-Path $GitRepoPath "src/core/syswarden-cli/config/default.go",
-              Join-Path $GitRepoPath "src/core/syswarden-cli/pkg/integration/webhook.go",
-              Join-Path $GitRepoPath "src/core/syswarden-core/webhook/discord.go"
+              (Join-Path $GitRepoPath "src/core/syswarden-cli/pkg/system/upgrade.go")
+              (Join-Path $GitRepoPath "src/core/syswarden-tui/main.go")
+              (Join-Path $GitRepoPath "src/core/syswarden-cli/cmd/install.go")
+              (Join-Path $GitRepoPath "src/core/syswarden-cli/config/default.go")
+              (Join-Path $GitRepoPath "src/core/syswarden-cli/pkg/integration/webhook.go")
+              (Join-Path $GitRepoPath "src/core/syswarden-core/webhook/discord.go")
           )
           
           # --- EXTRACT CURRENT VERSION ---

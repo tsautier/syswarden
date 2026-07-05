@@ -2,6 +2,9 @@
 
 ## ADDED
 - **GitOps Auto-Versioning CI/CD**: Migrated the legacy local PowerShell release script into a fully autonomous GitHub Actions workflow (`auto-versioning.yml`). The version bumping process (Patch, Minor, Major, Upgrade) is now dynamically orchestrated upon push to the `main` branch based on the commit message prefix, ensuring absolute consistency across all core components.
+
+## FIXED
+- **CI/CD Pipeline Syntax Error**: Fixed a critical PowerShell 7 array instantiation error within `auto-versioning.yml` that previously caused the `Join-Path` command to fail (`Cannot convert 'System.Object[]' to the type 'System.String'`) on Ubuntu runners during path generation.
 ---
 
 # Release v3.50.4
