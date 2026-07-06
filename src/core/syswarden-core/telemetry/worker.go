@@ -517,13 +517,24 @@ func getSystemStats() SystemData {
 	haStatus := "SKIPPED"
 	haEnabled := false
 	haPort := "62026"
-	if b, err := os.ReadFile("/etc/syswarden/syswarden.conf"); err == nil {
+	configPath := "/opt/syswarden/syswarden-auto.conf"
+	if runtime.GOOS == "freebsd" {
+		configPath = "/usr/local/etc/syswarden-auto.conf"
+	}
+	if b, err := os.ReadFile(configPath); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
 			if strings.HasPrefix(line, "SYSWARDEN_HA_ENABLED=") {
-				haEnabled = strings.TrimSpace(strings.Split(line, "=")[1]) == "true"
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					val := strings.ToLower(strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'")))
+					haEnabled = val == "y"
+				}
 			}
 			if strings.HasPrefix(line, "SYSWARDEN_HA_PEER_PORT=") {
-				haPort = strings.TrimSpace(strings.Split(line, "=")[1])
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					haPort = strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'"))
+				}
 			}
 		}
 	}

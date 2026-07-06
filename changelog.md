@@ -1,3 +1,10 @@
+# Release v3.52.1
+
+## FIXED
+- **TUI HA-CLUSTER Telemetry Status**: Fixed a configuration parsing bug where `syswarden-core` checked for the obsolete `/etc/syswarden/syswarden.conf` path and strictly expected the boolean `"true"`. The daemon now correctly parses `/opt/syswarden/syswarden-auto.conf` (or `/usr/local/etc/...` on FreeBSD), securely stripping quotes and validating against `"y"`. This instantly resolves the issue where the High Availability module was falsely reported as `SKIPPED` despite being fully active on cluster nodes.
+
+---
+
 # Release v3.52.0
 
 ## ADDED
