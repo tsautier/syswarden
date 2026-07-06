@@ -1,3 +1,10 @@
+# Release v3.51.6
+
+## FIXED
+- **Telemetry & Live Alerts Formatting**: Cleaned up the raw payload display in `syswarden alerts` (for both TUI and non-interactive text modes) to maintain consistent formatting. The L7 WAAP alerts (`BANNED`, `DETECTED`, `SHADOW-ALERT`) no longer append the raw log line, matching the clean structure of the network layer alerts. The native extraction of protocol/port metadata and SSH usernames remains fully functional.
+
+---
+
 # Release v3.51.5
 
 ## FIXED
