@@ -1,3 +1,10 @@
+# Release v3.52.2
+
+## FIXED
+- **Threat Intel Engine**: Fixed a logic bug where configuring `SYSWARDEN_LIST_CHOICE=4` (none) would still trigger the mirror latency benchmark and download Data-Shield blocklists, followed by OSINT feeds. The engine now correctly enforces the "zero-list" posture by completely skipping all downloads for option `4`. Additionally, option `3` (custom URL) correctly bypasses the download of OSINT feeds, ensuring strict adherence to the specified data sources.
+
+---
+
 # Release v3.52.1
 
 ## FIXED
