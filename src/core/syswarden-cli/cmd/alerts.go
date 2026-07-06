@@ -163,28 +163,18 @@ func streamWAF(app *tview.Application, table *tview.Table) {
 		switch wafEvent.Action {
 		case "ALLOWED":
 			info := "SERVICE: " + wafEvent.Jail
-			if wafEvent.Payload != "" {
-				if wafEvent.Jail == "sshd" {
-					match := regexp.MustCompile(`Accepted (?:password|publickey) for (\S+) from`).FindStringSubmatch(wafEvent.Payload)
-					if len(match) > 1 {
-						info += " | " + match[1]
-					}
-				} else {
-					info += " | " + wafEvent.Payload
+			if wafEvent.Payload != "" && wafEvent.Jail == "sshd" {
+				match := regexp.MustCompile(`Accepted (?:password|publickey) for (\S+) from`).FindStringSubmatch(wafEvent.Payload)
+				if len(match) > 1 {
+					info += " | " + match[1]
 				}
 			}
 			addRow(app, table, date, "SYSWARDEN WAF", "ALLOWED", wafEvent.IP, info, tcell.ColorGreen, tcell.ColorGreen)
 		case "SHADOW-ALERT":
 			info := "JAIL: " + wafEvent.Jail
-			if wafEvent.Payload != "" {
-				info += " | " + wafEvent.Payload
-			}
 			addRow(app, table, date, "INSIDER THREAT", "SHADOW-ALERT", wafEvent.IP, info, tcell.ColorOrange, tcell.ColorOrange)
 		case "DETECTED":
 			info := "JAIL: " + wafEvent.Jail
-			if wafEvent.Payload != "" {
-				info += " | " + wafEvent.Payload
-			}
 			addRow(app, table, date, "SYSWARDEN WAF", "DETECTED", wafEvent.IP, info, tcell.ColorYellow, tcell.ColorYellow)
 		default:
 			info := "JAIL: " + wafEvent.Jail
@@ -198,8 +188,6 @@ func streamWAF(app *tview.Application, table *tview.Table) {
 					} else if m := protoRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
 						info += " | PROTO: " + m[1]
 					}
-				} else {
-					info += " | " + wafEvent.Payload
 				}
 			}
 			addRow(app, table, date, "SYSWARDEN WAF", "BANNED", wafEvent.IP, info, tcell.ColorPurple, tcell.ColorRed)
@@ -306,23 +294,19 @@ func streamWAFText() {
 		switch wafEvent.Action {
 		case "ALLOWED":
 			info := "SERVICE: " + wafEvent.Jail
-			if wafEvent.Payload != "" {
-				if wafEvent.Jail == "sshd" {
-					match := regexp.MustCompile(`Accepted (?:password|publickey) for (\S+) from`).FindStringSubmatch(wafEvent.Payload)
-					if len(match) > 1 {
-						info += " | " + match[1]
-					}
-				} else {
-					info += " | " + wafEvent.Payload
+			if wafEvent.Payload != "" && wafEvent.Jail == "sshd" {
+				match := regexp.MustCompile(`Accepted (?:password|publickey) for (\S+) from`).FindStringSubmatch(wafEvent.Payload)
+				if len(match) > 1 {
+					info += " | " + match[1]
 				}
 			}
 			fmt.Printf("[%s] [SYSWARDEN L7] [ALLOWED] %s -> %s\n", date, wafEvent.IP, info)
 		case "SHADOW-ALERT":
 			info := "JAIL: " + wafEvent.Jail
-			if wafEvent.Payload != "" {
-				info += " | " + wafEvent.Payload
-			}
 			fmt.Printf("[%s] [INSIDER THREAT] [SHADOW-ALERT] %s -> %s\n", date, wafEvent.IP, info)
+		case "DETECTED":
+			info := "JAIL: " + wafEvent.Jail
+			fmt.Printf("[%s] [SYSWARDEN L7] [DETECTED] %s -> %s\n", date, wafEvent.IP, info)
 		default:
 			info := "JAIL: " + wafEvent.Jail
 			if wafEvent.Payload != "" {
@@ -335,8 +319,6 @@ func streamWAFText() {
 					} else if m := protoRegex.FindStringSubmatch(wafEvent.Payload); len(m) > 1 {
 						info += " | PROTO: " + m[1]
 					}
-				} else {
-					info += " | " + wafEvent.Payload
 				}
 			}
 			fmt.Printf("[%s] [SYSWARDEN L7] [BANNED] %s -> %s\n", date, wafEvent.IP, info)
