@@ -276,6 +276,9 @@ func DownloadFeeds(mirrorURL, customURL6, listChoice, geoCodes, asnList, geoAllo
 	switch listChoice {
 	case "4":
 		fmt.Println("Downloading Threat Intel IPv4 Blocklist... SKIPPED (Option 4 'none')")
+		// Clean up existing threat intel files to ensure Zero-Trust or 'none' posture is strictly enforced
+		_ = os.Remove("/etc/syswarden/lists/syswarden_threatintel.ipv4")
+		_ = os.Remove("/etc/syswarden/lists/syswarden_threatintel.ipv6")
 	case "3":
 		fmt.Printf("Downloading Custom Threat Intel IPv4 Blocklist... ")
 		dataShieldUrl := strings.TrimRight(mirrorURL, "/")

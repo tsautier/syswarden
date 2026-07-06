@@ -1,3 +1,11 @@
+# Release v3.52.3
+
+## FIXED
+- **Firewall Engine**: Fixed a critical bug in Zero-Trust mode where outbound traffic was completely blocked. The Zero-Trust verification rule has been moved from the `ingress` hook to the `input` and `forward` hooks (after stateful connection tracking), allowing the server to natively receive response packets for outbound requests while strictly dropping unauthorized new inbound connections.
+- **Threat Intel Engine**: Fixed an issue where the TUI displayed a phantom count of 115,000 blocked IPs when selecting `SYSWARDEN_LIST_CHOICE=4` or `3` after a previous full installation. The engine now natively clears pre-existing Threat Intel IPv4/IPv6 files from disk when these postures are selected, ensuring the telemetry remains perfectly synchronized with the zero-list policy.
+
+---
+
 # Release v3.52.2
 
 ## FIXED

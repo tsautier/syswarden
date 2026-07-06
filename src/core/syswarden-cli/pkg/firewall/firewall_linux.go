@@ -83,13 +83,6 @@ func ApplyPolicies() error {
 		_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_asn6 drop\n")
 	}
 
-	// ZERO-TRUST MODE: Drop everything that is not in the Zero-Trust allowed GEO/ASN list
-	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
-		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
-		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed drop\n")
-		_, _ = nftRules.WriteString("\t\tip6 saddr != @syswarden_zt_allowed6 limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
-		_, _ = nftRules.WriteString("\t\tip6 saddr != @syswarden_zt_allowed6 drop\n")
-	}
 	_, _ = nftRules.WriteString("\t}\n}\n\n")
 
 	// 3.5. INET Table (L3/L4) for Docker & Internal Routing Protection
@@ -123,6 +116,14 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\t\ttcp flags & (fin|syn|rst|psh|ack|urg) == 0 counter drop\n")
 	_, _ = nftRules.WriteString("\t\ttcp flags & (fin|syn|rst|psh|ack|urg) == fin|psh|urg counter drop\n")
 	_, _ = nftRules.WriteString("\t\ttcp flags & (fin|syn|rst|ack) != syn ct state new counter drop\n")
+
+	// ZERO-TRUST MODE: Drop everything that is not in the Zero-Trust allowed GEO/ASN list
+	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
+		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed drop\n")
+		_, _ = nftRules.WriteString("\t\tip6 saddr != @syswarden_zt_allowed6 limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
+		_, _ = nftRules.WriteString("\t\tip6 saddr != @syswarden_zt_allowed6 drop\n")
+	}
 
 	// Dynamically allow explicitly opened ports
 	tcpPorts, udpPorts := GetOpenPorts()
