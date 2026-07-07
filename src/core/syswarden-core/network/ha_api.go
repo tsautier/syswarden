@@ -180,8 +180,25 @@ func StartHAServer(fwManager firewall.Manager) {
 
 			log.Printf("[HA Cluster] Received %d banned IPs from peer %s", len(payload.IPs), remoteIP)
 
+			// Read current state to prevent duplicates
+			existingIPs := make(map[string]bool)
+			if content, err := os.ReadFile("/etc/syswarden/lists/syswarden_blacklist.ipv4"); err == nil {
+				for _, l := range strings.Split(string(content), "\n") {
+					existingIPs[strings.TrimSpace(l)] = true
+				}
+			}
+			if content, err := os.ReadFile("/etc/syswarden/lists/syswarden_blacklist.ipv6"); err == nil {
+				for _, l := range strings.Split(string(content), "\n") {
+					existingIPs[strings.TrimSpace(l)] = true
+				}
+			}
+
 			for _, ip := range payload.IPs {
 				_ = fwManager.Ban(ip)
+
+				if existingIPs[ip] {
+					continue
+				}
 
 				// Also persist locally to blocklist
 				if !strings.Contains(ip, ":") {

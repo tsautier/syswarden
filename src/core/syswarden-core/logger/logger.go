@@ -5,12 +5,37 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"syswarden-core/telemetry"
 	"syswarden-core/webhook"
 )
+
+// persistBanToDisk safely appends an IP to the persistent blocklist avoiding duplicates
+func persistBanToDisk(ip string) {
+	file := "/etc/syswarden/lists/syswarden_blacklist.ipv4"
+	if strings.Contains(ip, ":") {
+		file = "/etc/syswarden/lists/syswarden_blacklist.ipv6"
+	}
+
+	// Duplicate check (prevent syncing redundant IPs)
+	if content, err := os.ReadFile(file); err == nil {
+		lines := strings.Split(string(content), "\n")
+		for _, l := range lines {
+			if strings.TrimSpace(l) == ip {
+				return // IP already exists
+			}
+		}
+	}
+
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
+	if err == nil {
+		_, _ = f.WriteString(ip + "\n")
+		_ = f.Close()
+	}
+}
 
 type Logger struct {
 	file *os.File
@@ -54,6 +79,8 @@ func (l *Logger) Error(msg string, err error) {
 func (l *Logger) LogBan(ip, jail, payload string) {
 	telemetry.ReportAbuseAsync(ip, jail)
 	go webhook.SendBanAlert(ip, jail, "WAF Drop (L7)")
+	go persistBanToDisk(ip)
+
 	if l.file == nil {
 		return
 	}

@@ -1,3 +1,10 @@
+# Release v3.52.6
+
+## FIXED
+- **WAF Auto-Bans Persistence & HA Sync**: Fixed a critical architecture bug where locally detected WAF and CATCH-ALL bans were injected natively into Netlink/Nftables (RAM) but were never persisted to the disk blocklist (`syswarden_blacklist`). This prevented them from surviving reboots, broke the TUI telemetry (which read 0), and prevented the High Availability (HA) Cluster from synchronizing local detections to peers. Local bans are now properly and atomically persisted with duplicate checking to guarantee cluster symmetry and telemetry accuracy.
+
+---
+
 # Release v3.52.5
 
 ## UPDATED
