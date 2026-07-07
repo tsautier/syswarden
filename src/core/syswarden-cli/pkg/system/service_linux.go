@@ -104,7 +104,7 @@ ProtectSystem=full
 ProtectHome=yes
 NoNewPrivileges=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/syswarden /var/log/syswarden /run /opt/syswarden
+ReadWritePaths=/var/lib/syswarden /var/log/syswarden /run /opt/syswarden /etc/syswarden/lists
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE CAP_FOWNER
 
 [Install]

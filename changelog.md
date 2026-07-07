@@ -1,3 +1,10 @@
+# Release v3.52.7
+
+## FIXED
+- **SystemD ProtectSystem Override**: Fixed a severe orchestration issue where systemd's `ProtectSystem=full` directive silently blocked `syswarden-core` from persisting bans to `/etc/syswarden/lists/`. The daemon installer now properly whitelists the directory in `ReadWritePaths`, unlocking full High-Availability synchronization and instantaneous L7 telemetry feedback.
+
+---
+
 # Release v3.52.6
 
 ## FIXED
