@@ -69,6 +69,14 @@ SYSWARDEN_BRUTEFORCE_WINDOW="60"
 # SYSWARDEN natively blocks and traces any connection attempt to these ports as a malicious Lateral Movement.
 SYSWARDEN_HONEYPORTS="6379,23"
 
+# --- Local Network & L2 Protection ---
+# Enable OSI Layer 2 ARP Spoofing Prevention
+SYSWARDEN_ENABLE_L2="y"
+# Enable 10req/sec ARP Flood limits
+SYSWARDEN_ARP_PROTECT="y"
+# Enable Local LAN Mode to save RAM by skipping global OSINT downloads
+SYSWARDEN_LAN_MODE="n"
+
 # --- OS Hardening ---
 # y = Enable, n = Disable (Strict restrictions for privileged groups & Cron. Recommended for NEW servers only)
 SYSWARDEN_HARDENING="y"
