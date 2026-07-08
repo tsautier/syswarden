@@ -40,6 +40,11 @@ SYSWARDEN_WHITELIST_INFRA="y"
 # Extremely useful for CI/CD, Ansible, or Cloud-init deployments to prevent admin lock-out.
 SYSWARDEN_WHITELIST_IPS=""
 
+# --- SaaS Monitors Auto-Whitelist ---
+# y = Enable dynamic whitelisting for verified monitoring services (BetterStack, UptimeRobot, etc.)
+# Highly recommended to prevent false positive bans triggered by frequent health checks.
+SYSWARDEN_ALLOW_SAAS_MONITORS="y"
+
 # --- WireGuard Management VPN ---
 # y = Enable, n = Disable
 SYSWARDEN_ENABLE_WG="n"

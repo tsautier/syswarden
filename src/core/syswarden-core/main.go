@@ -57,6 +57,10 @@ func main() {
 	var wg sync.WaitGroup
 	telemetry.StartWorker(ctx, &wg, fwManager, telemetryLogger.LogAllowed, telemetryLogger.LogBan, telemetryLogger.LogShadowAlert)
 
+	// Start SaaS Monitors Downloader
+	saasDownloader := network.NewSaasMonitorDownloader(telemetryLogger)
+	saasDownloader.Start()
+
 	// Start L7 WAAP Analytics Engine (Heuristic & Bruteforce)
 	waapEngine := network.NewWAAPEngine(fwManager, telemetryLogger)
 	waapEngine.Start()
