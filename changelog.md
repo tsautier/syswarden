@@ -1,3 +1,10 @@
+# Release v3.52.10
+
+## UPDATED
+- **Code Hygiene**: Executed comprehensive `go fmt` across the `syswarden-cli/pkg/network` module to strip invisible trailing whitespaces in `sync.go`, enforcing strict Go styling guidelines and standardizing code formatting.
+
+---
+
 # Release v3.52.9
 
 ## UPDATED

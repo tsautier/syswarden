@@ -53,7 +53,7 @@ func SyncHAPeer() error {
 
 	for _, peerIP := range peerIPs {
 		fmt.Printf("[INFO] Starting HA Sync to Peer %s:%s...\n", peerIP, peerPort)
-		
+
 		apiUrl := fmt.Sprintf("https://%s:%s/ha/sync", peerIP, peerPort)
 
 		// 1. Get remote blocklist
@@ -62,7 +62,7 @@ func SyncHAPeer() error {
 			fmt.Printf("[ERROR] HA Peer unreachable at %s:%s: %v\n", peerIP, peerPort, err)
 			continue
 		}
-		
+
 		if resp.StatusCode != http.StatusOK {
 			fmt.Printf("[ERROR] HA Peer rejected the connection. HTTP Status: %d\n", resp.StatusCode)
 			_ = resp.Body.Close()
