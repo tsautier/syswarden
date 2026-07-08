@@ -45,7 +45,7 @@ func (s *SaasMonitorDownloader) isSaasAllowed() bool {
 	if err != nil {
 		return true // Default to true for safety
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -98,7 +98,7 @@ func (s *SaasMonitorDownloader) downloadList(url string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
