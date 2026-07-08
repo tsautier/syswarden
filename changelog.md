@@ -1,3 +1,10 @@
+# Release v3.52.11
+
+## UPDATED
+- **Telemetry Risk Vectors**: Completely wired the Global Risk Vectors telemetry in `syswarden-core`. The TUI and external SIEM components now accurately report real-time aggregated metrics for `Exploits`, `Brute-Force`, `Recon`, `DDoS`, and `Abuse/Spam` categories based on actual WAF detections and bans, replacing legacy UI mock placeholders.
+
+---
+
 # Release v3.52.10
 
 ## UPDATED

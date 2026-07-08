@@ -923,7 +923,22 @@ func getWAFStats() WAF {
 		})
 	}
 
-	waf.RiskRadar = []int{10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 50, 20} // Mock radar data
+	var cExploit, cBrute, cRecon, cDdos, cAbuse int
+	for jail, count := range jailCounts {
+		j := strings.ToLower(jail)
+		if strings.Contains(j, "bruteforce") || strings.Contains(j, "ssh") || strings.Contains(j, "auth") || strings.Contains(j, "login") {
+			cBrute += count
+		} else if strings.Contains(j, "scan") || strings.Contains(j, "recon") {
+			cRecon += count
+		} else if strings.Contains(j, "flood") || strings.Contains(j, "dos") || strings.Contains(j, "ddos") {
+			cDdos += count
+		} else if strings.Contains(j, "spam") || strings.Contains(j, "abuse") || strings.Contains(j, "bot") || strings.Contains(j, "crawler") {
+			cAbuse += count
+		} else {
+			cExploit += count
+		}
+	}
+	waf.RiskRadar = []int{cExploit, cBrute, cRecon, cDdos, cAbuse}
 
 	cachedWAF = waf
 	lastWAFFetch = time.Now()
