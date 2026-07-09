@@ -14,7 +14,8 @@ on:
 
 
 # OSSF Scorecard: Enforce strict read-all at the top-level
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   hygiene:
