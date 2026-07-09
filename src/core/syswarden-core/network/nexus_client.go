@@ -120,8 +120,7 @@ func runNexusClientLoop(ctx context.Context) error {
 				log.Printf("[NEXUS-SYNC] Failed to send telemetry: %v", err)
 				continue
 			}
-			resp.Body.Close()
-			
+			_ = resp.Body.Close()
 			if resp.StatusCode == 200 {
 				log.Println("[NEXUS-SYNC] Telemetry successfully pushed to Nexus API.")
 			} else {
