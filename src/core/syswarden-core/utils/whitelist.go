@@ -50,6 +50,7 @@ func refreshCache() {
 		"/etc/syswarden/lists/syswarden_whitelist.ipv4",
 		"/etc/syswarden/lists/syswarden_whitelist.ipv6",
 		"/etc/syswarden/lists/syswarden_saas_monitors.ipv4",
+		"/etc/syswarden/lists/syswarden_saas_monitors.ipv6",
 	}
 
 	for _, file := range files {

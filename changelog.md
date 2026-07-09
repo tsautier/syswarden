@@ -1,3 +1,10 @@
+# Release v3.55.1
+
+## FIXED
+- **SaaS Monitors Whitelisting**: Fixed a major bug where `BetterStack` IPv4/IPv6 ranges downloaded by the background updater were properly whitelisted by the software L7 WAF engine but never injected into the hardware L3 firewall tables (`nftables`/`pf`). Under strict Geo-IP configurations, SaaS monitors were dropped indiscriminately at Layer 3. The daemon now seamlessly injects both IPv4 and correctly separated IPv6 SaaS subsets directly into the kernel data paths.
+
+---
+
 # Release v3.55.0
 
 ## ADDED

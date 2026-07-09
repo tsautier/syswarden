@@ -84,11 +84,29 @@ func (s *SaasMonitorDownloader) fetchMonitors() {
 		return
 	}
 
-	// Write to file
-	targetFile := "/etc/syswarden/lists/syswarden_saas_monitors.ipv4"
-	err := os.WriteFile(targetFile, []byte(strings.Join(allIps, "\n")), 0644)
+	var ipv4List, ipv6List []string
+	for _, ip := range allIps {
+		if strings.Contains(ip, ":") {
+			ipv6List = append(ipv6List, ip)
+		} else {
+			ipv4List = append(ipv4List, ip)
+		}
+	}
+
+	// Write IPv4
+	targetFileV4 := "/etc/syswarden/lists/syswarden_saas_monitors.ipv4"
+	err := os.WriteFile(targetFileV4, []byte(strings.Join(ipv4List, "\n")), 0644)
 	if err != nil {
-		s.logger.Error("Failed to write SaaS monitors IP list", err)
+		s.logger.Error("Failed to write SaaS monitors IPv4 list", err)
+	}
+
+	// Write IPv6
+	if len(ipv6List) > 0 {
+		targetFileV6 := "/etc/syswarden/lists/syswarden_saas_monitors.ipv6"
+		err = os.WriteFile(targetFileV6, []byte(strings.Join(ipv6List, "\n")), 0644)
+		if err != nil {
+			s.logger.Error("Failed to write SaaS monitors IPv6 list", err)
+		}
 	}
 }
 

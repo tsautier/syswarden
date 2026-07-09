@@ -261,7 +261,10 @@ func ApplyPolicies() error {
 	_ = exec.Command("sysctl", "-w", "net.core.wmem_max=8388608").Run()
 	_ = exec.Command("sysctl", "-w", "net.core.rmem_max=8388608").Run()
 
-	whitelistFiles := []string{"/etc/syswarden/lists/syswarden_whitelist.ipv4"}
+	whitelistFiles := []string{
+		"/etc/syswarden/lists/syswarden_whitelist.ipv4",
+		"/etc/syswarden/lists/syswarden_saas_monitors.ipv4",
+	}
 	var ztFiles []string
 	var ztFiles6 []string
 
@@ -289,7 +292,10 @@ func ApplyPolicies() error {
 	}
 
 	populateSet(ctx, whitelistFiles, "syswarden_whitelist")
-	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_whitelist.ipv6"}, "syswarden_whitelist6")
+	populateSet(ctx, []string{
+		"/etc/syswarden/lists/syswarden_whitelist.ipv6",
+		"/etc/syswarden/lists/syswarden_saas_monitors.ipv6",
+	}, "syswarden_whitelist6")
 
 	if len(ztFiles) > 0 {
 		populateSet(ctx, ztFiles, "syswarden_zt_allowed")

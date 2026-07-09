@@ -27,7 +27,22 @@ func ApplyPolicies() error {
 	var pfRules strings.Builder
 
 	// Setup Tables for IP Sets (Loading files directly)
-	_, _ = pfRules.WriteString("table <syswarden_whitelist> persist file \"/etc/syswarden/lists/syswarden_whitelist.ipv4\" file \"/etc/syswarden/lists/syswarden_whitelist.ipv6\"\n")
+	pfWhitelist := []string{
+		"/etc/syswarden/lists/syswarden_whitelist.ipv4",
+		"/etc/syswarden/lists/syswarden_whitelist.ipv6",
+	}
+	if fileExists("/etc/syswarden/lists/syswarden_saas_monitors.ipv4") {
+		pfWhitelist = append(pfWhitelist, "/etc/syswarden/lists/syswarden_saas_monitors.ipv4")
+	}
+	if fileExists("/etc/syswarden/lists/syswarden_saas_monitors.ipv6") {
+		pfWhitelist = append(pfWhitelist, "/etc/syswarden/lists/syswarden_saas_monitors.ipv6")
+	}
+
+	pfRules.WriteString("table <syswarden_whitelist> persist")
+	for _, f := range pfWhitelist {
+		pfRules.WriteString(fmt.Sprintf(" file \"%s\"", f))
+	}
+	pfRules.WriteString("\n")
 
 	var ztFilesStr strings.Builder
 	if config.GlobalConfig.GeoAllowed != "" {
