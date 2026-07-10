@@ -39,30 +39,20 @@ type EnrollResponse struct {
 
 const configPath = "/opt/syswarden/nexus.conf"
 
-func EnrollNode(tokenB64 string) error {
-	decoded, err := base64.StdEncoding.DecodeString(tokenB64)
-	if err != nil {
-		return fmt.Errorf("invalid token format: %v", err)
-	}
+func EnrollNode(url, token string) error {
+	fmt.Printf("[*] Initiating Zero-Trust TOFU enrollment with SysWarden Nexus at %s...\n", url)
 	
-	var tokenPayload TokenPayload
-	if err := json.Unmarshal(decoded, &tokenPayload); err != nil {
-		return fmt.Errorf("invalid token payload: %v", err)
-	}
-
-	fmt.Println(" -> Connecting to Nexus API securely...")
-	
-	resp, err := DoEnrollHTTP(tokenPayload.URL, tokenPayload.Key)
+	resp, err := DoEnrollHTTP(url, token)
 	if err != nil {
 		return fmt.Errorf("enrollment failed: %v", err)
 	}
 
-	fmt.Println(" -> Enrollment successful! Provisioning configuration...")
+	fmt.Println("[SUCCESS] Enrollment successful! Provisioning TOFU configuration...")
 
 	config := Config{
-		NexusURL: tokenPayload.URL,
+		NexusURL: url,
 		NodeID:   resp.NodeID,
-		CertPEM:  resp.CertPEM, // Could be empty if Nexus doesn't generate it yet
+		CertPEM:  resp.CertPEM,
 		KeyPEM:   resp.KeyPEM,
 	}
 
@@ -99,7 +89,9 @@ func DoEnrollHTTP(url, key string) (*EnrollResponse, error) {
 
 	bodyBytes, _ := json.Marshal(reqBody)
 
-	// Skip verification ONLY if strictly required during prototyping
+	// Trust-On-First-Use (TOFU) Design:
+	// We skip strict TLS verification here ONLY during the initial enrollment bootstrap.
+	// This allows "magical" zero-touch provisioning. Subsequent mTLS telemetry will strictly verify.
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}

@@ -220,6 +220,7 @@ func ApplyPolicies() error {
 	// DNS Exfiltration Protection (L3/L4)
 	_, _ = pfRules.WriteString(fmt.Sprintf("block drop out log quick on %s proto udp to any port 53 length > 512\n", activeIf))
 
+	_, _ = pfRules.WriteString(fmt.Sprintf("pass out quick on %s proto tcp to any port 8443 keep state\n", activeIf)) // Ensure outbound mTLS to Nexus is explicitly allowed
 	_, _ = pfRules.WriteString(fmt.Sprintf("pass out on %s all keep state\n", activeIf))
 
 	// Write pf configuration to temporary file

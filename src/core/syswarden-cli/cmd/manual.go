@@ -40,7 +40,8 @@ var manualCmd = &cobra.Command{
 		fmt.Printf("  %sunwhitelist%s   : Removes an IP from the hardware whitelist.\n", ansiGreen, ansiReset)
 		fmt.Printf("  %scheck%s         : Checks if an IP is currently banned or whitelisted.\n", ansiGreen, ansiReset)
 		fmt.Printf("  %supdate%s        : Automatically updates the SYSWARDEN core binary and daemon.\n", ansiGreen, ansiReset)
-		fmt.Printf("  %supdate-feeds%s  : Forces an immediate refresh of the Data-Shield Threat Intelligence feeds.\n\n", ansiGreen, ansiReset)
+		fmt.Printf("  %supdate-feeds%s  : Forces an immediate refresh of the Data-Shield Threat Intelligence feeds.\n", ansiGreen, ansiReset)
+		fmt.Printf("  %senroll%s        : Securely attaches this node to a centralized SysWarden Nexus console.\n\n", ansiGreen, ansiReset)
 
 		// 2. Configuration Options
 		fmt.Printf("%s--- 2. CONFIGURATION FILE (syswarden-auto.conf) ---%s\n", ansiYellow, ansiReset)

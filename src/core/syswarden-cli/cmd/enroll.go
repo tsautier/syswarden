@@ -9,16 +9,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	enrollURL   string
+	enrollToken string
+)
+
 var enrollCmd = &cobra.Command{
-	Use:   "enroll [token]",
+	Use:   "enroll",
 	Short: "Enroll this node into a SysWarden Nexus fleet",
 	Long:  `Securely enroll this server into a centralized SysWarden Nexus management console using a bootstrap token.`,
-	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		token := args[0]
+		if enrollURL == "" || enrollToken == "" {
+			fmt.Fprintf(os.Stderr, "[ERROR] Both --url and --token are required.\n")
+			cmd.Usage()
+			os.Exit(1)
+		}
 
 		fmt.Println("[*] Initiating Zero-Trust mTLS enrollment with SysWarden Nexus...")
-		err := nexus.EnrollNode(token)
+		err := nexus.EnrollNode(enrollURL, enrollToken)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[ERROR] Enrollment failed: %v\n", err)
 			os.Exit(1)
@@ -30,5 +38,9 @@ var enrollCmd = &cobra.Command{
 }
 
 func init() {
+	enrollCmd.Flags().StringVar(&enrollURL, "url", "", "The SysWarden Nexus API URL (e.g. https://127.0.0.1:8443)")
+	enrollCmd.Flags().StringVar(&enrollToken, "token", "", "The Nexus enrollment token")
+	enrollCmd.MarkFlagRequired("url")
+	enrollCmd.MarkFlagRequired("token")
 	rootCmd.AddCommand(enrollCmd)
 }

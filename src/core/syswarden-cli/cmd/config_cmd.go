@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"syswarden-cli/config"
+	"syswarden-cli/pkg/nexus"
 
 	"github.com/spf13/cobra"
 )
@@ -71,6 +72,30 @@ var configCmd = &cobra.Command{
 
 		fmt.Println("[SUCCESS] Configuration is valid.")
 		fmt.Println("[INFO] To apply the new configuration, please run: sudo syswarden install")
+
+		// TUI Enrollment Prompt
+		fmt.Print("\nWould you like to enroll this node to a SysWarden Nexus server? (y/n): ")
+		var enrollChoice string
+		fmt.Scanln(&enrollChoice)
+		if enrollChoice == "y" || enrollChoice == "Y" {
+			fmt.Print("Enter Nexus API URL (e.g., https://127.0.0.1:8443): ")
+			var enrollURL string
+			fmt.Scanln(&enrollURL)
+
+			fmt.Print("Enter Nexus Enrollment Token: ")
+			var enrollToken string
+			fmt.Scanln(&enrollToken)
+
+			if enrollURL != "" && enrollToken != "" {
+				fmt.Println("[*] Initiating Zero-Trust mTLS enrollment with SysWarden Nexus...")
+				err := nexus.EnrollNode(enrollURL, enrollToken)
+				if err != nil {
+					fmt.Printf("[ERROR] Enrollment failed: %v\n", err)
+				}
+			} else {
+				fmt.Println("[WARNING] Enrollment skipped due to empty URL or Token.")
+			}
+		}
 	},
 }
 

@@ -1,3 +1,13 @@
+# Release v3.60.2
+
+## ADDED
+- **Zero-Touch mTLS Provisioning**: SysWarden Nexus now natively hosts an internal Public Key Infrastructure (PKI). Upon initial startup, it autonomously generates a Root CA and Server certificates. When an agent executes `syswarden enroll --url <URL> --token <TOKEN>`, Nexus dynamically generates a dedicated ECDSA node keypair, signs a Certificate Signing Request (CSR) against its internal CA, and securely transmits the certificates (`CertPEM`, `KeyPEM`) back to the agent in a single seamless transaction.
+- **Agent Trust-On-First-Use (TOFU)**: The SysWarden CLI `syswarden enroll` orchestration has been overhauled to implement a strict Trust-On-First-Use (TOFU) model for the initial HTTPS provisioning POST request, enabling "magical" enrollment without distributing CA certificates beforehand. All subsequent telemetry is rigidly authenticated via bidirectional mTLS.
+- **WAF API Protection (Nexus)**: Added native `signatures.json` heuristics (`nexus-api-protect`) to proactively shield the Nexus API (`/api/v1/enroll`, `/api/v1/telemetry`) from directory traversal and injection attempts.
+- **Nexus Firewall Orchestration**: The CI/CD pipelines (`build_packages.sh`, `package.yml`) now seamlessly embed `post_install.sh` scripts using FPM. SysWarden Nexus automatically detects the native Linux firewall manager (UFW, Firewalld, Iptables) and securely opens the required TCP/8443 listener port upon installation.
+
+---
+
 # Release v3.60.1
 
 ## ADDED

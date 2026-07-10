@@ -198,6 +198,7 @@ func ApplyPolicies() error {
 
 	// DNS Exfiltration Protection (L3/L4)
 	_, _ = nftRules.WriteString("\tchain data_leak_protect {\n\t\ttype filter hook output priority 0; policy accept;\n")
+	_, _ = nftRules.WriteString("\t\ttcp dport 8443 accept\n") // Ensure outbound mTLS to Nexus is explicitly allowed
 	_, _ = nftRules.WriteString("\t\tudp dport 53 udp length > 512 counter log prefix \"[SYSWARDEN-DNS-EXFIL] \" drop\n")
 	_, _ = nftRules.WriteString("\t}\n\n")
 
