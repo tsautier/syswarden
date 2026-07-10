@@ -76,15 +76,15 @@ var configCmd = &cobra.Command{
 		// TUI Enrollment Prompt
 		fmt.Print("\nWould you like to enroll this node to a SysWarden Nexus server? (y/n): ")
 		var enrollChoice string
-		fmt.Scanln(&enrollChoice)
+		_, _ = fmt.Scanln(&enrollChoice)
 		if enrollChoice == "y" || enrollChoice == "Y" {
 			fmt.Print("Enter Nexus API URL (e.g., https://127.0.0.1:8443): ")
 			var enrollURL string
-			fmt.Scanln(&enrollURL)
+			_, _ = fmt.Scanln(&enrollURL)
 
 			fmt.Print("Enter Nexus Enrollment Token: ")
 			var enrollToken string
-			fmt.Scanln(&enrollToken)
+			_, _ = fmt.Scanln(&enrollToken)
 
 			if enrollURL != "" && enrollToken != "" {
 				fmt.Println("[*] Initiating Zero-Trust mTLS enrollment with SysWarden Nexus...")

@@ -1,3 +1,10 @@
+# Release v3.60.4
+
+## FIXED
+- **Code Hygiene (golangci-lint)**: Addressed multiple unchecked error warnings (`errcheck`) in `syswarden-cli/cmd/config_cmd.go` and `syswarden-cli/cmd/enroll.go` to ensure a strict clean build in the CI/CD pipeline.
+
+---
+
 # Release v3.60.3
 
 ## FIXED

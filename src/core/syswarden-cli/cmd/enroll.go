@@ -21,7 +21,7 @@ var enrollCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if enrollURL == "" || enrollToken == "" {
 			fmt.Fprintf(os.Stderr, "[ERROR] Both --url and --token are required.\n")
-			cmd.Usage()
+			_ = cmd.Usage()
 			os.Exit(1)
 		}
 
@@ -40,7 +40,7 @@ var enrollCmd = &cobra.Command{
 func init() {
 	enrollCmd.Flags().StringVar(&enrollURL, "url", "", "The SysWarden Nexus API URL (e.g. https://127.0.0.1:8443)")
 	enrollCmd.Flags().StringVar(&enrollToken, "token", "", "The Nexus enrollment token")
-	enrollCmd.MarkFlagRequired("url")
-	enrollCmd.MarkFlagRequired("token")
+	_ = enrollCmd.MarkFlagRequired("url")
+	_ = enrollCmd.MarkFlagRequired("token")
 	rootCmd.AddCommand(enrollCmd)
 }
