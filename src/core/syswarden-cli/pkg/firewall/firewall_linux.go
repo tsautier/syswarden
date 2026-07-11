@@ -120,6 +120,9 @@ func ApplyPolicies() error {
 
 	// ZERO-TRUST MODE: Drop everything that is not in the Zero-Trust allowed GEO/ASN list
 	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+		// LAN Bypass: Explicitly allow internal RFC1918 subnets to bypass Zero-Trust
+		_, _ = nftRules.WriteString("\t\tip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } accept\n")
+
 		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
 		_, _ = nftRules.WriteString("\t\tip saddr != @syswarden_zt_allowed drop\n")
 		_, _ = nftRules.WriteString("\t\tip6 saddr != @syswarden_zt_allowed6 limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ZERO-TRUST] \"\n")
@@ -145,6 +148,32 @@ func ApplyPolicies() error {
 		}
 		if _, err := exec.LookPath("iptables"); err == nil {
 			_ = exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", config.GlobalConfig.HAPeerPort, "-j", "ACCEPT").Run()
+		}
+	}
+
+	// Trust LAN Subnets in OS wrappers (RFC1918 by default + Custom)
+	validLANSubnets := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+	if config.GlobalConfig.LANSubnets != "" {
+		subnets := strings.Split(config.GlobalConfig.LANSubnets, " ")
+		for _, s := range subnets {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				validLANSubnets = append(validLANSubnets, s)
+			}
+		}
+	}
+
+	// Apply all trusted subnets to UFW, Firewalld and iptables
+	for _, s := range validLANSubnets {
+		if _, err := exec.LookPath("ufw"); err == nil {
+			_ = exec.Command("ufw", "allow", "from", s).Run()
+		}
+		if _, err := exec.LookPath("firewall-cmd"); err == nil {
+			_ = exec.Command("firewall-cmd", "--add-source="+s, "--zone=trusted", "--permanent").Run()
+			_ = exec.Command("firewall-cmd", "--reload").Run()
+		}
+		if _, err := exec.LookPath("iptables"); err == nil {
+			_ = exec.Command("iptables", "-I", "INPUT", "-s", s, "-j", "ACCEPT").Run()
 		}
 	}
 
@@ -190,6 +219,13 @@ func ApplyPolicies() error {
 		ports := strings.ReplaceAll(config.GlobalConfig.HoneyPorts, " ", "")
 		_, _ = fmt.Fprintf(&nftRules, "\t\tct state new tcp dport { %s } limit rate 5/second burst 10 packets log prefix \"[SYSWARDEN-HONEYPORT] \"\n", ports)
 		_, _ = fmt.Fprintf(&nftRules, "\t\tct state new tcp dport { %s } counter drop\n", ports)
+	}
+
+	// Explicitly trust internal enterprise subnets (Bypass Catch-All)
+	_, _ = nftRules.WriteString("\t\t# Explicitly trust internal enterprise subnets (Bypass Catch-All)\n")
+	_, _ = nftRules.WriteString("\t\tip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } accept\n")
+	if len(validLANSubnets) > 0 {
+		_, _ = fmt.Fprintf(&nftRules, "\t\tip saddr { %s } accept\n", strings.Join(validLANSubnets, ", "))
 	}
 
 	// CATCH-ALL Default Deny Logging

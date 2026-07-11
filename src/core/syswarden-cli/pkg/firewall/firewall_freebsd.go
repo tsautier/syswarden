@@ -150,6 +150,8 @@ func ApplyPolicies() error {
 
 	// ZERO-TRUST MODE: Drop everything that is not in the Zero-Trust allowed GEO/ASN list
 	if config.GlobalConfig.GeoAllowed != "" || config.GlobalConfig.ASNAllowed != "" {
+		// LAN Bypass: Always allow internal subnets (RFC1918) to bypass Zero-Trust Catch-All
+		_, _ = pfRules.WriteString("pass in quick from { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 } to any\n")
 		_, _ = pfRules.WriteString(fmt.Sprintf("block drop in quick on %s from ! <syswarden_zt_allowed> to any\n", activeIf))
 	}
 
@@ -212,6 +214,22 @@ func ApplyPolicies() error {
 	if config.GlobalConfig.LANMode && config.GlobalConfig.HoneyPorts != "" {
 		ports := strings.ReplaceAll(config.GlobalConfig.HoneyPorts, " ", "")
 		_, _ = pfRules.WriteString(fmt.Sprintf("block drop in log quick on %s proto tcp to any port { %s }\n", activeIf, ports))
+	}
+
+	// Explicitly trust internal enterprise subnets (Bypass Catch-All)
+	if config.GlobalConfig.LANSubnets != "" {
+		subnets := strings.Split(config.GlobalConfig.LANSubnets, " ")
+		var validLANSubnets []string
+		for _, s := range subnets {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				validLANSubnets = append(validLANSubnets, s)
+			}
+		}
+		if len(validLANSubnets) > 0 {
+			_, _ = pfRules.WriteString("# Explicitly trust internal enterprise subnets (Bypass Catch-All)\n")
+			_, _ = pfRules.WriteString(fmt.Sprintf("pass in quick on %s from { %s } to any keep state\n", activeIf, strings.Join(validLANSubnets, ", ")))
+		}
 	}
 
 	// Default drop catch-all for incoming

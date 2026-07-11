@@ -50,6 +50,10 @@ SYSWARDEN_SECURE_WIPE_CONF="n"
 # Highly recommended to prevent server lockout when using aggressive ASN/GEO blocklists.
 SYSWARDEN_WHITELIST_INFRA="y"
 
+# Explicitly trust internal enterprise subnets to bypass L4 Catch-All rules.
+# Space-separated list in CIDR format (Default: RFC1918)
+SYSWARDEN_LAN_SUBNETS="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+
 # Space-separated list of IPv4/IPv6 addresses to automatically whitelist (e.g., "192.***.*.*** 203.*.***.***")
 # Extremely useful for CI/CD, Ansible, or Cloud-init deployments to prevent admin lock-out.
 SYSWARDEN_WHITELIST_IPS=""

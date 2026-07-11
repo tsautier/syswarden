@@ -134,6 +134,8 @@ func ParseConfig(filepath string) error {
 			GlobalConfig.ArpProtect = parseBool(val)
 		case "SYSWARDEN_LAN_MODE":
 			GlobalConfig.LANMode = parseBool(val)
+		case "SYSWARDEN_LAN_SUBNETS":
+			GlobalConfig.LANSubnets = val
 		}
 	}
 

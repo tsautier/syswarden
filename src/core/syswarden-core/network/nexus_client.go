@@ -113,7 +113,7 @@ func runNexusClientLoop(ctx context.Context) error {
 				"reason":     "Simulated Agent Alert",
 				"payload":    "GET /?id=1' OR '1'='1",
 			}
-			
+
 			body, _ := json.Marshal(payload)
 			resp, err := client.Post(conf.NexusURL+"/api/v1/telemetry", "application/json", bytes.NewBuffer(body))
 			if err != nil {

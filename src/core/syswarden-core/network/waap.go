@@ -95,6 +95,7 @@ func discoverLogs() []string {
 		"/var/log/caddy":    {"/var/log/caddy/access.log", "/var/log/caddy/*.log"},
 		"/var/log/traefik":  {"/var/log/traefik/access.log", "/var/log/traefik/*.log"},
 		"/var/log/lighttpd": {"/var/log/lighttpd/access.log"},
+		"/var/log":          {"/var/log/secure", "/var/log/auth.log"},
 	}
 
 	for dir, patterns := range autoPaths {
@@ -162,13 +163,13 @@ func (w *WAAPEngine) tailFile(filepath string) {
 
 	log.Printf("[WAAP Engine] Actively tailing %s", filepath)
 
-	// A simple but fast regex for IPv4 extraction
-	ipRegex := regexp.MustCompile(`^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})`)
+	// A simple but fast regex for IPv4 extraction (No anchor so it can match SSH logs)
+	ipRegex := regexp.MustCompile(`([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})`)
 
 	// Signatures mappings (Zero-overhead substring matching)
 	// Keys are the substring to look for, values are the Jail Name
-	sigSQLi := []string{"union select", "select * from", "waitfor delay", "1=1--", "%27", "pg_sleep", "xp_cmdshell"}
-	sigXSS := []string{"<script", "javascript:", "onerror=", "eval(", "onload="}
+	sigSQLi := []string{"union select", "union+select", "union%20select", "select * from", "waitfor delay", "1=1--", "%27", "pg_sleep", "xp_cmdshell"}
+	sigXSS := []string{"<script", "%3cscript", "javascript:", "onerror=", "eval(", "onload="}
 	sigLFI := []string{"../../../", "..%2f", "/etc/passwd", "c:\\windows", "%c0%af", "php://filter", "php://input"}
 	sigRCE := []string{"${jndi:", ";\\wget ", "|curl ", "${lower:jndi}", "/bin/sh -c"}
 	sigSSRF := []string{"169.254.169.254", "metadata.google.internal", "/metadata/instance"}
@@ -256,8 +257,10 @@ func (w *WAAPEngine) tailFile(filepath string) {
 			continue
 		}
 
-		// 2. Fallback to heuristic analysis (401, 403, 404 thresholds)
-		if strings.Contains(text, "\" 401 ") || strings.Contains(text, "\" 403 ") || strings.Contains(text, "\" 404 ") {
+		// 2. Fallback to heuristic analysis (401, 403, 404 thresholds and SSH bruteforce)
+		if strings.Contains(text, "\" 401 ") || strings.Contains(text, "\" 403 ") || strings.Contains(text, "\" 404 ") ||
+			strings.Contains(lowerText, "failed password") || strings.Contains(lowerText, "invalid user") ||
+			strings.Contains(lowerText, "connection closed by authenticating user") || strings.Contains(lowerText, "preauth") {
 			w.recordFailure(ip, text)
 		}
 	}

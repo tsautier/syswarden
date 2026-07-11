@@ -1,3 +1,13 @@
+# Release v3.61.0
+
+## UPDATED
+- Implemented generic RFC1918 (LAN) bypasses for the Catch-All and Zero-Trust firewall rules across native nftables, PF (FreeBSD), firewalld, ufw, and iptables wrappers, guaranteeing internal enterprise subnets are always trusted.
+
+## FIXED
+- Resolved an issue in the WAAP engine where L7 signatures for SQLi and XSS failed to match URL-encoded payloads (e.g., `+`, `%20`, `%3c`) injected into raw HTTP access logs. Added comprehensive URL-encoded attack vectors to `sigSQLi` and `sigXSS` lists.
+
+---
+
 # Release v3.60.6
 
 ## FIXED

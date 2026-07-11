@@ -52,6 +52,7 @@ type Config struct {
 	EnableL2            bool
 	ArpProtect          bool
 	LANMode             bool
+	LANSubnets          string
 }
 
 // GlobalConfig is the singleton instance holding the parsed configuration
