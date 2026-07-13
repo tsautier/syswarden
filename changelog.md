@@ -1,4 +1,4 @@
-# Release v3.62.0
+# Release v3.62.1
 
 ## ADDED
 - **Interactive TUI Unban**: Added the ability to interactively unban IPs directly from the `syswarden tui` dashboard. Selecting an IP in the "WAF ALLOWED/BANNED IP REGISTRY" table and pressing the `u` hotkey triggers a secure modal confirmation, executing the native unban safely in the background.

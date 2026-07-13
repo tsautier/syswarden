@@ -11,6 +11,7 @@ import (
 
 type Manager interface {
 	Ban(ip string) error
+	Unban(ip string) error
 	Name() string
 }
 
@@ -35,6 +36,22 @@ func (m *PFManager) Ban(ip string) error {
 	}
 
 	log.Printf("[Firewall-PF] Successfully injected IP: %s into banned_ips table", ip)
+	return nil
+}
+
+func (m *PFManager) Unban(ip string) error {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	// Delete IP from the banned_ips table dynamically
+	cmd := exec.Command("pfctl", "-t", "banned_ips", "-T", "delete", ip)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to remove IP natively from pf: %s (err: %w)", string(out), err)
+	}
+
+	log.Printf("[Firewall-PF] Successfully unbanned IP: %s from banned_ips table", ip)
 	return nil
 }
 

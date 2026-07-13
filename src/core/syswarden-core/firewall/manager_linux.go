@@ -16,6 +16,7 @@ import (
 
 type Manager interface {
 	Ban(ip string) error
+	Unban(ip string) error
 	Name() string
 }
 
@@ -42,6 +43,26 @@ func (m *FallbackManager) Ban(ip string) error {
 	if cmd != nil {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to run firewall fallback command (%s): %w", m.backend, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("unsupported fallback backend")
+}
+
+func (m *FallbackManager) Unban(ip string) error {
+	var cmd *exec.Cmd
+	switch m.backend {
+	case "ufw":
+		cmd = exec.Command(m.cmdPath, "delete", "deny", "from", ip)
+	case "firewalld":
+		cmd = exec.Command(m.cmdPath, "--remove-rich-rule", fmt.Sprintf("rule family=ipv4 source address=%s drop", ip))
+	case "iptables":
+		cmd = exec.Command(m.cmdPath, "-D", "INPUT", "-s", ip, "-j", "DROP")
+	}
+
+	if cmd != nil {
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to run firewall fallback unban command (%s): %w", m.backend, err)
 		}
 		return nil
 	}
@@ -125,6 +146,67 @@ func (m *NftablesManager) Ban(ip string) error {
 	}
 
 	log.Printf("[Firewall-Netlink] Successfully injected IP: %s with 30d timeout", ip)
+	return nil
+}
+
+func (m *NftablesManager) Unban(ip string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	var errs []string
+
+	if parsedIP.To4() != nil {
+		if m.inetSet != nil {
+			err := m.conn.SetDeleteElements(m.inetSet, []nftables.SetElement{
+				{Key: parsedIP.To4()},
+			})
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("inet: %v", err))
+			}
+		}
+
+		if m.netdevSet != nil {
+			err := m.conn.SetDeleteElements(m.netdevSet, []nftables.SetElement{
+				{Key: parsedIP.To4()},
+			})
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("netdev: %v", err))
+			}
+		}
+	} else {
+		if m.inetSet6 != nil {
+			err := m.conn.SetDeleteElements(m.inetSet6, []nftables.SetElement{
+				{Key: parsedIP.To16()},
+			})
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("inet6: %v", err))
+			}
+		}
+
+		if m.netdevSet6 != nil {
+			err := m.conn.SetDeleteElements(m.netdevSet6, []nftables.SetElement{
+				{Key: parsedIP.To16()},
+			})
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("netdev6: %v", err))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to remove IP natively: %s", strings.Join(errs, ", "))
+	}
+
+	if err := m.conn.Flush(); err != nil {
+		return fmt.Errorf("failed to flush netlink buffer: %w", err)
+	}
+
+	log.Printf("[Firewall-Netlink] Successfully unbanned IP: %s", ip)
 	return nil
 }
 
