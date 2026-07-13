@@ -476,6 +476,8 @@ func contains(slice []string, val string) bool {
 
 func populateSet(ctx context.Context, filepaths []string, setName string) {
 	var chunk []string
+	isIPv6Set := strings.HasSuffix(setName, "6")
+
 	for _, filepath := range filepaths {
 		content, err := os.ReadFile(filepath)
 		if err != nil {
@@ -484,8 +486,19 @@ func populateSet(ctx context.Context, filepaths []string, setName string) {
 		lines := strings.Split(string(content), "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
-			if line != "" {
-				chunk = append(chunk, line)
+			// Ignore empty lines and comments
+			if line != "" && !strings.HasPrefix(line, "#") {
+				valid, isIPv4 := IsValidIP(line)
+				if valid {
+					// Strictly enforce address family mapping
+					if isIPv6Set && !isIPv4 {
+						chunk = append(chunk, line)
+					} else if !isIPv6Set && isIPv4 {
+						chunk = append(chunk, line)
+					} else {
+						fmt.Printf("[WARNING] Ignored incompatible IP family %s for set %s\n", line, setName)
+					}
+				}
 			}
 		}
 	}

@@ -1,3 +1,10 @@
+# Release v3.61.7
+
+## FIXED
+- **Firewall Reliability (nftables)**: Fixed an issue on Linux (`nftables`) where an IPv6 address accidentally present in an IPv4 whitelist or blacklist file would cause a fatal `Address family for hostname not supported` crash during the atomic `nft -f` transaction. The `populateSet` logic now strictly parses and enforces the correct IP address family for each generated firewall set (e.g. `syswarden_whitelist` vs `syswarden_whitelist6`), safely ignoring incompatible entries and emitting a `[WARNING]` log.
+
+---
+
 # Release v3.61.6
 
 ## FIXED
