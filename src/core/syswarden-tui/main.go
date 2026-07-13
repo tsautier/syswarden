@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -182,6 +183,39 @@ func main() {
 		SetTitle(" [white]❖ WAF ALLOWED/BANNED IP REGISTRY (L4/L7)[-] ").
 		SetBorderColor(tcell.ColorBlue)
 
+	// Layout Setup
+	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(headerText, 8, 1, false).
+		AddItem(metricsFlex, 6, 1, false).
+		AddItem(midFlex, 8, 1, false).
+		AddItem(bannedTable, 0, 3, true)
+
+	bannedTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Rune() == 'u' || event.Rune() == 'U' {
+			row, _ := bannedTable.GetSelection()
+			if row > 0 {
+				cell := bannedTable.GetCell(row, 0)
+				if cell != nil {
+					ip := cell.Text
+					if ip != "" && ip != "Registry is empty. Architecture is secure." {
+						modal := tview.NewModal().
+							SetText(fmt.Sprintf("[white]Do you want to delete / unban IP %s from the list?[-]", ip)).
+							AddButtons([]string{"y", "n"}).
+							SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+								if buttonLabel == "y" {
+									_ = exec.Command("syswarden", "unblock", ip).Run()
+									app.QueueUpdateDraw(func() { readDataAndUpdate() })
+								}
+								app.SetRoot(mainFlex, true)
+							})
+						app.SetRoot(modal, false)
+					}
+				}
+			}
+		}
+		return event
+	})
+
 	// Ensure safe exiting via Q/Ctrl+C
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -194,13 +228,6 @@ func main() {
 		}
 		return event
 	})
-
-	// Layout Setup
-	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(headerText, 8, 1, false).
-		AddItem(metricsFlex, 6, 1, false).
-		AddItem(midFlex, 8, 1, false).
-		AddItem(bannedTable, 0, 3, true)
 
 	// Background Poller
 	wg.Add(1)

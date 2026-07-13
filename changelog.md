@@ -1,3 +1,11 @@
+# Release v3.62.0
+
+## ADDED
+- **Interactive TUI Unban**: Added the ability to interactively unban IPs directly from the `syswarden tui` dashboard. Selecting an IP in the "WAF ALLOWED/BANNED IP REGISTRY" table and pressing the `u` hotkey triggers a secure modal confirmation, executing the native unban safely in the background.
+- **HA Cluster Unban Synchronization**: Fully synchronized the unban mechanism across the High Availability cluster. Using `syswarden unblock` or the new TUI hotkey instantly purges the IP locally and broadcasts a Zero-Trust `DELETE /ha/sync` TLS payload to all configured HA peers, ensuring real-time cluster symmetry for whitelisting.
+
+---
+
 # Release v3.61.7
 
 ## FIXED

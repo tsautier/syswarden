@@ -130,3 +130,52 @@ func SyncHAPeer() error {
 
 	return nil
 }
+
+func SyncHAUnban(ips []string) error {
+	if !config.GlobalConfig.HAEnabled {
+		return nil
+	}
+	if len(ips) == 0 {
+		return nil
+	}
+
+	peerIPsStr := strings.ReplaceAll(config.GlobalConfig.HAPeerIP, ",", " ")
+	peerIPs := strings.Fields(peerIPsStr)
+	peerPort := config.GlobalConfig.HAPeerPort
+	if len(peerIPs) == 0 {
+		return nil
+	}
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	payload := HASyncPayload{IPs: ips}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	for _, peerIP := range peerIPs {
+		apiUrl := fmt.Sprintf("https://%s:%s/ha/sync", peerIP, peerPort)
+
+		req, err := http.NewRequest(http.MethodDelete, apiUrl, bytes.NewBuffer(jsonData))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Printf("[ERROR] Failed to push UNBAN to HA Peer %s: %v\n", peerIP, err)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("[ERROR] HA Peer %s rejected the UNBAN push. HTTP Status: %d\n", peerIP, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+
+	return nil
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syswarden-cli/pkg/network"
 	"syswarden-cli/pkg/system"
 )
 
@@ -174,6 +175,10 @@ func RemoveFromBlocklist(ip string) error {
 		return err
 	}
 	fmt.Printf("[SUCCESS] IP %s removed from blocklist.\n", ip)
+
+	// Synchronize UNBAN to HA cluster
+	_ = network.SyncHAUnban([]string{ip})
+
 	return ApplyPolicies()
 }
 

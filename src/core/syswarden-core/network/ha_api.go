@@ -220,6 +220,49 @@ func StartHAServer(fwManager firewall.Manager) {
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 			return
 		}
+		if r.Method == http.MethodDelete {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "Bad Request", http.StatusBadRequest)
+				return
+			}
+
+			var payload HASyncPayload
+			if err := json.Unmarshal(body, &payload); err != nil {
+				http.Error(w, "Invalid JSON", http.StatusBadRequest)
+				return
+			}
+
+			log.Printf("[HA Cluster] Received %d IPs to UNBAN from peer %s", len(payload.IPs), remoteIP)
+
+			for _, ip := range payload.IPs {
+				_ = fwManager.Unban(ip)
+
+				file := "/etc/syswarden/lists/syswarden_blacklist.ipv4"
+				if strings.Contains(ip, ":") {
+					file = "/etc/syswarden/lists/syswarden_blacklist.ipv6"
+				}
+
+				if content, err := os.ReadFile(file); err == nil {
+					lines := strings.Split(string(content), "\n")
+					var newLines []string
+					for _, l := range lines {
+						if strings.TrimSpace(l) != ip && strings.TrimSpace(l) != "" {
+							newLines = append(newLines, l)
+						}
+					}
+					if len(newLines) > 0 {
+						_ = os.WriteFile(file, []byte(strings.Join(newLines, "\n")+"\n"), 0640)
+					} else {
+						_ = os.WriteFile(file, []byte(""), 0640)
+					}
+				}
+			}
+
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
 
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
