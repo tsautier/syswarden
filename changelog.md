@@ -1,3 +1,10 @@
+# Release v3.70.2
+
+## FIXED
+- **TUI Responsiveness**: Fixed a critical thread lockup in `syswarden-tui` that caused the dashboard to freeze entirely when context-switching to an unreachable P2P HA-Cluster node. Network operations (fetching telemetry) are now fully asynchronous and no longer block the main `tview` UI drawing thread.
+
+---
+
 # Release v3.70.1
 
 ## FIXED

@@ -219,7 +219,7 @@ func main() {
 							SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 								if buttonLabel == "y" {
 									_ = exec.Command("syswarden", "unblock", ip).Run()
-									app.QueueUpdateDraw(func() { readDataAndUpdate() })
+									go readDataAndUpdate()
 								}
 								app.SetRoot(mainFlex, true)
 							})
@@ -302,7 +302,7 @@ func showP2PMenu(mainFlex *tview.Flex) {
 		AddItem("ACTUAL NODE", "Supervise local telemetry", '1', func() {
 			activeNodeIP = "local"
 			app.SetRoot(mainFlex, true)
-			app.QueueUpdateDraw(func() { readDataAndUpdate() })
+			go readDataAndUpdate()
 		}).
 		AddItem("NODES HA-CLUSTERS", "Explore and supervise HA peer nodes", '2', func() {
 			showNodesList(mainFlex)
@@ -405,7 +405,7 @@ func showNodesList(mainFlex *tview.Flex) {
 				if cell != nil && cell.Text != "" {
 					activeNodeIP = cell.Text
 					app.SetRoot(mainFlex, true)
-					app.QueueUpdateDraw(func() { readDataAndUpdate() })
+					go readDataAndUpdate()
 				}
 			}
 			return nil
