@@ -1,3 +1,10 @@
+# Release v3.70.7
+
+## FIXED
+- **Plumber Compliance**: Fixed about the new naming convention "plumber-compliance to plumber-report"
+
+---
+
 # Release v3.70.6
 
 ## FIXED
