@@ -269,10 +269,10 @@ Starting with v3.51.0, the HA synchronization uses a **"Zero-Touch" TLS P2P API*
 ```bash
 sudo syswarden config
 ```
-2. Enable HA and add your peer IP(s) (comma-separated) and the custom TLS port:
+2. Enable HA, add your peer IP(s) (can be comma or space-separated), and set the custom TLS port:
 ```conf
 SYSWARDEN_HA_ENABLE="true"
-SYSWARDEN_HA_PEERS="172.x.x.x,10.x.x.x"
+SYSWARDEN_HA_PEER_IP="172.16.0.1, 10.0.0.2 10.0.0.3"
 SYSWARDEN_HA_PORT="62026"
 ```
 3. Reload the configuration instantly:
