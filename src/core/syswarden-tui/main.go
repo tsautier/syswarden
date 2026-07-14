@@ -250,6 +250,8 @@ func main() {
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'q' || event.Rune() == 'Q' || event.Key() == tcell.KeyCtrlC {
 			cancel()
+			app.EnableMouse(false)
+			time.Sleep(50 * time.Millisecond)
 			app.Stop()
 			return nil
 		}
@@ -323,6 +325,8 @@ func showP2PMenu(mainFlex *tview.Flex) {
 			showHotkeysMenu(mainFlex)
 		}).
 		AddItem("EXIT", "Quit SysWarden TUI", '4', func() {
+			app.EnableMouse(false)
+			time.Sleep(50 * time.Millisecond)
 			app.Stop()
 		})
 

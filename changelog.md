@@ -1,3 +1,10 @@
+# Release v3.70.6
+
+## FIXED
+- **TUI Mouse Artifacts**: Fixed a display bug in `syswarden-tui` where a stray asterisk (`*`) was left behind on the terminal prompt upon exiting. Explicitly disabled mouse tracking sequences and added a buffer flush delay before terminating `tcell`.
+
+---
+
 # Release v3.70.5
 
 ## FIXED
