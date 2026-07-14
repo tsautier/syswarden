@@ -280,7 +280,7 @@ func getHAPeers() []string {
 	if err != nil {
 		return peers
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -371,7 +371,7 @@ func showNodesList(mainFlex *tview.Flex) {
 						table.SetCell(r, 4, tview.NewTableCell("-").SetTextColor(tcell.ColorDarkGray))
 						return
 					}
-					defer resp.Body.Close()
+					defer func() { _ = resp.Body.Close() }()
 
 					if resp.StatusCode == 200 {
 						var status struct {
@@ -427,7 +427,7 @@ func readDataAndUpdate() {
 		if reqErr != nil {
 			err = reqErr
 		} else {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode == 200 {
 				bytes, err = io.ReadAll(resp.Body)
 			} else {

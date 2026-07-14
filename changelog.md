@@ -1,3 +1,9 @@
+# Release v3.70.1
+
+## FIXED
+- **Code Hygiene (golangci-lint)**: Fixed `errcheck` linter errors in the P2P TUI codebase by properly explicitly discarding unhandled `file.Close()` and `resp.Body.Close()` return values inside deferred operations.
+---
+
 # Release v3.70.0
 
 ## ADDED
