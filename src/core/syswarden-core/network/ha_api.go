@@ -267,6 +267,94 @@ func StartHAServer(fwManager firewall.Manager) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	})
 
+	mux.HandleFunc("/ha/telemetry", func(w http.ResponseWriter, r *http.Request) {
+		remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		allowed := false
+		for _, peer := range cfg.PeerIPs {
+			if peer == remoteIP {
+				allowed = true
+				break
+			}
+		}
+
+		if !allowed {
+			log.Printf("[HA Cluster] Unauthorized telemetry attempt dropped from %s", remoteIP)
+			http.Error(w, "Forbidden: IP not in cluster", http.StatusForbidden)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		content, err := os.ReadFile("/var/lib/syswarden/ui/data.json")
+		if err != nil {
+			http.Error(w, "Telemetry unavailable", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(content)
+	})
+
+	mux.HandleFunc("/ha/status", func(w http.ResponseWriter, r *http.Request) {
+		remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		allowed := false
+		for _, peer := range cfg.PeerIPs {
+			if peer == remoteIP {
+				allowed = true
+				break
+			}
+		}
+
+		if !allowed {
+			http.Error(w, "Forbidden: IP not in cluster", http.StatusForbidden)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		hostname, _ := os.Hostname()
+		if hostname == "" {
+			hostname = "unknown"
+		}
+
+		// Very lightweight OS check from /etc/os-release
+		osName := "Linux"
+		if osRelease, err := os.ReadFile("/etc/os-release"); err == nil {
+			for _, line := range strings.Split(string(osRelease), "\n") {
+				if strings.HasPrefix(line, "PRETTY_NAME=") {
+					osName = strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), "\"")
+					break
+				}
+			}
+		}
+
+		statusData := map[string]string{
+			"hostname": hostname,
+			"os":       osName,
+			"version":  "v3.70.0", // syswarden current core version
+			"status":   "online",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(statusData)
+	})
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%s", cfg.Port),
 		Handler: mux,

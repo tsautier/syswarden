@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"sort"
@@ -19,6 +23,17 @@ import (
 
 const DataFile = "/var/lib/syswarden/ui/data.json"
 const SysWardenVersion = "v3.62.1"
+
+var (
+	activeNodeIP = "local"
+	haPeerPort   = "62026"
+	httpClient   = &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+)
 
 // --- DATA MODELS ---
 type Service struct {
@@ -226,6 +241,10 @@ func main() {
 			app.Stop()
 			return nil
 		}
+		if event.Key() == tcell.KeyEscape {
+			showP2PMenu(mainFlex)
+			return nil
+		}
 		return event
 	})
 
@@ -253,11 +272,177 @@ func main() {
 	wg.Wait()
 }
 
+// --- P2P MESH TUI LOGIC ---
+
+func getHAPeers() []string {
+	var peers []string
+	file, err := os.Open("/opt/syswarden/syswarden-auto.conf")
+	if err != nil {
+		return peers
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "SYSWARDEN_HA_PEER_IP=") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				ips := strings.TrimSpace(strings.Trim(strings.TrimSpace(parts[1]), "\"'"))
+				ips = strings.ReplaceAll(ips, ",", " ")
+				peers = append(peers, strings.Fields(ips)...)
+			}
+		}
+	}
+	return peers
+}
+
+func showP2PMenu(mainFlex *tview.Flex) {
+	list := tview.NewList().
+		AddItem("ACTUAL NODE", "Supervise local telemetry", '1', func() {
+			activeNodeIP = "local"
+			app.SetRoot(mainFlex, true)
+			app.QueueUpdateDraw(func() { readDataAndUpdate() })
+		}).
+		AddItem("NODES HA-CLUSTERS", "Explore and supervise HA peer nodes", '2', func() {
+			showNodesList(mainFlex)
+		}).
+		AddItem("HOTKEYS", "Show functional hotkeys", '3', func() {
+			showHotkeysMenu(mainFlex)
+		}).
+		AddItem("EXIT", "Quit SysWarden TUI", '4', func() {
+			app.Stop()
+		})
+
+	list.SetBorder(true).
+		SetTitle(" [white]❖ P2P HA-CLUSTER MESH MENU[-] ").
+		SetBorderColor(tcell.ColorBlue)
+
+	app.SetRoot(list, true)
+}
+
+func showHotkeysMenu(mainFlex *tview.Flex) {
+	modal := tview.NewModal().
+		SetText("[white]P2P TUI HOTKEYS[-]\n\n[yellow]Esc[-]    : Open P2P HA-Cluster Menu\n[yellow]Ctrl+C[-] : Force exit TUI\n[yellow]q / Q[-]  : Quit TUI\n[yellow]u / U[-]  : Unban IP (when in ALLOWED/BANNED table)\n[yellow]Tab[-]    : Switch focus between panels\n[yellow]Enter[-]  : Select Node in HA-Cluster Explorer").
+		AddButtons([]string{"Back"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			showP2PMenu(mainFlex)
+		})
+	app.SetRoot(modal, false)
+}
+
+func showNodesList(mainFlex *tview.Flex) {
+	peers := getHAPeers()
+
+	table := tview.NewTable().
+		SetBorders(true).
+		SetSelectable(true, false).
+		SetFixed(1, 0)
+
+	table.SetBorder(true).
+		SetTitle(" [white]❖ HA-CLUSTER NODES EXPLORER[-] ").
+		SetBorderColor(tcell.ColorBlue)
+
+	table.SetCell(0, 0, tview.NewTableCell("Hostname").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+	table.SetCell(0, 1, tview.NewTableCell("IP").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+	table.SetCell(0, 2, tview.NewTableCell("OS").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+	table.SetCell(0, 3, tview.NewTableCell("Status").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+	table.SetCell(0, 4, tview.NewTableCell("Version").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+
+	if len(peers) == 0 {
+		table.SetCell(1, 0, tview.NewTableCell("No peers configured in syswarden-auto.conf").SetTextColor(tcell.ColorGray))
+	} else {
+		for i, ip := range peers {
+			row := i + 1
+			table.SetCell(row, 0, tview.NewTableCell("Probing...").SetTextColor(tcell.ColorGray))
+			table.SetCell(row, 1, tview.NewTableCell(ip).SetTextColor(tcell.ColorWhite))
+			table.SetCell(row, 2, tview.NewTableCell("...").SetTextColor(tcell.ColorGray))
+			table.SetCell(row, 3, tview.NewTableCell("[gray]WAITING[-]").SetTextColor(tcell.ColorGray))
+			table.SetCell(row, 4, tview.NewTableCell("...").SetTextColor(tcell.ColorGray))
+
+			go func(ip string, r int) {
+				resp, err := httpClient.Get(fmt.Sprintf("https://%s:%s/ha/status", ip, haPeerPort))
+
+				app.QueueUpdateDraw(func() {
+					if err != nil {
+						table.SetCell(r, 0, tview.NewTableCell("Unknown").SetTextColor(tcell.ColorDarkGray))
+						table.SetCell(r, 2, tview.NewTableCell("Unknown").SetTextColor(tcell.ColorDarkGray))
+						table.SetCell(r, 3, tview.NewTableCell("OFFLINE").SetTextColor(tcell.ColorRed))
+						table.SetCell(r, 4, tview.NewTableCell("-").SetTextColor(tcell.ColorDarkGray))
+						return
+					}
+					defer resp.Body.Close()
+
+					if resp.StatusCode == 200 {
+						var status struct {
+							Hostname string `json:"hostname"`
+							OS       string `json:"os"`
+							Version  string `json:"version"`
+							Status   string `json:"status"`
+						}
+						_ = json.NewDecoder(resp.Body).Decode(&status)
+						table.SetCell(r, 0, tview.NewTableCell(status.Hostname).SetTextColor(tcell.ColorWhite))
+						table.SetCell(r, 2, tview.NewTableCell(status.OS).SetTextColor(tcell.ColorWhite))
+						table.SetCell(r, 3, tview.NewTableCell("ONLINE").SetTextColor(tcell.ColorGreen))
+						table.SetCell(r, 4, tview.NewTableCell(status.Version).SetTextColor(tcell.ColorWhite))
+					} else {
+						table.SetCell(r, 3, tview.NewTableCell("OFFLINE").SetTextColor(tcell.ColorRed))
+					}
+				})
+			}(ip, row)
+		}
+	}
+
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			showP2PMenu(mainFlex)
+			return nil
+		}
+		if event.Key() == tcell.KeyEnter {
+			row, _ := table.GetSelection()
+			if row > 0 {
+				cell := table.GetCell(row, 1)
+				if cell != nil && cell.Text != "" {
+					activeNodeIP = cell.Text
+					app.SetRoot(mainFlex, true)
+					app.QueueUpdateDraw(func() { readDataAndUpdate() })
+				}
+			}
+			return nil
+		}
+		return event
+	})
+
+	app.SetRoot(table, true)
+}
+
 func readDataAndUpdate() {
-	bytes, err := os.ReadFile(DataFile)
+	var bytes []byte
+	var err error
+
+	if activeNodeIP == "local" {
+		bytes, err = os.ReadFile(DataFile)
+	} else {
+		resp, reqErr := httpClient.Get(fmt.Sprintf("https://%s:%s/ha/telemetry", activeNodeIP, haPeerPort))
+		if reqErr != nil {
+			err = reqErr
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				bytes, err = io.ReadAll(resp.Body)
+			} else {
+				err = fmt.Errorf("HTTP %d", resp.StatusCode)
+			}
+		}
+	}
+
 	mu.Lock()
 	if err != nil {
-		fetchError = fmt.Errorf("data unreadable: %w", err)
+		if activeNodeIP == "local" {
+			fetchError = fmt.Errorf("data unreadable: %w", err)
+		} else {
+			fetchError = fmt.Errorf("node %s unreachable: %w", activeNodeIP, err)
+		}
 		mu.Unlock()
 		app.QueueUpdateDraw(func() { refreshUI() })
 		return

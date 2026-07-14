@@ -1,3 +1,15 @@
+# Release v3.70.0
+
+## ADDED
+- **P2P HA-Cluster TUI Mesh**: SysWarden is now completely decentralized! The TUI (`syswarden tui`) features a new interactive Zero-Trust mesh overlay. Pressing `Esc` opens a new modal to explore all active HA-Cluster nodes. Selecting a node switches your local dashboard to supervise the remote node's telemetry in real-time.
+- **Dynamic HA-Status Probing**: The TUI automatically and asynchronously probes all nodes declared in `SYSWARDEN_HA_PEER_IP` to display their Hostname, OS, Version, and `ONLINE`/`OFFLINE` statuses in a dedicated explorer table.
+
+## DELETED
+- **Deprecation of SysWarden Nexus**: The Hub-and-Spoke central management server (`syswarden-nexus`) and its associated core client integration (`nexus_client.go`) have been entirely removed.
+- **Removal of mTLS Enrollment**: Removed the `syswarden enroll` command and API endpoint logic. The architecture is now strictly terminal-first and peer-to-peer.
+
+---
+
 # Release v3.62.1
 
 ## ADDED
