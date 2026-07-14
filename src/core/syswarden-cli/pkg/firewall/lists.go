@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syswarden-cli/pkg/network"
 	"syswarden-cli/pkg/system"
@@ -156,6 +157,11 @@ func AddToBlocklist(ip string) error {
 		return err
 	}
 	fmt.Printf("[SUCCESS] IP %s safely blocklisted.\n", ip)
+
+	if runtime.GOOS == "freebsd" {
+		_ = exec.Command("pfctl", "-k", ip).Run()
+	}
+
 	return ApplyPolicies()
 }
 

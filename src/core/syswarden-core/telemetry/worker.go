@@ -921,13 +921,16 @@ func getWAFStats() WAF {
 		waf.AllowedEvents = append(waf.AllowedEvents, allAllowed[i])
 	}
 
-	// Get last 50 banned IPs for display
-	start := 0
-	if len(allBans) > 50 {
-		start = len(allBans) - 50
-	}
-	// Reverse order for newest first
-	for i := len(allBans) - 1; i >= start; i-- {
+	// Get last 50 unique banned/detected IPs for display (newest first)
+	seenIPs := make(map[string]bool)
+	for i := len(allBans) - 1; i >= 0; i-- {
+		if len(waf.BannedIPs) >= 50 {
+			break
+		}
+		if seenIPs[allBans[i].IP] {
+			continue
+		}
+		seenIPs[allBans[i].IP] = true
 		waf.BannedIPs = append(waf.BannedIPs, allBans[i])
 
 		// Quick TopAttacker populate with OSINT

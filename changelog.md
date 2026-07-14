@@ -1,3 +1,11 @@
+# Release v3.70.5
+
+## FIXED
+- **Telemetry Duplication**: Deduplicated banned IPs in the `syswarden-core` telemetry registry to ensure each IP only appears once in the TUI, keeping only its latest event and preventing infinite loop log pollution.
+- **L3 Firewall (Linux)**: Fixed a critical L3 firewall bypass and infinite log loop in `nftables` by inserting blacklist drop rules before established states in the `stateful_protect` chain.
+- **L3 Firewall (FreeBSD)**: Added `pfctl` state flushing when banning IPs to instantly sever active attacker sessions, preventing the state tracking bypass in `pf`.
+---
+
 # Release v3.70.4
 
 ## FIXED

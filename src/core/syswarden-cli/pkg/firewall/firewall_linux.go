@@ -121,6 +121,13 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\t\tiifname \"lo\" accept\n")
 	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_whitelist accept\n")
 	_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_whitelist6 accept\n")
+	
+	// Enforce blacklists BEFORE established state to instantly sever active attacker sessions
+	_, _ = nftRules.WriteString("\t\tip saddr @banned_ips counter drop\n")
+	_, _ = nftRules.WriteString("\t\tip6 saddr @banned_ips6 counter drop\n")
+	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_blacklist counter drop\n")
+	_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_blacklist6 counter drop\n")
+
 	_, _ = nftRules.WriteString("\t\tct state established,related accept\n")
 	_, _ = nftRules.WriteString("\t\tct state invalid counter drop\n")
 
@@ -243,7 +250,7 @@ func ApplyPolicies() error {
 	// Protect Docker (Forward chain)
 	_, _ = nftRules.WriteString("\tchain docker_protect {\n\t\ttype filter hook forward priority -10; policy accept;\n")
 	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_whitelist accept\n")
-	_, _ = nftRules.WriteString("\t\tct state established,related accept\n")
+	_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_whitelist6 accept\n")
 	_, _ = nftRules.WriteString("\t\tip saddr @banned_ips counter drop\n")
 	_, _ = nftRules.WriteString("\t\tip daddr @banned_ips counter drop\n")
 	_, _ = nftRules.WriteString("\t\tip6 saddr @banned_ips6 counter drop\n")
@@ -252,6 +259,7 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\t\tip daddr @syswarden_blacklist counter drop\n")
 	_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_blacklist6 counter drop\n")
 	_, _ = nftRules.WriteString("\t\tip6 daddr @syswarden_blacklist6 counter drop\n")
+	_, _ = nftRules.WriteString("\t\tct state established,related accept\n")
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_geoip counter drop\n")
 	}
