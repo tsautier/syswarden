@@ -1,3 +1,10 @@
+# Release v3.70.9
+
+## FIXED
+- **SysWarden TUI**: Implement bulletproof terminal teardown and TCIFLUSH in CLI to prevent mouse artifacts on SIGINT"
+
+---
+
 # Release v3.70.8
 
 ## FIXED

@@ -4,20 +4,40 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 )
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the SYSWARDEN Enterprise Dashboard (TUI)",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Ignore SIGINT/SIGTERM in the parent so we survive if the child TUI is violently killed via Ctrl+C
+		signal.Ignore(os.Interrupt, syscall.SIGTERM)
+		defer signal.Reset(os.Interrupt, syscall.SIGTERM)
+
 		tuiCmd := exec.Command("/opt/syswarden/bin/syswarden-tui")
 		tuiCmd.Stdin = os.Stdin
 		tuiCmd.Stdout = os.Stdout
 		tuiCmd.Stderr = os.Stderr
-		if err := tuiCmd.Run(); err != nil {
-			fmt.Printf("[ERROR] Failed to start TUI: %v\n", err)
+
+		err := tuiCmd.Run()
+
+		// Forcefully disable all mouse tracking modes and ensure cursor is visible
+		fmt.Print("\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?25h")
+
+		// Small delay to allow the terminal emulator to process the mouse release
+		time.Sleep(50 * time.Millisecond)
+
+		// Flush any lingering mouse artifacts (like the '*' character) from the stdin buffer
+		_ = unix.IoctlSetInt(int(os.Stdin.Fd()), unix.TCFLSH, unix.TCIFLUSH)
+
+		if err != nil {
+			fmt.Printf("\n[ERROR] TUI exited abnormally: %v\n", err)
 			os.Exit(1)
 		}
 	},

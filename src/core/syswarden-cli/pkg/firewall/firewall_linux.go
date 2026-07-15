@@ -121,7 +121,7 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\t\tiifname \"lo\" accept\n")
 	_, _ = nftRules.WriteString("\t\tip saddr @syswarden_whitelist accept\n")
 	_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_whitelist6 accept\n")
-	
+
 	// Enforce blacklists BEFORE established state to instantly sever active attacker sessions
 	_, _ = nftRules.WriteString("\t\tip saddr @banned_ips counter drop\n")
 	_, _ = nftRules.WriteString("\t\tip6 saddr @banned_ips6 counter drop\n")
