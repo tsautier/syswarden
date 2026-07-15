@@ -245,7 +245,6 @@ func main() {
 
 	// Ensure safe exiting via Q/Ctrl+C
 	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Rune() == 'q' || event.Rune() == 'Q' || event.Key() == tcell.KeyCtrlC {
@@ -263,9 +262,7 @@ func main() {
 	})
 
 	// Background Poller
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		// First read immediately
 		readDataAndUpdate()
 		for {
@@ -280,10 +277,9 @@ func main() {
 
 	if err := app.SetRoot(mainFlex, true).EnableMouse(true).Run(); err != nil {
 		cancel()
-		wg.Wait()
 		panic(err)
 	}
-	wg.Wait()
+	cancel()
 }
 
 // --- P2P MESH TUI LOGIC ---

@@ -16,9 +16,11 @@ var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Launch the SYSWARDEN Enterprise Dashboard (TUI)",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Ignore SIGINT/SIGTERM in the parent so we survive if the child TUI is violently killed via Ctrl+C
-		signal.Ignore(os.Interrupt, syscall.SIGTERM)
-		defer signal.Reset(os.Interrupt, syscall.SIGTERM)
+		// Catch SIGINT/SIGTERM in the parent without exiting, so we survive if the child TUI is violently killed.
+		// Using Notify instead of Ignore prevents the child from inheriting SIG_IGN.
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(sigChan)
 
 		tuiCmd := exec.Command("/opt/syswarden/bin/syswarden-tui")
 		tuiCmd.Stdin = os.Stdin

@@ -1,3 +1,15 @@
+# Release v3.71.0
+
+## UPGRADED
+- **Security Updates**: Bumped standard Go dependencies to resolve CVE vulnerabilities flagged by Trivy during CI/CD security audits:
+  - Upgraded `golang.org/x/text` to `v0.39.0` across `syswarden-cli` and `syswarden-tui` to patch CVE-2026-56852 (Infinite loop on invalid UTF-8 bytes).
+  - Upgraded `golang.org/x/net` to `v0.56.0` in `syswarden-core` to patch CVE-2026-46600 (Panic when parsing invalid SVCB/HTTPS DNS RR).
+
+## FIXED
+- **SysWarden TUI**: Resolved a critical deadlock issue where the TUI could freeze on exit (`wg.Wait` blocking indefinitely on background telemetry polls) and ignore `SIGINT` signals (Ctrl+C). `syswarden-cli` wrapper now gracefully handles `SIGINT` without propagating `SIG_IGN` to child processes, guaranteeing that the terminal is always reset (`TCIFLUSH`) and artifacts (`*`) are purged regardless of how violently the TUI is killed.
+
+---
+
 # Release v3.70.9
 
 ## FIXED
