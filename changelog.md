@@ -1,3 +1,10 @@
+# Release v3.71.3
+
+## FIXED
+- **SysWarden TUI / Telemetry**: Fixed a display issue in the "TOP ATTACKERS (OSINT HISTORY)" table where the Target Port would incorrectly default to `80/443` for ICMP floods or other non-TCP/UDP attacks. The telemetry worker now dynamically parses the protocol (`PROTO=ICMP`, `ESP`, `GRE`, etc.) from the kernel payload when `DPT` (Destination Port) is absent.
+
+---
+
 # Release v3.71.2
 
 ## FIXED

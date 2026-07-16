@@ -721,11 +721,32 @@ func enrichOSINT(ip string, payload string) Attacker {
 		}
 	}
 
-	// Extract port from payload dynamically
+	// Extract port or protocol from payload dynamically
 	port := "80/443"
 	if payload != "" {
-		if m := regexp.MustCompile(`DPT=([0-9]+)`).FindStringSubmatch(payload); len(m) > 1 {
-			port = m[1]
+		if protoIdx := strings.Index(payload, "PROTO="); protoIdx != -1 {
+			protoStr := payload[protoIdx+6:]
+			if spaceIdx := strings.Index(protoStr, " "); spaceIdx != -1 {
+				protoStr = protoStr[:spaceIdx]
+			}
+			
+			if protoStr == "ICMP" || protoStr == "ICMPv6" {
+				port = protoStr
+			} else if dptIdx := strings.Index(payload, "DPT="); dptIdx != -1 {
+				dptStr := payload[dptIdx+4:]
+				if spaceIdx := strings.Index(dptStr, " "); spaceIdx != -1 {
+					dptStr = dptStr[:spaceIdx]
+				}
+				port = dptStr
+			} else {
+				port = protoStr
+			}
+		} else if dptIdx := strings.Index(payload, "DPT="); dptIdx != -1 {
+			dptStr := payload[dptIdx+4:]
+			if spaceIdx := strings.Index(dptStr, " "); spaceIdx != -1 {
+				dptStr = dptStr[:spaceIdx]
+			}
+			port = dptStr
 		}
 	}
 	att.Port = port
