@@ -122,7 +122,7 @@ jobs:
             # Inject compliance audit trail references
             echo "" >> "${NOTES_FILE}"
             echo "## COMPLIANCE & SECURITY" >> "${NOTES_FILE}"
-            echo "- Plumber Compliance Audit bundled as \`plumber-compliance.zip\`." >> "${NOTES_FILE}"
+            echo "- Plumber Report Audit bundled as \`plumber-report.zip\`." >> "${NOTES_FILE}"
             echo "- Cryptographic SBOM (SPDX) and Supply Chain Attestation (SLSA Level 3) generated and attached." >> "${NOTES_FILE}"
 
       - name: "Generate SLSA Release Attestations"
