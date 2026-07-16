@@ -1,3 +1,10 @@
+# Release v3.71.5
+
+## FIXED
+- **CLI Upgrades**: Improved the error handling for `syswarden update` when the unauthenticated GitHub API rate limit (60 requests/hour/IP) is exhausted. Instead of displaying a confusing JSON parsing error (`could not parse latest version from API`), the CLI now catches the HTTP `403 Forbidden` status and outputs a clear, human-readable rate limit warning.
+
+---
+
 # Release v3.71.4
 
 ## FIXED

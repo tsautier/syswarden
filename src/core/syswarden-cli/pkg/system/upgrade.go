@@ -59,6 +59,12 @@ func UpgradeSystem() error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("GitHub API rate limit exceeded. Please try again later or authenticate")
+	} else if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitHub API returned unexpected status: %s", resp.Status)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response body: %w", err)
