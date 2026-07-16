@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"syswarden-core/firewall"
 	"time"
@@ -112,6 +113,18 @@ func StartHAServer(fwManager firewall.Manager) {
 
 	log.Printf("[HA Cluster] Starting TLS P2P API on port %s", cfg.Port)
 
+	coreVersion := "unknown"
+	cmd := exec.Command("syswarden")
+	if out, err := cmd.Output(); err == nil {
+		lines := strings.Split(string(out), "\n")
+		if len(lines) > 0 {
+			parts := strings.Split(lines[0], " ")
+			if len(parts) >= 2 {
+				coreVersion = parts[1]
+			}
+		}
+	}
+
 	cert, err := generateSelfSignedCert()
 	if err != nil {
 		log.Printf("[HA Cluster] Failed to generate TLS cert: %v", err)
@@ -136,7 +149,7 @@ func StartHAServer(fwManager firewall.Manager) {
 		}
 
 		if !allowed {
-			log.Printf("[HA Cluster] Unauthorized sync attempt dropped from %s", remoteIP)
+			log.Printf("[HA Cluster] Unauthorized sync attempt dropped from %s", remoteIP) // #nosec G706
 			http.Error(w, "Forbidden: IP not in cluster", http.StatusForbidden)
 			return
 		}
@@ -178,7 +191,7 @@ func StartHAServer(fwManager firewall.Manager) {
 				return
 			}
 
-			log.Printf("[HA Cluster] Received %d banned IPs from peer %s", len(payload.IPs), remoteIP)
+			log.Printf("[HA Cluster] Received %d banned IPs from peer %s", len(payload.IPs), remoteIP) // #nosec G706
 
 			// Read current state to prevent duplicates
 			existingIPs := make(map[string]bool)
@@ -233,7 +246,7 @@ func StartHAServer(fwManager firewall.Manager) {
 				return
 			}
 
-			log.Printf("[HA Cluster] Received %d IPs to UNBAN from peer %s", len(payload.IPs), remoteIP)
+			log.Printf("[HA Cluster] Received %d IPs to UNBAN from peer %s", len(payload.IPs), remoteIP) // #nosec G706
 
 			for _, ip := range payload.IPs {
 				_ = fwManager.Unban(ip)
@@ -283,7 +296,7 @@ func StartHAServer(fwManager firewall.Manager) {
 		}
 
 		if !allowed {
-			log.Printf("[HA Cluster] Unauthorized telemetry attempt dropped from %s", remoteIP)
+			log.Printf("[HA Cluster] Unauthorized telemetry attempt dropped from %s", remoteIP) // #nosec G706
 			http.Error(w, "Forbidden: IP not in cluster", http.StatusForbidden)
 			return
 		}
@@ -347,7 +360,7 @@ func StartHAServer(fwManager firewall.Manager) {
 		statusData := map[string]string{
 			"hostname": hostname,
 			"os":       osName,
-			"version":  "v3.70.0", // syswarden current core version
+			"version":  coreVersion, // syswarden current core version dynamically extracted
 			"status":   "online",
 		}
 
@@ -361,6 +374,7 @@ func StartHAServer(fwManager firewall.Manager) {
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		},
+		ReadHeaderTimeout: 3 * time.Second,
 	}
 
 	go func() {

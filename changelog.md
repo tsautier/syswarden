@@ -1,3 +1,10 @@
+# Release v3.71.6
+
+## FIXED
+- **UI / Telemetry**: Fixed an issue where the HA-Cluster TUI Explorer displayed a hardcoded `v3.70.0` version for peer nodes. The `syswarden-core` now dynamically extracts the exact system version during TLS cluster initialization, ensuring the UI always reflects the true installed version on each node.
+
+---
+
 # Release v3.71.5
 
 ## FIXED
