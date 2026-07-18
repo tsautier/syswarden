@@ -31,7 +31,7 @@ func ConfigureSSH() error {
 	if _, err := os.Stat(sshConf); err == nil {
 		fmt.Println("[INFO] Ensuring SSH TCP Forwarding is strictly DISABLED...")
 		// Simulate file edit
-		_ = exec.Command("sed", "-i", "s/^#AllowTcpForwarding.*/AllowTcpForwarding no/", sshConf).Run() // #nosec
+		_ = exec.Command("sed", "-i", "s/^#AllowTcpForwarding.*/AllowTcpForwarding no/", sshConf).Run()                         // #nosec
 		_ = exec.Command("sed", "-i", "s/^[[:space:]]*AllowTcpForwarding[[:space:]]*yes/AllowTcpForwarding no/", sshConf).Run() // #nosec
 
 		if IsAlpine() {

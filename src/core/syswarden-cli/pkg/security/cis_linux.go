@@ -130,9 +130,9 @@ func restrictCoreDumps() error {
 
 	// systemd override
 	if _, err := os.Stat("/etc/systemd/coredump.conf"); err == nil {
-		_ = exec.Command("sed", "-i", "s/.*Storage=.*/Storage=none/", "/etc/systemd/coredump.conf").Run() // #nosec
+		_ = exec.Command("sed", "-i", "s/.*Storage=.*/Storage=none/", "/etc/systemd/coredump.conf").Run()            // #nosec
 		_ = exec.Command("sed", "-i", "s/.*ProcessSizeMax=.*/ProcessSizeMax=0/", "/etc/systemd/coredump.conf").Run() // #nosec
-		_ = exec.Command("systemctl", "daemon-reload").Run() // #nosec
+		_ = exec.Command("systemctl", "daemon-reload").Run()                                                         // #nosec
 	}
 	return nil
 }
@@ -206,17 +206,17 @@ func enableAutomaticSecurityUpdates() error {
 		aptConf := "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n"
 		_ = os.WriteFile("/etc/apt/apt.conf.d/20auto-upgrades", []byte(aptConf), 0600)
 		_ = exec.Command("systemctl", "enable", "unattended-upgrades").Run() // #nosec
-		_ = exec.Command("systemctl", "start", "unattended-upgrades").Run() // #nosec
+		_ = exec.Command("systemctl", "start", "unattended-upgrades").Run()  // #nosec
 	} else if _, err := os.Stat("/etc/redhat-release"); err == nil {
 		_ = exec.Command("dnf", "install", "-y", "-q", "dnf-automatic").Run() // #nosec
 		conf := "/etc/dnf/automatic.conf"
 		if _, err := os.Stat(conf); err == nil {
-			_ = exec.Command("sed", "-i", "s/^[[:space:]]*upgrade_type[[:space:]]*=.*/upgrade_type = security/", conf).Run() // #nosec
+			_ = exec.Command("sed", "-i", "s/^[[:space:]]*upgrade_type[[:space:]]*=.*/upgrade_type = security/", conf).Run()    // #nosec
 			_ = exec.Command("sed", "-i", "s/^[[:space:]]*download_updates[[:space:]]*=.*/download_updates = yes/", conf).Run() // #nosec
-			_ = exec.Command("sed", "-i", "s/^[[:space:]]*apply_updates[[:space:]]*=.*/apply_updates = yes/", conf).Run() // #nosec
+			_ = exec.Command("sed", "-i", "s/^[[:space:]]*apply_updates[[:space:]]*=.*/apply_updates = yes/", conf).Run()       // #nosec
 		}
 		_ = exec.Command("systemctl", "enable", "dnf-automatic.timer").Run() // #nosec
-		_ = exec.Command("systemctl", "start", "dnf-automatic.timer").Run() // #nosec
+		_ = exec.Command("systemctl", "start", "dnf-automatic.timer").Run()  // #nosec
 	}
 	return nil
 }

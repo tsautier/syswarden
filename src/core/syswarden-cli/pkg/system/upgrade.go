@@ -93,7 +93,7 @@ func UpgradeSystem() error {
 	// 1. Check if it's an APT repository deployment (highly unlikely now, but keeping for compatibility)
 	if _, err := os.Stat("/etc/apt/sources.list.d/syswarden.list"); err == nil {
 		fmt.Println("[INFO] SYSWARDEN is installed via APT repository. Upgrading via apt-get...")
-		_ = exec.Command("apt-get", "update").Run() // #nosec
+		_ = exec.Command("apt-get", "update").Run()                                                           // #nosec
 		if err := exec.Command("apt-get", "install", "--only-upgrade", "-y", "syswarden").Run(); err != nil { // #nosec
 			return fmt.Errorf("failed to upgrade via apt-get: %w", err)
 		}
@@ -179,7 +179,24 @@ func UpgradeSystem() error {
 	// Clean up
 	_ = os.Remove(pkgFile)
 
-	fmt.Println("[+] In-place upgrade completed successfully!")
+	// Ensure Web-TUI is initialized and display URL if upgrading to a version supporting it
+	configPath := "/opt/syswarden/syswarden-auto.conf"
+	out, err := os.ReadFile(configPath) // #nosec G304
+	if err == nil && !strings.Contains(string(out), "SYSWARDEN_WEB_TOKEN=") {
+		fmt.Println("\n[INFO] Upgrading SysWarden: Initializing Web-TUI...")
+		cmdWT := exec.Command("/opt/syswarden/bin/syswarden-cli", "web-token", "--rotate") // #nosec
+		cmdWT.Stdout = os.Stdout
+		cmdWT.Stderr = os.Stderr
+		_ = cmdWT.Run()
+	} else if err == nil && strings.Contains(string(out), "SYSWARDEN_WEB_TOKEN=") {
+		fmt.Println("\n[INFO] Web-TUI is available at:")
+		cmdWT := exec.Command("/opt/syswarden/bin/syswarden-cli", "web-token") // #nosec
+		cmdWT.Stdout = os.Stdout
+		cmdWT.Stderr = os.Stderr
+		_ = cmdWT.Run()
+	}
+
+	fmt.Println("\n[+] In-place upgrade completed successfully!")
 	fmt.Println("[INFO] Please restart your terminal session to use the new version.")
 	return nil
 }

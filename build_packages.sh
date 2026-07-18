@@ -40,6 +40,7 @@ echo "[+] Detected SysWarden Version: v${VERSION}"
 echo "[*] Compiling SysWarden Native Go Modules..."
 export GOOS=linux
 export GOARCH=amd64
+export CGO_ENABLED=0
 
 mkdir -p dist/bin
 
@@ -63,6 +64,7 @@ echo "[+] Linux Compilation successful."
 echo "[*] Compiling SysWarden Native Go Modules for FreeBSD..."
 export GOOS=freebsd
 export GOARCH=amd64
+export CGO_ENABLED=0
 
 mkdir -p dist/freebsd/bin
 
@@ -110,13 +112,73 @@ fi
 # RPM Upgrade ($1 = 2) or DEB Upgrade ($1 = configure && $2 != "")
 if [ "$1" = "2" ] || [ "$1" = "configure" -a -n "$2" ]; then
     sed -i 's|ReadWritePaths=/var/lib/syswarden /var/log/syswarden /run /opt/syswarden$|ReadWritePaths=/var/lib/syswarden /var/log/syswarden /run /opt/syswarden /etc/syswarden/lists|g' /etc/systemd/system/syswarden-core.service || true
-    systemctl daemon-reload
-    systemctl restart syswarden-core || true
-    systemctl restart syswarden-firewall || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload
+        systemctl restart syswarden-core || true
+        systemctl restart syswarden-firewall || true
+        if [ ! -f /etc/systemd/system/syswarden-webtui.service ]; then
+            cat << 'SVC' > /etc/systemd/system/syswarden-webtui.service
+[Unit]
+Description=SYSWARDEN Web-TUI (WebTTY)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/syswarden/bin/syswarden-cli web-tui
+Restart=on-failure
+RestartSec=5s
+
+# Security Hardening
+ProtectSystem=full
+ProtectHome=yes
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+SVC
+            systemctl daemon-reload
+            systemctl enable --now syswarden-webtui.service || true
+        fi
+        systemctl restart syswarden-webtui || true
+    elif command -v rc-service >/dev/null 2>&1; then
+        rc-service syswarden-core restart || true
+        rc-service syswarden-firewall restart || true
+        if [ ! -f /etc/init.d/syswarden-webtui ]; then
+            cat << 'SVC' > /etc/init.d/syswarden-webtui
+#!/sbin/openrc-run
+
+name="syswarden-webtui"
+description="SYSWARDEN Web-TUI (WebTTY)"
+command="/opt/syswarden/bin/syswarden-cli"
+command_args="web-tui"
+command_background=true
+pidfile="/run/syswarden-webtui.pid"
+
+depend() {
+	need net
+}
+SVC
+            chmod +x /etc/init.d/syswarden-webtui
+            rc-update add syswarden-webtui default || true
+            rc-service syswarden-webtui start || true
+        fi
+        rc-service syswarden-webtui restart || true
+    fi
+
+    if ! grep -q "SYSWARDEN_WEB_TOKEN" /opt/syswarden/syswarden-auto.conf 2>/dev/null; then
+        echo "[INFO] Upgrading SysWarden: Initializing Web-TUI..."
+        /usr/local/bin/syswarden web-token --rotate
+    fi
 # RPM Install ($1 = 1) or DEB Install ($1 = configure && $2 == "")
-elif [ "$1" = "1" ] || [ "$1" = "configure" ]; then
     /opt/syswarden/bin/syswarden-cli install
-    systemctl restart syswarden-core || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart syswarden-core || true
+    elif command -v rc-service >/dev/null 2>&1; then
+        rc-service syswarden-core restart || true
+    fi
 fi
 EOF
 
@@ -136,15 +198,27 @@ cat << 'EOF' > prerm.sh
 #!/bin/sh
 # RPM Uninstall ($1 = 0) or DEB Uninstall/Purge
 if [ "$1" = "0" ] || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    systemctl stop syswarden-core.service || true
-    systemctl disable syswarden-core.service || true
-    systemctl stop syswarden-firewall.service || true
-    systemctl disable syswarden-firewall.service || true
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl stop syswarden-core.service || true
+        systemctl disable syswarden-core.service || true
+        systemctl stop syswarden-firewall.service || true
+        systemctl disable syswarden-firewall.service || true
+        systemctl stop syswarden-webtui.service || true
+        systemctl disable syswarden-webtui.service || true
+        systemctl restart rsyslog || true
+    elif command -v rc-service >/dev/null 2>&1; then
+        rc-service syswarden-core stop || true
+        rc-update del syswarden-core default || true
+        rc-service syswarden-firewall stop || true
+        rc-update del syswarden-firewall default || true
+        rc-service syswarden-webtui stop || true
+        rc-update del syswarden-webtui default || true
+        rc-service rsyslog restart || true
+    fi
     nft delete table netdev syswarden_hw_drop || true
     nft delete table inet syswarden || true
     crontab -l | grep -v 'syswarden-cli' | crontab - || true
     rm -f /etc/rsyslog.d/99-syswarden-waf-bridge.conf || true
-    systemctl restart rsyslog || true
 fi
 EOF
 

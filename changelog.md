@@ -1,7 +1,20 @@
+# Release v3.72.0
+
+## ADDED
+- **Zero-Client Web-TUI**: Implemented a fully functional Web-Terminal interface directly served by the SysWarden daemon.
+- **Zero-Client Web-TUI**: Added `syswarden web-token --rotate` to securely generate, revoke, and manage one-time access tokens.
+- **Zero-Client Web-TUI**: Integrated `syswarden-webtui.service` across systemd, OpenRC, and rc.d natively.
+- **Upgrade Path**: Seamless auto-initialization of Web-TUI during `syswarden update` upgrades from older versions.
+
+## UPDATED
+- **Signatures**: Updated WordPress WAF jail to block `/wp-json/batch/v1` and `rest_route=/batch/v1` vectors (https://wp2shell.com/).
+
+---
+
 # Release v3.71.9
 
 ## FIXED
-Fix string literal escaping syntax error in lists.go.
+- Fix string literal escaping syntax error in lists.go.
 
 ---
 

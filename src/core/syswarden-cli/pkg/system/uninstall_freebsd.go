@@ -19,7 +19,7 @@ func UninstallSystem() error {
 
 	// 1. Terminate Daemons
 	fmt.Println(" -> Stopping and removing SYSWARDEN Core Services...")
-	_ = exec.Command("service", "syswarden", "stop").Run() // #nosec
+	_ = exec.Command("service", "syswarden", "stop").Run()    // #nosec
 	_ = exec.Command("sysrc", "-x", "syswarden_enable").Run() // #nosec
 	_ = os.Remove("/usr/local/etc/rc.d/syswarden")
 
@@ -30,7 +30,7 @@ func UninstallSystem() error {
 	if _, err := os.Stat("/usr/local/etc/wireguard/wg-syswarden.conf"); err == nil {
 		fmt.Println(" -> Removing WireGuard VPN configs...")
 		_ = exec.Command("sysrc", "-x", "wireguard_interfaces").Run() // #nosec
-		_ = exec.Command("service", "wireguard", "stop").Run() // #nosec
+		_ = exec.Command("service", "wireguard", "stop").Run()        // #nosec
 		_ = os.Remove("/usr/local/etc/wireguard/wg-syswarden.conf")
 		_ = os.RemoveAll("/usr/local/etc/wireguard/clients")
 	}
@@ -40,9 +40,9 @@ func UninstallSystem() error {
 	// Flush specific tables
 	_ = exec.Command("pfctl", "-t", "syswarden_whitelist", "-T", "kill").Run() // #nosec
 	_ = exec.Command("pfctl", "-t", "syswarden_blacklist", "-T", "kill").Run() // #nosec
-	_ = exec.Command("pfctl", "-t", "banned_ips", "-T", "kill").Run() // #nosec
-	_ = exec.Command("pfctl", "-t", "syswarden_geoip", "-T", "kill").Run() // #nosec
-	_ = exec.Command("pfctl", "-t", "syswarden_asn", "-T", "kill").Run() // #nosec
+	_ = exec.Command("pfctl", "-t", "banned_ips", "-T", "kill").Run()          // #nosec
+	_ = exec.Command("pfctl", "-t", "syswarden_geoip", "-T", "kill").Run()     // #nosec
+	_ = exec.Command("pfctl", "-t", "syswarden_asn", "-T", "kill").Run()       // #nosec
 
 	// 5. Clean up Cron and Syslog
 	fmt.Println(" -> Cleaning up background jobs and SIEM...")

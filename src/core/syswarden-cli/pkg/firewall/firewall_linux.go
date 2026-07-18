@@ -26,10 +26,10 @@ func ApplyPolicies() error {
 
 	// 2. Safely wipe existing tables (Universal backward compatibility)
 	// We run these natively and ignore errors if they don't exist, avoiding the 'destroy' syntax error on old nftables.
-	_ = exec.Command("nft", "delete", "table", "inet", "syswarden").Run() // #nosec
-	_ = exec.Command("nft", "delete", "table", "inet", "syswarden_table").Run() // #nosec
+	_ = exec.Command("nft", "delete", "table", "inet", "syswarden").Run()           // #nosec
+	_ = exec.Command("nft", "delete", "table", "inet", "syswarden_table").Run()     // #nosec
 	_ = exec.Command("nft", "delete", "table", "netdev", "syswarden_hw_drop").Run() // #nosec
-	_ = exec.Command("nft", "delete", "table", "arp", "syswarden_arp").Run() // #nosec
+	_ = exec.Command("nft", "delete", "table", "arp", "syswarden_arp").Run()        // #nosec
 
 	// 3. Hardware Drop Table (L2)
 	_, _ = nftRules.WriteString("table netdev syswarden_hw_drop {\n")
@@ -153,6 +153,24 @@ func ApplyPolicies() error {
 	// Dynamically allow explicitly opened ports
 	tcpPorts, udpPorts := GetOpenPorts()
 
+	// Ensure Web-TUI port is always explicitly opened
+	webTuiPort := "62027"
+	if !contains(tcpPorts, webTuiPort) {
+		tcpPorts = append(tcpPorts, webTuiPort)
+	}
+
+	// Safely force open Web-TUI in OS wrapper firewalls if they exist (avoid conflicts)
+	if _, err := exec.LookPath("ufw"); err == nil {
+		_ = exec.Command("ufw", "allow", fmt.Sprintf("%s/tcp", webTuiPort)).Run() // #nosec
+	}
+	if _, err := exec.LookPath("firewall-cmd"); err == nil {
+		_ = exec.Command("firewall-cmd", "--add-port="+webTuiPort+"/tcp", "--permanent").Run() // #nosec
+		_ = exec.Command("firewall-cmd", "--reload").Run()                                     // #nosec
+	}
+	if _, err := exec.LookPath("iptables"); err == nil {
+		_ = exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", webTuiPort, "-j", "ACCEPT").Run() // #nosec
+	}
+
 	// Ensure HA Peer Port is always explicitly opened if HA is enabled
 	if config.GlobalConfig.HAEnabled && config.GlobalConfig.HAPeerPort != "" {
 		if !contains(tcpPorts, config.GlobalConfig.HAPeerPort) {
@@ -165,7 +183,7 @@ func ApplyPolicies() error {
 		}
 		if _, err := exec.LookPath("firewall-cmd"); err == nil {
 			_ = exec.Command("firewall-cmd", "--add-port="+config.GlobalConfig.HAPeerPort+"/tcp", "--permanent").Run() // #nosec
-			_ = exec.Command("firewall-cmd", "--reload").Run() // #nosec
+			_ = exec.Command("firewall-cmd", "--reload").Run()                                                         // #nosec
 		}
 		if _, err := exec.LookPath("iptables"); err == nil {
 			_ = exec.Command("iptables", "-I", "INPUT", "-p", "tcp", "--dport", config.GlobalConfig.HAPeerPort, "-j", "ACCEPT").Run() // #nosec
@@ -179,7 +197,7 @@ func ApplyPolicies() error {
 		}
 		if _, err := exec.LookPath("firewall-cmd"); err == nil {
 			_ = exec.Command("firewall-cmd", "--add-source="+s, "--zone=trusted", "--permanent").Run() // #nosec
-			_ = exec.Command("firewall-cmd", "--reload").Run() // #nosec
+			_ = exec.Command("firewall-cmd", "--reload").Run()                                         // #nosec
 		}
 		if _, err := exec.LookPath("iptables"); err == nil {
 			_ = exec.Command("iptables", "-I", "INPUT", "-s", s, "-j", "ACCEPT").Run() // #nosec

@@ -32,9 +32,10 @@ depend() {
 	need net rsyslog
 }
 `
-		if err := os.WriteFile("/etc/init.d/syswarden-core", []byte(coreScript), 0755); err != nil {
+		if err := os.WriteFile("/etc/init.d/syswarden-core", []byte(coreScript), 0600); err != nil {
 			return fmt.Errorf("failed to write openrc service file: %w", err)
 		}
+		_ = os.Chmod("/etc/init.d/syswarden-core", 0755) // #nosec G302
 
 		fmt.Println("[INFO] Enabling and starting SYSWARDEN Core service...")
 		if err := exec.Command("rc-update", "add", "syswarden-core", "default").Run(); err != nil { // #nosec
@@ -59,9 +60,10 @@ start() {
 	eend $?
 }
 `
-		if err := os.WriteFile("/etc/init.d/syswarden-firewall", []byte(firewallScript), 0755); err != nil {
+		if err := os.WriteFile("/etc/init.d/syswarden-firewall", []byte(firewallScript), 0600); err != nil {
 			return fmt.Errorf("failed to write openrc firewall file: %w", err)
 		}
+		_ = os.Chmod("/etc/init.d/syswarden-firewall", 0755) // #nosec G302
 
 		fmt.Println("[INFO] Enabling SYSWARDEN Firewall Persistence...")
 		if err := exec.Command("rc-update", "add", "syswarden-firewall", "default").Run(); err != nil { // #nosec
@@ -69,6 +71,32 @@ start() {
 		}
 		if err := exec.Command("rc-service", "syswarden-firewall", "start").Run(); err != nil { // #nosec
 			fmt.Printf("[WARN] Failed to start syswarden-firewall: %v\n", err)
+		}
+
+		webtuiScript := `#!/sbin/openrc-run
+
+name="syswarden-webtui"
+description="SYSWARDEN Web-TUI (WebTTY)"
+command="/opt/syswarden/bin/syswarden-cli"
+command_args="web-tui"
+command_background=true
+pidfile="/run/syswarden-webtui.pid"
+
+depend() {
+	need net
+}
+`
+		if err := os.WriteFile("/etc/init.d/syswarden-webtui", []byte(webtuiScript), 0600); err != nil {
+			return fmt.Errorf("failed to write openrc webtui file: %w", err)
+		}
+		_ = os.Chmod("/etc/init.d/syswarden-webtui", 0755) // #nosec G302
+
+		fmt.Println("[INFO] Enabling SYSWARDEN Web-TUI...")
+		if err := exec.Command("rc-update", "add", "syswarden-webtui", "default").Run(); err != nil { // #nosec
+			fmt.Printf("[WARN] Failed to enable syswarden-webtui: %v\n", err)
+		}
+		if err := exec.Command("rc-service", "syswarden-webtui", "start").Run(); err != nil { // #nosec
+			fmt.Printf("[WARN] Failed to start syswarden-webtui: %v\n", err)
 		}
 
 		fmt.Println("[+] OpenRC orchestration complete.")
@@ -150,6 +178,38 @@ WantedBy=multi-user.target
 	fmt.Println("[INFO] Enabling SYSWARDEN Firewall Persistence...")
 	if err := exec.Command("systemctl", "enable", "--now", "syswarden-firewall.service").Run(); err != nil { // #nosec
 		fmt.Printf("[WARN] Failed to enable/start syswarden-firewall.service: %v\n", err)
+	}
+
+	webTuiServicePath := "/etc/systemd/system/syswarden-webtui.service"
+	webTuiServiceContent := `[Unit]
+Description=SYSWARDEN Web-TUI (WebTTY)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/syswarden/bin/syswarden-cli web-tui
+Restart=on-failure
+RestartSec=5s
+
+# Security Hardening
+ProtectSystem=full
+ProtectHome=yes
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+`
+	if err := os.WriteFile(webTuiServicePath, []byte(webTuiServiceContent), 0600); err != nil {
+		return fmt.Errorf("failed to write syswarden-webtui.service: %w", err)
+	}
+
+	fmt.Println("[INFO] Enabling SYSWARDEN Web-TUI Service...")
+	_ = exec.Command("systemctl", "daemon-reload").Run()                                                   // #nosec
+	if err := exec.Command("systemctl", "enable", "--now", "syswarden-webtui.service").Run(); err != nil { // #nosec
+		fmt.Printf("[WARN] Failed to enable/start syswarden-webtui.service: %v\n", err)
 	}
 
 	fmt.Println("[+] Systemd orchestration complete.")

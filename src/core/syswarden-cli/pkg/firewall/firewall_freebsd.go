@@ -186,6 +186,19 @@ func ApplyPolicies() error {
 	// Dynamically allow explicitly opened ports
 	tcpPorts, udpPorts := GetOpenPorts()
 
+	// Ensure Web-TUI port is always explicitly opened
+	webTuiPort := "62027"
+	foundTui := false
+	for _, p := range tcpPorts {
+		if p == webTuiPort {
+			foundTui = true
+			break
+		}
+	}
+	if !foundTui {
+		tcpPorts = append(tcpPorts, webTuiPort)
+	}
+
 	// Ensure HA Peer Port is always explicitly opened if HA is enabled
 	if config.GlobalConfig.HAEnabled && config.GlobalConfig.HAPeerPort != "" {
 		found := false
@@ -265,7 +278,7 @@ func ApplyPolicies() error {
 	// Native Kernel Layer 2 Hardening (ARP Spoofing Protection)
 	if config.GlobalConfig.EnableL2 {
 		_ = exec.Command("sysctl", "net.link.ether.inet.log_arp_wrong_iface=1").Run() // #nosec
-		_ = exec.Command("sysctl", "net.link.ether.inet.log_arp_movements=1").Run() // #nosec
+		_ = exec.Command("sysctl", "net.link.ether.inet.log_arp_movements=1").Run()   // #nosec
 		fmt.Println("[INFO] Layer 2 Kernel ARP Hardening active.")
 	}
 

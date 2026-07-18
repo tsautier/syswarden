@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
 )
 
 var tuiCmd = &cobra.Command{
@@ -36,7 +35,7 @@ var tuiCmd = &cobra.Command{
 		time.Sleep(50 * time.Millisecond)
 
 		// Flush any lingering mouse artifacts (like the '*' character) from the stdin buffer
-		_ = unix.IoctlSetInt(int(os.Stdin.Fd()), unix.TCFLSH, unix.TCIFLUSH)
+		flushStdin()
 
 		if err != nil {
 			fmt.Printf("\n[ERROR] TUI exited abnormally: %v\n", err)

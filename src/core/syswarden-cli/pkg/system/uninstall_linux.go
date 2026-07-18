@@ -20,28 +20,28 @@ func UninstallSystem() error {
 	// 1. Terminate Daemons
 	fmt.Println(" -> Stopping and removing SYSWARDEN Core Services...")
 	if IsAlpine() {
-		_ = exec.Command("rc-service", "syswarden-core", "stop").Run() // #nosec
+		_ = exec.Command("rc-service", "syswarden-core", "stop").Run()          // #nosec
 		_ = exec.Command("rc-update", "del", "syswarden-core", "default").Run() // #nosec
 		_ = os.Remove("/etc/init.d/syswarden-core")
 
-		_ = exec.Command("rc-service", "syswarden-firewall", "stop").Run() // #nosec
+		_ = exec.Command("rc-service", "syswarden-firewall", "stop").Run()          // #nosec
 		_ = exec.Command("rc-update", "del", "syswarden-firewall", "default").Run() // #nosec
 		_ = os.Remove("/etc/init.d/syswarden-firewall")
 	} else {
-		_ = exec.Command("systemctl", "stop", "syswarden-core.service").Run() // #nosec
+		_ = exec.Command("systemctl", "stop", "syswarden-core.service").Run()    // #nosec
 		_ = exec.Command("systemctl", "disable", "syswarden-core.service").Run() // #nosec
 		_ = os.Remove("/etc/systemd/system/syswarden-core.service")
 
-		_ = exec.Command("systemctl", "stop", "syswarden-firewall.service").Run() // #nosec
+		_ = exec.Command("systemctl", "stop", "syswarden-firewall.service").Run()    // #nosec
 		_ = exec.Command("systemctl", "disable", "syswarden-firewall.service").Run() // #nosec
 		_ = os.Remove("/etc/systemd/system/syswarden-firewall.service")
 
 		// Legacy cleanups
-		_ = exec.Command("systemctl", "stop", "syswarden.service").Run() // #nosec
+		_ = exec.Command("systemctl", "stop", "syswarden.service").Run()    // #nosec
 		_ = exec.Command("systemctl", "disable", "syswarden.service").Run() // #nosec
 		_ = os.Remove("/etc/systemd/system/syswarden.service")
 
-		_ = exec.Command("systemctl", "stop", "syswarden-reporter").Run() // #nosec
+		_ = exec.Command("systemctl", "stop", "syswarden-reporter").Run()    // #nosec
 		_ = exec.Command("systemctl", "disable", "syswarden-reporter").Run() // #nosec
 		_ = os.Remove("/etc/systemd/system/syswarden-reporter.service")
 
@@ -65,9 +65,9 @@ func UninstallSystem() error {
 	fmt.Println(" -> Cleaning Firewall Rules (nftables & iptables)...")
 	if err := exec.Command("nft", "list", "ruleset").Run(); err == nil { // #nosec
 		_ = exec.Command("nft", "delete", "table", "netdev", "syswarden_hw_drop").Run() // #nosec
-		_ = exec.Command("nft", "delete", "table", "arp", "syswarden_arp").Run() // #nosec
-		_ = exec.Command("nft", "delete", "table", "inet", "syswarden").Run() // #nosec
-		_ = exec.Command("nft", "delete", "table", "inet", "syswarden_wg").Run() // #nosec
+		_ = exec.Command("nft", "delete", "table", "arp", "syswarden_arp").Run()        // #nosec
+		_ = exec.Command("nft", "delete", "table", "inet", "syswarden").Run()           // #nosec
+		_ = exec.Command("nft", "delete", "table", "inet", "syswarden_wg").Run()        // #nosec
 	}
 	_ = os.Remove("/etc/syswarden/syswarden.nft")
 

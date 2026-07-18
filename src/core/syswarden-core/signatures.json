@@ -36,7 +36,7 @@
     { "id": "vaultwarden", "type": "regex", "pattern": "Invalid password.*from <HOST>", "service": "vaultwarden" },
     { "id": "idor-enum", "type": "aho-corasick", "patterns": ["/api/v1/users/", "/api/v1/profile/"], "service": "http" },
     { "id": "sso", "type": "regex", "pattern": "msg=\"Authentication failed\".*remote_ip=\"<HOST>\"", "service": "sso" },
-    { "id": "cms-wordpress", "type": "aho-corasick", "patterns": ["/wp-includes", "/wp-admin", "/wp-login.php", "xmlrpc.php", "wp-config.php"], "service": "http" },
+    { "id": "cms-wordpress", "type": "aho-corasick", "patterns": ["/wp-includes", "/wp-admin", "/wp-login.php", "xmlrpc.php", "wp-config.php", "/wp-json/batch/v1", "rest_route=/batch/v1"], "service": "http" },
     { "id": "cms-joomla", "type": "aho-corasick", "patterns": ["/joomla", "/administrator/index.php", "Joomla!"], "service": "http" },
     { "id": "cms-magento", "type": "aho-corasick", "patterns": ["/magento", "/downloader/index.php"], "service": "http" },
     { "id": "proxy-abuse", "type": "aho-corasick", "patterns": ["CONNECT ", "TRACE ", "TRACK "], "service": "http" },

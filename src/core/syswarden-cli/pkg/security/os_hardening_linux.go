@@ -126,7 +126,7 @@ $DropTrailingLFOnReception on
 		out, _ := os.ReadFile(journalConf) // #nosec
 		if !strings.Contains(string(out), "ForwardToSyslog=yes") {
 			_ = exec.Command("sed", "-i", "s/.*ForwardToSyslog.*/ForwardToSyslog=yes/", journalConf).Run() // #nosec
-			_ = exec.Command("systemctl", "restart", "systemd-journald").Run() // #nosec
+			_ = exec.Command("systemctl", "restart", "systemd-journald").Run()                             // #nosec
 		}
 	}
 }

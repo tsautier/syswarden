@@ -80,6 +80,59 @@ run_rc_command "$1"
 		fmt.Printf("[WARN] Failed to start syswarden service: %v\n", err)
 	}
 
+	webtuiRcScript := `#!/bin/sh
+#
+# PROVIDE: syswardenwebtui
+# REQUIRE: NETWORKING syswarden
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="syswardenwebtui"
+rcvar="syswardenwebtui_enable"
+
+command="/opt/syswarden/bin/syswarden-cli"
+command_args="web-tui &"
+pidfile="/var/run/${name}.pid"
+
+load_rc_config $name
+: ${syswardenwebtui_enable:="NO"}
+
+start_cmd="webtui_start"
+stop_cmd="webtui_stop"
+
+webtui_start() {
+    echo "Starting SYSWARDEN Web-TUI..."
+    /usr/sbin/daemon -p ${pidfile} ${command} web-tui
+}
+
+webtui_stop() {
+    if [ -f ${pidfile} ]; then
+        echo "Stopping SYSWARDEN Web-TUI..."
+        kill $(cat ${pidfile})
+        rm -f ${pidfile}
+    else
+        echo "SYSWARDEN Web-TUI is not running."
+    fi
+}
+
+run_rc_command "$1"
+`
+
+	webtuiServicePath := "/usr/local/etc/rc.d/syswardenwebtui"
+	err = os.WriteFile(webtuiServicePath, []byte(webtuiRcScript), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write syswardenwebtui rc.d script: %w", err)
+	}
+	_ = os.Chmod(webtuiServicePath, 0755)
+
+	if err := exec.Command("sysrc", "syswardenwebtui_enable=YES").Run(); err != nil { // #nosec
+		fmt.Printf("[WARN] Failed to enable syswardenwebtui in rc.conf: %v\n", err)
+	}
+	if err := exec.Command("service", "syswardenwebtui", "start").Run(); err != nil { // #nosec
+		fmt.Printf("[WARN] Failed to start syswardenwebtui service: %v\n", err)
+	}
+
 	fmt.Println("[SUCCESS] SYSWARDEN rc.d service configured and enabled.")
 	return nil
 }

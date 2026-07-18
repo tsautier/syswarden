@@ -27,7 +27,7 @@ func SetupWireguard() error {
 	_ = os.Chmod("/usr/local/etc/wireguard", 0700)
 
 	// Create sysrc configuration for IP forwarding
-	_ = exec.Command("sysrc", "gateway_enable=YES").Run() // #nosec
+	_ = exec.Command("sysrc", "gateway_enable=YES").Run()        // #nosec
 	_ = exec.Command("sysctl", "net.inet.ip.forwarding=1").Run() // #nosec
 
 	// Keys
@@ -114,9 +114,9 @@ PersistentKeepalive = 25
 
 	// Start service
 	fmt.Println(" -> Starting WireGuard Interface")
-	_ = exec.Command("sysrc", "wireguard_enable=YES").Run() // #nosec
+	_ = exec.Command("sysrc", "wireguard_enable=YES").Run()              // #nosec
 	_ = exec.Command("sysrc", "wireguard_interfaces=wg-syswarden").Run() // #nosec
-	_ = exec.Command("service", "wireguard", "start").Run() // #nosec
+	_ = exec.Command("service", "wireguard", "start").Run()              // #nosec
 
 	fmt.Println("\n=======================================================")
 	fmt.Println("             WIREGUARD CLIENT CONFIGURATION            ")

@@ -107,6 +107,19 @@ var installCmd = &cobra.Command{
 			fmt.Printf("[ERROR] Systemd setup failed: %v\n", err)
 		}
 
+		// Web-TUI Initialization
+		token := readConfigToken()
+		if token == "" {
+			token = generateSecureToken(32)
+			if err := updateConfigToken(token); err != nil {
+				fmt.Printf("[ERROR] Failed to save Web-TUI token: %v\n", err)
+			}
+		}
+		ip := getPublicIP()
+		fmt.Printf("\n======================================================\n")
+		fmt.Printf("[+] URL d'accès client Web-TUI : http://%s:%s/?token=%s\n", ip, webtuiPort, token)
+		fmt.Printf("======================================================\n\n")
+
 		fmt.Println("[SYSWARDEN] v3.71.9 Native Installation Complete.")
 	},
 }

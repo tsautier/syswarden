@@ -122,10 +122,10 @@ PersistentKeepalive = 25
 	fmt.Println(" -> Starting WireGuard Interface")
 	if system.IsAlpine() {
 		_ = exec.Command("ln", "-s", "/etc/init.d/wg-quick", "/etc/init.d/wg-quick.wg-syswarden").Run() // #nosec
-		_ = exec.Command("rc-update", "add", "wg-quick.wg-syswarden", "default").Run() // #nosec
-		_ = exec.Command("rc-service", "wg-quick.wg-syswarden", "start").Run() // #nosec
+		_ = exec.Command("rc-update", "add", "wg-quick.wg-syswarden", "default").Run()                  // #nosec
+		_ = exec.Command("rc-service", "wg-quick.wg-syswarden", "start").Run()                          // #nosec
 	} else {
-		_ = exec.Command("systemctl", "daemon-reload").Run() // #nosec
+		_ = exec.Command("systemctl", "daemon-reload").Run()                            // #nosec
 		_ = exec.Command("systemctl", "enable", "--now", "wg-quick@wg-syswarden").Run() // #nosec
 	}
 
