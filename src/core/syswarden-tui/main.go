@@ -605,7 +605,7 @@ func refreshUI() {
 	// --- L3 Metrics ---
 	globalBlockedStr := fmt.Sprintf("%d", d.Layer3.GlobalBlocked)
 	if d.Layer3.ZeroTrustMode {
-		globalBlockedStr = "N/A (Catch-All)"
+		globalBlockedStr = fmt.Sprintf("%d (Zero-Trust)", d.Layer3.GlobalBlocked)
 	}
 	l3Lines := fmt.Sprintf("\n [gray]Value:[-] [white]%s[-] [gray](L7/HA: %d)[-]\n [gray]GeoIP:[-] [white]%d[-] │ [gray]ASN:[-] [white]%d[-]",
 		globalBlockedStr, d.Layer3.L7Banned, d.Layer3.GeoIPBlocked, d.Layer3.ASNBlocked)

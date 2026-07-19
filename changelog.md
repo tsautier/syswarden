@@ -1,3 +1,10 @@
+# Release v3.73.1
+
+## FIXED 🐛
+- **Syswarden-TUI**: Fixed the "L3 KERNEL BLOCKS (GLOBAL)" display value in Zero-Trust mode to show the actual L7-to-L3 explicit blocked IP count instead of 'N/A' (e.g. `50 (Zero-Trust)`).
+
+---
+
 # Release v3.73.0
 
 ## ADDED ➕
