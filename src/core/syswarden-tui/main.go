@@ -66,10 +66,11 @@ type SystemData struct {
 }
 
 type Layer3 struct {
-	GlobalBlocked int `json:"global_blocked"`
-	GeoIPBlocked  int `json:"geoip_blocked"`
-	ASNBlocked    int `json:"asn_blocked"`
-	L7Banned      int `json:"l7_banned"`
+	GlobalBlocked int  `json:"global_blocked"`
+	GeoIPBlocked  int  `json:"geoip_blocked"`
+	ASNBlocked    int  `json:"asn_blocked"`
+	L7Banned      int  `json:"l7_banned"`
+	ZeroTrustMode bool `json:"zero_trust_mode"`
 }
 
 type JailData struct {
@@ -94,11 +95,12 @@ type BannedIP struct {
 }
 
 type Attacker struct {
-	IP      string `json:"ip"`
-	Port    string `json:"port"`
-	Country string `json:"country"`
-	ASN     string `json:"asn"`
-	ISP     string `json:"isp"`
+	IP       string `json:"ip"`
+	Severity string `json:"severity"`
+	Port     string `json:"port"`
+	Country  string `json:"country"`
+	ASN      string `json:"asn"`
+	ISP      string `json:"isp"`
 }
 
 type WAF struct {
@@ -522,7 +524,10 @@ func refreshUI() {
 	// --- Header Calculation ---
 	totalThreats := d.Layer3.GlobalBlocked + d.WAF.TotalBanned
 	noisePct, signalPct := "0.00%", "0.00%"
-	if totalThreats > 0 {
+	if d.Layer3.ZeroTrustMode {
+		noisePct = ">99.99% (Zero-Trust)"
+		signalPct = "<0.01%"
+	} else if totalThreats > 0 {
 		noisePct = fmt.Sprintf("%.2f%%", float64(d.Layer3.GlobalBlocked)/float64(totalThreats)*100)
 		signalPct = fmt.Sprintf("%.2f%%", float64(d.WAF.TotalBanned)/float64(totalThreats)*100)
 	}
@@ -598,8 +603,12 @@ func refreshUI() {
 	headerText.SetText(headerLines)
 
 	// --- L3 Metrics ---
-	l3Lines := fmt.Sprintf("\n [gray]Value:[-] [white]%d[-] [gray](L7/HA: %d)[-]\n [gray]GeoIP:[-] [white]%d[-] │ [gray]ASN:[-] [white]%d[-]",
-		d.Layer3.GlobalBlocked, d.Layer3.L7Banned, d.Layer3.GeoIPBlocked, d.Layer3.ASNBlocked)
+	globalBlockedStr := fmt.Sprintf("%d", d.Layer3.GlobalBlocked)
+	if d.Layer3.ZeroTrustMode {
+		globalBlockedStr = "N/A (Catch-All)"
+	}
+	l3Lines := fmt.Sprintf("\n [gray]Value:[-] [white]%s[-] [gray](L7/HA: %d)[-]\n [gray]GeoIP:[-] [white]%d[-] │ [gray]ASN:[-] [white]%d[-]",
+		globalBlockedStr, d.Layer3.L7Banned, d.Layer3.GeoIPBlocked, d.Layer3.ASNBlocked)
 	l3Text.SetText(l3Lines)
 
 	// --- Risk Vectors ---
@@ -639,17 +648,19 @@ func refreshUI() {
 	// --- Top Attackers ---
 	attackersTable.Clear()
 	attackersTable.SetCell(0, 0, tview.NewTableCell("IP ADDRESS").SetTextColor(tcell.ColorGray))
-	attackersTable.SetCell(0, 1, tview.NewTableCell("PORT").SetTextColor(tcell.ColorGray))
-	attackersTable.SetCell(0, 2, tview.NewTableCell("COUNTRY").SetTextColor(tcell.ColorGray))
-	attackersTable.SetCell(0, 3, tview.NewTableCell("ASN").SetTextColor(tcell.ColorGray))
-	attackersTable.SetCell(0, 4, tview.NewTableCell("ISP").SetTextColor(tcell.ColorGray))
+	attackersTable.SetCell(0, 1, tview.NewTableCell("SEVERITY").SetTextColor(tcell.ColorGray))
+	attackersTable.SetCell(0, 2, tview.NewTableCell("PORT").SetTextColor(tcell.ColorGray))
+	attackersTable.SetCell(0, 3, tview.NewTableCell("COUNTRY").SetTextColor(tcell.ColorGray))
+	attackersTable.SetCell(0, 4, tview.NewTableCell("ASN").SetTextColor(tcell.ColorGray))
+	attackersTable.SetCell(0, 5, tview.NewTableCell("ISP").SetTextColor(tcell.ColorGray))
 	for i := 0; i < 5 && i < len(d.WAF.TopAttackers); i++ {
 		t := d.WAF.TopAttackers[i]
 		attackersTable.SetCell(i+1, 0, tview.NewTableCell(t.IP).SetTextColor(tcell.ColorRed))
-		attackersTable.SetCell(i+1, 1, tview.NewTableCell(t.Port).SetTextColor(tcell.ColorYellow))
-		attackersTable.SetCell(i+1, 2, tview.NewTableCell(t.Country).SetTextColor(tcell.ColorWhite))
-		attackersTable.SetCell(i+1, 3, tview.NewTableCell(t.ASN).SetTextColor(tcell.ColorAqua))
-		attackersTable.SetCell(i+1, 4, tview.NewTableCell(t.ISP).SetTextColor(tcell.ColorWhite))
+		attackersTable.SetCell(i+1, 1, tview.NewTableCell(t.Severity).SetTextColor(tcell.ColorFuchsia))
+		attackersTable.SetCell(i+1, 2, tview.NewTableCell(t.Port).SetTextColor(tcell.ColorYellow))
+		attackersTable.SetCell(i+1, 3, tview.NewTableCell(t.Country).SetTextColor(tcell.ColorWhite))
+		attackersTable.SetCell(i+1, 4, tview.NewTableCell(t.ASN).SetTextColor(tcell.ColorAqua))
+		attackersTable.SetCell(i+1, 5, tview.NewTableCell(t.ISP).SetTextColor(tcell.ColorWhite))
 	}
 
 	// --- Banned Table ---

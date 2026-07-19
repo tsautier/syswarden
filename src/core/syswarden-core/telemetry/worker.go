@@ -54,10 +54,11 @@ type SystemData struct {
 }
 
 type Layer3 struct {
-	GlobalBlocked int `json:"global_blocked"`
-	GeoIPBlocked  int `json:"geoip_blocked"`
-	ASNBlocked    int `json:"asn_blocked"`
-	L7Banned      int `json:"l7_banned"`
+	GlobalBlocked int  `json:"global_blocked"`
+	GeoIPBlocked  int  `json:"geoip_blocked"`
+	ASNBlocked    int  `json:"asn_blocked"`
+	L7Banned      int  `json:"l7_banned"`
+	ZeroTrustMode bool `json:"zero_trust_mode"`
 }
 
 type JailData struct {
@@ -82,11 +83,12 @@ type BannedIP struct {
 }
 
 type Attacker struct {
-	IP      string `json:"ip"`
-	Port    string `json:"port"`
-	Country string `json:"country"`
-	ASN     string `json:"asn"`
-	ISP     string `json:"isp"`
+	IP       string `json:"ip"`
+	Severity string `json:"severity"`
+	Port     string `json:"port"`
+	Country  string `json:"country"`
+	ASN      string `json:"asn"`
+	ISP      string `json:"isp"`
 }
 
 type WAF struct {
@@ -613,6 +615,20 @@ func getLayer3Stats() Layer3 {
 	}
 
 	var l3 Layer3
+	
+	// Detect Zero-Trust Mode
+	if conf, err := os.ReadFile("/opt/syswarden/syswarden-auto.conf"); err == nil {
+		for _, line := range strings.Split(string(conf), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "SYSWARDEN_GEO_ALLOWED=\"") && len(line) > 23 && !strings.HasSuffix(line, "\"\"") {
+				l3.ZeroTrustMode = true
+			}
+			if strings.HasPrefix(line, "SYSWARDEN_ASN_ALLOWED=\"") && len(line) > 23 && !strings.HasSuffix(line, "\"\"") {
+				l3.ZeroTrustMode = true
+			}
+		}
+	}
+
 	l3.L7Banned = countLinesInFile("/etc/syswarden/lists/syswarden_blacklist.ipv4")
 	l3.GlobalBlocked = l3.L7Banned + countLinesInFile("/etc/syswarden/lists/syswarden_threatintel.ipv4")
 
@@ -943,6 +959,12 @@ func getWAFStats() WAF {
 
 	// Get last 50 unique banned/detected IPs for display (newest first)
 	seenIPs := make(map[string]bool)
+	hitCounts := make(map[string]int)
+	for _, b := range allBans {
+		hitCounts[b.IP]++
+	}
+	totalBans := len(allBans)
+
 	for i := len(allBans) - 1; i >= 0; i-- {
 		if len(waf.BannedIPs) >= 50 {
 			break
@@ -953,8 +975,15 @@ func getWAFStats() WAF {
 		seenIPs[allBans[i].IP] = true
 		waf.BannedIPs = append(waf.BannedIPs, allBans[i])
 
-		// Quick TopAttacker populate with OSINT
-		waf.TopAttackers = append(waf.TopAttackers, enrichOSINT(allBans[i].IP, allBans[i].Payload))
+		// Quick TopAttacker populate with OSINT and Severity
+		att := enrichOSINT(allBans[i].IP, allBans[i].Payload)
+		hits := hitCounts[allBans[i].IP]
+		pct := 0.0
+		if totalBans > 0 {
+			pct = (float64(hits) / float64(totalBans)) * 100
+		}
+		att.Severity = fmt.Sprintf("%.1f%% (%d hits)", pct, hits)
+		waf.TopAttackers = append(waf.TopAttackers, att)
 	}
 
 	for jail, count := range jailCounts {
