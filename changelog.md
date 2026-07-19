@@ -1,3 +1,10 @@
+# Release v3.72.4
+
+## FIXED
+- [Web-TUI] Translate Web-TUI URL announcement to English.
+
+---
+
 # Release v3.72.3
 
 # FIXED
@@ -7,7 +14,7 @@
 
 # Release v3.72.2
 
-# FIXED
+## FIXED
 - [Security] Auto-generate in-memory self-signed TLS certificates for Native HTTPS support (`syswarden web-tui`).
 - [Web-TUI] Fixed static asset loading (xterm.js/css) by issuing a secure session cookie after initial token validation.
 - [Web-TUI] Fixed terminal crash ("term not set") by injecting `TERM=xterm-256color` into the PTY environment.

@@ -110,7 +110,7 @@ var webTokenCmd = &cobra.Command{
 		}
 
 		ip := getPublicIP()
-		fmt.Printf("\n[+] URL d'accès client Web-TUI : https://%s:%s/?token=%s\n\n", ip, webtuiPort, token)
+		fmt.Printf("\n[+] Web-TUI Client Access URL: https://%s:%s/?token=%s\n\n", ip, webtuiPort, token)
 	},
 }
 
