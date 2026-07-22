@@ -1,3 +1,13 @@
+# Release v3.74.9
+
+## ADDED ➕
+- Missing GEOIP IPv6 logic (syswarden_geoip6) explicitly instantiated and loaded into kernel for global Drop actions.
+
+## FIXED 🐛
+- Massive overhaul of Firewall List parsing (Linux & FreeBSD): Removed strict file segregation, natively allowing IPv6 addresses hidden within .ipv4 files to be correctly sorted into their respective IPv6 kernel sets (Full Hybrid Blocklist Support).
+
+---
+
 # Release v3.74.8
 
 ## ADDED ⚡
@@ -1195,3 +1205,4 @@ Error package and code hygiene v3.40.1
 - Eradicated a telemetry blind spot on Fedora/RHEL architectures by natively injecting `/var/log/httpd/access_log` into the Hybrid Telemetry Worker's asynchronous tailing routine.
 
 ---
+

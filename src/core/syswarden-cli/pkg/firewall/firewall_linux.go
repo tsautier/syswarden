@@ -54,6 +54,7 @@ func ApplyPolicies() error {
 
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 		_, _ = nftRules.WriteString("\tset syswarden_geoip { type ipv4_addr; flags interval; auto-merge; }\n")
+		_, _ = nftRules.WriteString("\tset syswarden_geoip6 { type ipv6_addr; flags interval; auto-merge; }\n")
 	}
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		_, _ = nftRules.WriteString("\tset syswarden_asn { type ipv4_addr; flags interval; auto-merge; }\n")
@@ -65,7 +66,7 @@ func ApplyPolicies() error {
 	for _, iface := range interfaces {
 		devicesStr = append(devicesStr, fmt.Sprintf("%q", iface)) // format as "eth0"
 	}
-	
+
 	if len(interfaces) > 1 {
 		fmt.Fprintf(&nftRules, "\tchain ingress_frontline {\n\t\ttype filter hook ingress devices = { %s } priority -500; policy accept;\n", strings.Join(devicesStr, ", "))
 	} else {
@@ -96,6 +97,8 @@ func ApplyPolicies() error {
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_geoip limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-GEO] \"\n")
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_geoip drop\n")
+		_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_geoip6 limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-GEO] \"\n")
+		_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_geoip6 drop\n")
 	}
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn limit rate 2/second burst 5 packets log prefix \"[SYSWARDEN-ASN] \"\n")
@@ -118,6 +121,7 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\tset syswarden_blacklist6 { type ipv6_addr; flags interval; auto-merge; }\n")
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 		_, _ = nftRules.WriteString("\tset syswarden_geoip { type ipv4_addr; flags interval; auto-merge; }\n")
+		_, _ = nftRules.WriteString("\tset syswarden_geoip6 { type ipv6_addr; flags interval; auto-merge; }\n")
 	}
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		_, _ = nftRules.WriteString("\tset syswarden_asn { type ipv4_addr; flags interval; auto-merge; }\n")
@@ -300,6 +304,7 @@ func ApplyPolicies() error {
 	_, _ = nftRules.WriteString("\t\tct state established,related accept\n")
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_geoip counter drop\n")
+		_, _ = nftRules.WriteString("\t\tip6 saddr @syswarden_geoip6 counter drop\n")
 	}
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		_, _ = nftRules.WriteString("\t\tip saddr @syswarden_asn counter drop\n")
@@ -386,21 +391,27 @@ func ApplyPolicies() error {
 		}
 	}
 
-	populateSet(ctx, whitelistFiles, "syswarden_whitelist")
-	populateSet(ctx, []string{
+	whitelistFiles = append(whitelistFiles,
 		"/etc/syswarden/lists/syswarden_whitelist.ipv6",
 		"/etc/syswarden/lists/syswarden_saas_monitors.ipv6",
-	}, "syswarden_whitelist6")
+	)
+	populateSet(ctx, whitelistFiles, "syswarden_whitelist")
+	populateSet(ctx, whitelistFiles, "syswarden_whitelist6")
 
 	if len(ztFiles) > 0 {
-		populateSet(ctx, ztFiles, "syswarden_zt_allowed")
-	}
-	if len(ztFiles6) > 0 {
-		populateSet(ctx, ztFiles6, "syswarden_zt_allowed6")
+		ztAllFiles := append(ztFiles, ztFiles6...)
+		populateSet(ctx, ztAllFiles, "syswarden_zt_allowed")
+		populateSet(ctx, ztAllFiles, "syswarden_zt_allowed6")
 	}
 
-	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_blacklist.ipv4", "/etc/syswarden/lists/syswarden_threatintel.ipv4"}, "syswarden_blacklist")
-	populateSet(ctx, []string{"/etc/syswarden/lists/syswarden_blacklist.ipv6", "/etc/syswarden/lists/syswarden_threatintel.ipv6"}, "syswarden_blacklist6")
+	blacklistFiles := []string{
+		"/etc/syswarden/lists/syswarden_blacklist.ipv4",
+		"/etc/syswarden/lists/syswarden_threatintel.ipv4",
+		"/etc/syswarden/lists/syswarden_blacklist.ipv6",
+		"/etc/syswarden/lists/syswarden_threatintel.ipv6",
+	}
+	populateSet(ctx, blacklistFiles, "syswarden_blacklist")
+	populateSet(ctx, blacklistFiles, "syswarden_blacklist6")
 
 	var geoFiles []string
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
@@ -409,15 +420,16 @@ func ApplyPolicies() error {
 			code = strings.TrimSpace(code)
 			if code != "" && code != "none" {
 				geoFiles = append(geoFiles, fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToLower(code)))
+				geoFiles = append(geoFiles, fmt.Sprintf("/etc/syswarden/lists/%s.ipv6", strings.ToLower(code)))
 			}
 		}
 	}
 	if len(geoFiles) > 0 {
 		populateSet(ctx, geoFiles, "syswarden_geoip")
+		populateSet(ctx, geoFiles, "syswarden_geoip6")
 	}
 
 	var asnFiles []string
-	var asnFiles6 []string
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
 		asns := strings.Split(config.GlobalConfig.ASNList, " ")
 		for _, asn := range asns {
@@ -427,15 +439,13 @@ func ApplyPolicies() error {
 					asn = "AS" + asn
 				}
 				asnFiles = append(asnFiles, fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToUpper(asn)))
-				asnFiles6 = append(asnFiles6, fmt.Sprintf("/etc/syswarden/lists/%s.ipv6", strings.ToUpper(asn)))
+				asnFiles = append(asnFiles, fmt.Sprintf("/etc/syswarden/lists/%s.ipv6", strings.ToUpper(asn)))
 			}
 		}
 	}
 	if len(asnFiles) > 0 {
 		populateSet(ctx, asnFiles, "syswarden_asn")
-	}
-	if len(asnFiles6) > 0 {
-		populateSet(ctx, asnFiles6, "syswarden_asn6")
+		populateSet(ctx, asnFiles, "syswarden_asn6")
 	}
 
 	fmt.Println("[INFO] Nftables applied successfully.")

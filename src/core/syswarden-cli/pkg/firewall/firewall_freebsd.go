@@ -50,9 +50,13 @@ func ApplyPolicies() error {
 		for _, code := range codes {
 			code = strings.TrimSpace(code)
 			if code != "" && code != "none" {
-				path := fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToLower(code))
-				if fileExists(path) {
-					ztFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", path))
+				pathV4 := fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv4", strings.ToLower(code))
+				pathV6 := fmt.Sprintf("/etc/syswarden/lists/allowed_%s.ipv6", strings.ToLower(code))
+				if fileExists(pathV4) {
+					ztFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV4))
+				}
+				if fileExists(pathV6) {
+					ztFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV6))
 				}
 			}
 		}
@@ -78,8 +82,8 @@ func ApplyPolicies() error {
 	}
 	_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_zt_allowed> persist%s\n", ztFilesStr.String()))
 
-	_, _ = pfRules.WriteString("table <syswarden_blacklist> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv4\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv4\"\n")
-	_, _ = pfRules.WriteString("table <syswarden_blacklist6> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv6\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv6\"\n")
+	_, _ = pfRules.WriteString("table <syswarden_blacklist> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv4\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv4\" file \"/etc/syswarden/lists/syswarden_blacklist.ipv6\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv6\"\n")
+	_, _ = pfRules.WriteString("table <syswarden_blacklist6> persist file \"/etc/syswarden/lists/syswarden_blacklist.ipv4\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv4\" file \"/etc/syswarden/lists/syswarden_blacklist.ipv6\" file \"/etc/syswarden/lists/syswarden_threatintel.ipv6\"\n")
 	_, _ = pfRules.WriteString("table <banned_ips> persist\n")
 
 	if config.GlobalConfig.EnableGeo && config.GlobalConfig.GeoCodes != "" {
@@ -88,16 +92,20 @@ func ApplyPolicies() error {
 		for _, code := range codes {
 			code = strings.TrimSpace(code)
 			if code != "" && code != "none" {
-				path := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToLower(code))
-				if fileExists(path) {
-					geoFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", path))
+				pathV4 := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToLower(code))
+				pathV6 := fmt.Sprintf("/etc/syswarden/lists/%s.ipv6", strings.ToLower(code))
+				if fileExists(pathV4) {
+					geoFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV4))
+				}
+				if fileExists(pathV6) {
+					geoFilesStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV6))
 				}
 			}
 		}
 		_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_geoip> persist%s\n", geoFilesStr.String()))
 	}
 	if config.GlobalConfig.EnableASN && config.GlobalConfig.ASNList != "" {
-		var asnV4Str, asnV6Str strings.Builder
+		var asnAllStr strings.Builder
 		asns := strings.Split(config.GlobalConfig.ASNList, " ")
 		for _, asn := range asns {
 			asn = strings.TrimSpace(asn)
@@ -108,15 +116,15 @@ func ApplyPolicies() error {
 				pathV4 := fmt.Sprintf("/etc/syswarden/lists/%s.ipv4", strings.ToUpper(asn))
 				pathV6 := fmt.Sprintf("/etc/syswarden/lists/%s.ipv6", strings.ToUpper(asn))
 				if fileExists(pathV4) {
-					asnV4Str.WriteString(fmt.Sprintf(" file \"%s\"", pathV4))
+					asnAllStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV4))
 				}
 				if fileExists(pathV6) {
-					asnV6Str.WriteString(fmt.Sprintf(" file \"%s\"", pathV6))
+					asnAllStr.WriteString(fmt.Sprintf(" file \"%s\"", pathV6))
 				}
 			}
 		}
-		_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_asn> persist%s\n", asnV4Str.String()))
-		_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_asn6> persist%s\n", asnV6Str.String()))
+		_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_asn> persist%s\n", asnAllStr.String()))
+		_, _ = pfRules.WriteString(fmt.Sprintf("table <syswarden_asn6> persist%s\n", asnAllStr.String()))
 	}
 
 	// Active interface

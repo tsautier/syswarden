@@ -386,23 +386,6 @@ func DownloadFeeds(mirrorURL, customURLIPv6, listChoice, geoCodes, asnList, geoA
 		if !success {
 			fmt.Printf("FAILED (%v)\n", lastErr)
 		}
-
-		fmt.Printf("Downloading Threat Intel IPv6 Blocklist... ")
-		success = false
-		mirrorsV6 := system.SelectFastestThreatIntelMirrorV6(listChoice)
-
-		for _, url := range mirrorsV6 {
-			if err := SecureDownloader(ctx, url, "/etc/syswarden/lists/syswarden_threatintel.ipv6"); err == nil {
-				fmt.Println("OK")
-				success = true
-				break
-			} else {
-				lastErr = err
-			}
-		}
-		if !success {
-			fmt.Printf("FAILED (%v)\n", lastErr)
-		}
 	}
 
 	// Download OSINT Feeds (CINS Army & Blocklist.de)
