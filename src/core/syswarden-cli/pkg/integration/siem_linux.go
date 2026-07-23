@@ -59,6 +59,7 @@ func SetupSIEM() error {
 	rsyslogConf += "      Severity=\"alert\"\n"
 	rsyslogConf += "      Facility=\"local7\")\n"
 
+	_ = os.MkdirAll("/etc/rsyslog.d", 0750)
 	if err := os.WriteFile(confPath, []byte(rsyslogConf), 0600); err != nil {
 		return fmt.Errorf("failed to write rsyslog SIEM config: %w", err)
 	}

@@ -59,6 +59,7 @@ ruleset(name="waf_bridge") {
 }
 `
 
+	_ = os.MkdirAll("/etc/rsyslog.d", 0750)
 	if err := os.WriteFile(confPath, []byte(rsyslogConf), 0600); err != nil {
 		return fmt.Errorf("failed to write WAF bridge config: %w", err)
 	}

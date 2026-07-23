@@ -1,3 +1,10 @@
+# Release v3.74.12
+
+## FIXED 🐛
+- Rsyslog Integration (Alpine/Minimal Linux): Added proactive directory creation (`/etc/rsyslog.d/`) to prevent `no such file or directory` crashes when writing WAF Bridge and SIEM configurations natively on minimal operating systems.
+
+---
+
 # Release v3.74.11
 
 ## FIXED 🐛
