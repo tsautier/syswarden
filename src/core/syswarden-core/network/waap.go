@@ -95,7 +95,7 @@ func discoverLogs() []string {
 		"/var/log/caddy":    {"/var/log/caddy/access.log", "/var/log/caddy/*.log"},
 		"/var/log/traefik":  {"/var/log/traefik/access.log", "/var/log/traefik/*.log"},
 		"/var/log/lighttpd": {"/var/log/lighttpd/access.log"},
-		"/var/log":          {"/var/log/secure", "/var/log/auth.log"},
+		"/var/log":          {"/var/log/secure", "/var/log/auth.log", "/var/log/messages"},
 	}
 
 	for dir, patterns := range autoPaths {

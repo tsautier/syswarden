@@ -1,3 +1,11 @@
+# Release v3.75.2
+
+## FIXED 🐛
+- Alpine SSH Bruteforce: Fixed native log ingestion by adding `/var/log/messages` to the WAAP engine tail paths, ensuring real-time `sshd` failure analysis on systems without `auth.log`.
+- Alpine Services: Fixed `syswarden-core` and `syswarden-webtui` failing to stop properly during OpenRC daemon restarts by appending a graceful termination timeout (`retry="TERM/5/KILL/5"`).
+
+---
+
 # Release v3.75.1
 
 ## FIXED 🐛

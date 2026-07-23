@@ -27,6 +27,7 @@ description="SYSWARDEN WAF and Core Engine"
 command="/opt/syswarden/bin/syswarden-core"
 command_background=true
 pidfile="/run/syswarden-core.pid"
+retry="TERM/5/KILL/5"
 
 depend() {
 	need net rsyslog
@@ -81,6 +82,7 @@ command="/opt/syswarden/bin/syswarden-cli"
 command_args="web-tui"
 command_background=true
 pidfile="/run/syswarden-webtui.pid"
+retry="TERM/5/KILL/5"
 
 depend() {
 	need net
