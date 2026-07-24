@@ -1,3 +1,10 @@
+# Release v3.75.4
+
+## FIXED
+- Network Intelligence (ASN WHOIS): Fixed a critical DNS resolution timeout on networks dropping IPv6 AAAA queries. `syswarden-cli` now strictly sequentially attempts IPv4 WHOIS resolution before falling back to IPv6, preventing `lookup whois.radb.net: i/o timeout` and allowing successful threat intelligence downloads in misconfigured dual-stack environments.
+
+---
+
 # Release v3.75.3
 
 ## FIXED

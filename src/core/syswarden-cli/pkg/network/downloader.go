@@ -497,9 +497,12 @@ func SetupFeedsCron() error {
 
 // FetchASNWhois retrieves IPv4 and IPv6 prefixes for an ASN natively via TCP WHOIS
 func FetchASNWhois(asn, destBase string) error {
-	conn, err := net.DialTimeout("tcp", "whois.radb.net:43", 5*time.Second)
+	conn, err := net.DialTimeout("tcp4", "whois.radb.net:43", 5*time.Second)
 	if err != nil {
-		return fmt.Errorf("whois connection failed: %w", err)
+		conn, err = net.DialTimeout("tcp6", "whois.radb.net:43", 5*time.Second)
+		if err != nil {
+			return fmt.Errorf("whois connection failed: %w", err)
+		}
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
